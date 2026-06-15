@@ -1,0 +1,29 @@
+[
+  {
+    "internal_game_id": 1,
+    "line_number_to_batch": {
+      "4": [
+        "time: 1700000001.0",
+        "1 connect alice 127.0.0.1 socket-1 False",
+        "1 <- [[1,1],[2,1,\"alice\",\"127.0.0.1\"]]",
+        "1 -> [6,\" hello world \"]",
+        "{\"_\":\"game\",\"game-id\":1,\"external-game-id\":99,\"state\":\"Starting\",\"mode\":\"Singles\",\"max-players\":2,\"begin\":1700000001}",
+        "{\"_\":\"game-player\",\"game-id\":1,\"external-game-id\":99,\"player-id\":0,\"username\":\"alice\"}",
+        ""
+      ],
+      "11": [
+        "time: 1700000002.0",
+        "game #99 expired (internal #1)",
+        "1 disconnect",
+        ""
+      ]
+    },
+    "log_timestamp": 1700000000,
+    "player_id_to_username": {
+      "0": "alice"
+    },
+    "username_to_player_id": {
+      "alice": 0
+    }
+  }
+]

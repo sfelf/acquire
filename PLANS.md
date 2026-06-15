@@ -45,7 +45,7 @@ Status: in progress.
 Status: in progress.
 
 - Use historical game logs as replay fixtures.
-- Add a replay harness for current game behavior. Started with parser-level golden fixtures.
+- Add a replay harness for current game behavior. Started with parser-level and individual-game extraction golden fixtures.
 - Store expected outputs or final states as golden files.
 - Document how to add new replay fixtures.
 - Use replay tests as the main safety net for the major refactor.

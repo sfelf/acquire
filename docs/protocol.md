@@ -18,4 +18,4 @@ The current client, Node.js gateway, and Python game server communicate through 
 
 The protocol should be covered by tests before it is changed. The first Python-only backend should preserve the existing client-facing behavior where practical.
 
-Parser-level golden fixtures live under `tests/fixtures/game_logs/` and document how current server logs are interpreted.
+Parser-level and individual-game golden fixtures live under `tests/fixtures/game_logs/` and document how current server logs are interpreted.
