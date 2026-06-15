@@ -22,6 +22,14 @@ Testing is the main safety mechanism for the planned refactor.
 
 Coverage should be reported early, but strict thresholds should wait until meaningful coverage exists. The first target is useful regression protection, not an arbitrary percentage.
 
+## Test Layout
+
+- `tests/conftest.py` makes the legacy `server/` modules importable without changing runtime paths.
+- `tests/test_id_managers.py` contains the migrated ID manager coverage.
+- `tests/test_server_protocol.py` covers the Python server line protocol parser.
+- `tests/test_server_messages.py` covers pending-message grouping and flushing behavior.
+- `tests/fixtures/game_logs/` is reserved for historical log replay fixtures.
+
 ## Golden Replay Plan
 
 Historical game logs should be added as fixtures after the tooling-only PR. The replay harness should make it easy to compare final states or expected protocol output without changing the current runtime behavior.

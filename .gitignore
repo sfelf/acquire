@@ -6,6 +6,9 @@
 /dist
 /lib
 /node_modules
+/__pycache__/
+*.py[cod]
+/tests/__pycache__/
 /server/__pycache__
 /uv-cache
 /.uv-cache
