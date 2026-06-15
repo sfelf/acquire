@@ -21,7 +21,7 @@ package = false
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["server"]
+testpaths = ["tests"]
 python_files = ["test.py", "test_*.py", "*_test.py"]
 addopts = "-ra"
 markers = [

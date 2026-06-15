@@ -8,7 +8,7 @@ Modernize the repository in phases so the team can safely perform a major refact
 
 ## Phase 1: Tooling And Agent Docs
 
-Status: in progress.
+Status: complete.
 
 Scope:
 
@@ -31,8 +31,10 @@ Constraints:
 
 ## Phase 2: Test Foundation
 
+Status: in progress.
+
 - Create a dedicated `tests/` layout.
-- Move or mirror the existing `server/test.py` coverage under pytest.
+- Move or mirror the existing `server/test.py` coverage under pytest. Complete.
 - Add fixtures for game-server behavior.
 - Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`.
 - Add coverage reporting as informational only.
