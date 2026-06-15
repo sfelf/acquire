@@ -33,3 +33,11 @@ Coverage should be reported early, but strict thresholds should wait until meani
 ## Golden Replay Plan
 
 Historical game logs should be added as fixtures after the tooling-only PR. The replay harness should make it easy to compare final states or expected protocol output without changing the current runtime behavior.
+
+The first golden fixture is parser-level:
+
+- Add a redacted log fixture under `tests/fixtures/game_logs/`.
+- Add a matching `*.expected.json` file with normalized parser events.
+- Add or extend tests that compare parser output to the expected snapshot.
+
+Future replay tests should build on this by processing complete historical game logs and comparing final game state, protocol output, or both.

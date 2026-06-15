@@ -42,8 +42,10 @@ Status: in progress.
 
 ## Phase 3: Golden Replay Tests
 
+Status: in progress.
+
 - Use historical game logs as replay fixtures.
-- Add a replay harness for current game behavior.
+- Add a replay harness for current game behavior. Started with parser-level golden fixtures.
 - Store expected outputs or final states as golden files.
 - Document how to add new replay fixtures.
 - Use replay tests as the main safety net for the major refactor.
