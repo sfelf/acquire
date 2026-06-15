@@ -7,5 +7,14 @@
 /lib
 /node_modules
 /server/__pycache__
+/uv-cache
+/.uv-cache
+/.uv-venv
+/uv.lock.tmp
 /venv
+/.venv
+/.mypy_cache
+/.pre-commit-cache
+/.pytest_cache
+/.ruff_cache
 /.vscode
