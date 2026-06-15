@@ -1,0 +1,80 @@
+# Modernization Plan
+
+This document tracks the agreed modernization path for the Acquire codebase.
+
+## Project Goal
+
+Modernize the repository in phases so the team can safely perform a major refactor, retire the Node.js server, keep the Python backend, preserve current behavior through extensive pytest coverage, keep MySQL initially, and prepare for Docker-first local development with a later AWS deployment path.
+
+## Phase 1: Tooling And Agent Docs
+
+Status: in progress.
+
+Scope:
+
+- Add `uv` project metadata and lockfile.
+- Add lenient `ruff` configuration.
+- Add lenient `mypy` configuration.
+- Add `pytest` as the test runner.
+- Add `pre-commit` hooks for `ruff` and `mypy`.
+- Add GitHub Actions CI for Python 3.12, 3.13, and 3.14.
+- Add Codex-oriented project instructions.
+- Add initial modernization docs and ADRs.
+
+Constraints:
+
+- Do not change runtime behavior.
+- Do not migrate tests yet.
+- Do not upgrade legacy runtime dependencies unless strictly required for tooling.
+- Do not add Docker implementation yet.
+- Do not begin Node.js deprecation yet.
+
+## Phase 2: Test Foundation
+
+- Create a dedicated `tests/` layout.
+- Move or mirror the existing `server/test.py` coverage under pytest.
+- Add fixtures for game-server behavior.
+- Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`.
+- Add coverage reporting as informational only.
+- Keep fast tests separate from MySQL and end-to-end tests.
+
+## Phase 3: Golden Replay Tests
+
+- Use historical game logs as replay fixtures.
+- Add a replay harness for current game behavior.
+- Store expected outputs or final states as golden files.
+- Document how to add new replay fixtures.
+- Use replay tests as the main safety net for the major refactor.
+
+## Phase 4: Local Development Docker
+
+- Add Docker Compose for local development.
+- Include MySQL as a local service.
+- Support the current Node.js and Python split without over-investing in Node.js as a long-term runtime.
+- Add `.env.example`.
+- Document local setup and teardown commands.
+
+## Phase 5: Python Backend Consolidation
+
+- Move Node-owned HTTP endpoints into Python.
+- Move auth and user database checks into Python.
+- Replace the Node.js SockJS gateway with a Python websocket path.
+- Preserve the existing client protocol until tests prove it is safe to change.
+- Remove the Node.js server from runtime once parity is covered.
+
+## Phase 6: Dependency And Deployment Modernization
+
+- Upgrade Python runtime dependencies.
+- Upgrade SQLAlchemy.
+- Add Alembic migrations.
+- Plan and execute a MySQL-to-Postgres migration.
+- Modernize frontend tooling.
+- Tighten `ruff` and `mypy`.
+- Add production Docker and AWS deployment paths.
+
+## Open Notes
+
+- MySQL remains the database until test coverage is strong.
+- Docker starts as local-development tooling only.
+- AWS is the preferred future cloud target.
+- Runtime dependency upgrades are intentionally deferred.

@@ -1,0 +1,30 @@
+[project]
+name = "acquire"
+default_branch = "feature/modernization-refactor"
+branch_prefix = "codex/"
+
+[commands]
+setup = "uv sync --group dev"
+lint = "uv run ruff check ."
+typecheck = "uv run mypy"
+test = "uv run pytest"
+validate = "uv run ruff check . && uv run mypy && uv run pytest"
+precommit = "uv run pre-commit run --all-files"
+
+[workflow]
+first_pr_scope = "tooling-and-agent-docs-only"
+runtime_behavior_changes_allowed = false
+dependency_upgrades_allowed = false
+docker_implementation_allowed = false
+node_deprecation_allowed = false
+
+[testing]
+framework = "pytest"
+coverage_policy = "informational-until-coverage-baseline-exists"
+planned_markers = ["unit", "integration", "golden", "mysql", "e2e"]
+
+[deployment]
+initial_target = "local-docker"
+future_cloud_target = "aws"
+database_now = "mysql"
+database_future = "postgres"
