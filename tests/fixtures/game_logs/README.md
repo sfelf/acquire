@@ -1,5 +1,8 @@
 # Game Log Fixtures
 
-Historical game logs should be added here in a later PR for replay and golden regression tests.
+This directory stores small redacted log fixtures and expected parser output for golden regression tests.
 
-Do not add production-only or sensitive logs without redaction.
+- `sample_server.txt` is a synthetic fixture that exercises the current line parser without using production data.
+- `sample_server.expected.json` is the expected normalized parser output.
+
+Historical game logs can be added here in later PRs after sensitive data is redacted or replaced with representative samples.
