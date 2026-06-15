@@ -8,13 +8,14 @@ from pathlib import Path
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 
 
-def import_logs_to_games_without_database():
-    sys.modules.setdefault("orm", types.ModuleType("orm"))
+def import_logs_to_games_without_database(monkeypatch):
+    monkeypatch.delitem(sys.modules, "logs_to_games", raising=False)
 
     sqlalchemy = types.ModuleType("sqlalchemy")
     sqlalchemy.sql = types.SimpleNamespace(text=lambda query: query)
-    sys.modules.setdefault("sqlalchemy", sqlalchemy)
-    sys.modules.setdefault("sqlalchemy.sql", sqlalchemy.sql)
+    monkeypatch.setitem(sys.modules, "orm", types.ModuleType("orm"))
+    monkeypatch.setitem(sys.modules, "sqlalchemy", sqlalchemy)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.sql", sqlalchemy.sql)
 
     return importlib.import_module("logs_to_games")
 
@@ -32,8 +33,9 @@ def normalize_parser_events(events):
     return normalized
 
 
-def test_log_parser_matches_sample_golden_fixture():
-    logs_to_games = import_logs_to_games_without_database()
+def test_log_parser_matches_sample_golden_fixture(monkeypatch, request):
+    request.addfinalizer(lambda: sys.modules.pop("logs_to_games", None))
+    logs_to_games = import_logs_to_games_without_database(monkeypatch)
     log_path = FIXTURES_DIR / "sample_server.txt"
     expected_path = FIXTURES_DIR / "sample_server.expected.json"
 
