@@ -1,0 +1,98 @@
+{
+  "individual_game_log_count": 8,
+  "individual_game_logs": [
+    {
+      "batch_count": 4,
+      "first_batch_line": 4,
+      "internal_game_id": 1,
+      "last_batch_line": 17,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_1"
+      }
+    },
+    {
+      "batch_count": 4,
+      "first_batch_line": 17,
+      "internal_game_id": 2,
+      "last_batch_line": 36,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_1"
+      }
+    },
+    {
+      "batch_count": 123,
+      "first_batch_line": 42,
+      "internal_game_id": 3,
+      "last_batch_line": 534,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_2"
+      }
+    },
+    {
+      "batch_count": 194,
+      "first_batch_line": 540,
+      "internal_game_id": 4,
+      "last_batch_line": 1315,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_2"
+      }
+    },
+    {
+      "batch_count": 146,
+      "first_batch_line": 1321,
+      "internal_game_id": 5,
+      "last_batch_line": 1904,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_2"
+      }
+    },
+    {
+      "batch_count": 161,
+      "first_batch_line": 1910,
+      "internal_game_id": 6,
+      "last_batch_line": 2554,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_2"
+      }
+    },
+    {
+      "batch_count": 41,
+      "first_batch_line": 2560,
+      "internal_game_id": 7,
+      "last_batch_line": 2724,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_2"
+      }
+    },
+    {
+      "batch_count": 3,
+      "first_batch_line": 2737,
+      "internal_game_id": 8,
+      "last_batch_line": 2747,
+      "log_timestamp": 1780589302,
+      "player_id_to_username": {
+        "0": "player_1"
+      }
+    }
+  ],
+  "line_count": 2752,
+  "parser_event_count": 2752,
+  "parser_event_counts": {
+    "blank_line": 686,
+    "command_to_client": 666,
+    "command_to_server": 653,
+    "connect": 12,
+    "connection_made": 1,
+    "disconnect": 12,
+    "game_expired": 8,
+    "log": 28,
+    "time": 686
+  }
+}
