@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sfelf/acquire/actions/workflows/ci.yml/badge.svg?branch=feature/modernization-refactor)](https://github.com/sfelf/acquire/actions/workflows/ci.yml?query=branch%3Afeature%2Fmodernization-refactor)
 ![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
-![Coverage](.github/badges/coverage.svg)
+[![codecov](https://codecov.io/github/sfelf/acquire/branch/feature%2Fmodernization-refactor/graph/badge.svg)](https://app.codecov.io/github/sfelf/acquire/tree/feature%2Fmodernization-refactor)
 
 This is the code for my Acquire board game program which can be played at [http://acquire.tlstyer.com/](http://acquire.tlstyer.com/).
 
@@ -24,7 +24,7 @@ Run the informational coverage report with:
 uv run pytest --cov=server --cov-report=term-missing:skip-covered --cov-report=xml
 ```
 
-Current coverage is informational while golden replay tests are expanded before the major refactor. The coverage command generates `coverage.xml`, and CI refreshes the README coverage badge from the XML line-rate in that report.
+Current coverage is informational while golden replay tests are expanded before the major refactor. The coverage command generates `coverage.xml`, and CI uploads that report to Codecov so the README coverage badge can update without committing generated badge files to the repository. The repository must be connected to Codecov for uploads and the badge to resolve.
 
 ## Install dependencies
 
