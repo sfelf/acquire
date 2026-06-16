@@ -41,6 +41,6 @@ The first golden fixture is parser-level:
 - Add or extend tests that compare parser output to the expected snapshot.
 - Add per-game extraction snapshots for `IndividualGameLogMaker` when a fixture should cover game-specific batches.
 
-Future replay tests should build on this by processing complete historical game logs and comparing final game state, protocol output, or both.
+Fuller replay tests process complete historical game logs with `LogProcessor` and compare final game summaries. Future replay tests should build on this by comparing richer final game state, protocol output, or both.
 
 Real-server fixtures should be redacted before commit. Preserve game commands and structured log entries, but replace usernames, IP addresses, and socket identifiers with stable fake values.
