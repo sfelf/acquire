@@ -44,3 +44,6 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+      - name: Report coverage
+        run: uv run pytest --cov=server --cov-report=term-missing:skip-covered --cov-report=xml

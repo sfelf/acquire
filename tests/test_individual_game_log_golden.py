@@ -1,8 +1,13 @@
 import json
 from pathlib import Path
 
+import pytest
+
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
+
+
+pytestmark = pytest.mark.golden
 
 
 def normalize_individual_game_log(game_log):

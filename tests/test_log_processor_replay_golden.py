@@ -1,9 +1,14 @@
 import json
 from pathlib import Path
 
+import pytest
+
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 LOG_TIMESTAMP = 1780589302
+
+
+pytestmark = pytest.mark.golden
 
 
 def summarize_replayed_game(game):

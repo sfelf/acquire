@@ -32,6 +32,20 @@ markers = [
     "e2e: end-to-end smoke tests",
 ]
 
+[tool.coverage.run]
+branch = true
+source = ["server"]
+omit = [
+    "server/settings.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "if __name__ == .__main__.:",
+]
+
 [tool.ruff]
 line-length = 160
 target-version = "py312"
