@@ -37,6 +37,16 @@ def cron_module(monkeypatch):
     fake_orm.session_scope = contextlib.nullcontext
     monkeypatch.setitem(sys.modules, "orm", fake_orm)
 
+    fake_sqlalchemy = types.ModuleType("sqlalchemy")
+    fake_sqlalchemy.orm = types.ModuleType("sqlalchemy.orm")
+    fake_sqlalchemy.sql = types.ModuleType("sqlalchemy.sql")
+    fake_sqlalchemy.types = types.ModuleType("sqlalchemy.types")
+    fake_sqlalchemy.sql.text = lambda query: query
+    monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_sqlalchemy.orm)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.sql", fake_sqlalchemy.sql)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.types", fake_sqlalchemy.types)
+
     fake_trueskill = types.ModuleType("trueskill")
     fake_trueskill.MU = 25.0
     fake_trueskill.SIGMA = 8.333
