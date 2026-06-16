@@ -1,6 +1,12 @@
 import pytest
 import server
-from enums import CommandsToClient, GameActions, GameBoardTypes, GameHistoryMessages
+from enums import (
+    CommandsToClient,
+    GameActions,
+    GameBoardTypes,
+    GameHistoryMessages,
+    ScoreSheetIndexes,
+)
 
 
 pytestmark = pytest.mark.unit
@@ -212,4 +218,208 @@ def test_select_new_chain_execute_ignores_unavailable_chain_id():
 
     assert result is None
     assert game.score_sheet.chain_size[GameBoardTypes.Tower.value] == 0
+    assert game.history_messages == []
+
+
+def test_select_merger_survivor_prepare_prompts_when_largest_chains_are_tied():
+    game = RecordingGame()
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 3
+    game.score_sheet.chain_size[GameBoardTypes.Tower.value] = 3
+    action = server.ActionSelectMergerSurvivor(
+        game,
+        0,
+        {GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value},
+        (1, 1),
+    )
+
+    result = action.prepare()
+
+    assert result is None
+    assert action.additional_params == [
+        [GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value]
+    ]
+    assert game.game_board.x_to_y_to_board_type[1][1] == GameBoardTypes.NothingYet.value
+    assert game.tile_racks.determine_calls == [None]
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.MergedChains.value,
+                0,
+                [GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value],
+            ),
+            {},
+        )
+    ]
+
+
+def test_select_merger_survivor_prepare_auto_selects_unique_largest_chain():
+    board = make_empty_board()
+    board[0][1] = GameBoardTypes.Luxor.value
+    board[0][2] = GameBoardTypes.Luxor.value
+    board[2][1] = GameBoardTypes.Tower.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.chain_size[GameBoardTypes.Tower.value] = 1
+    game.score_sheet.price[GameBoardTypes.Tower.value] = 2
+    game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 2
+    game.score_sheet.player_data[1][GameBoardTypes.Tower.value] = 1
+
+    result = server.ActionSelectMergerSurvivor(
+        game,
+        0,
+        {GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value},
+        (1, 1),
+    ).prepare()
+
+    assert len(result) == 1
+    next_action = result[0]
+    assert isinstance(next_action, server.ActionSelectChainToDisposeOfNext)
+    assert next_action.defunct_type_ids == {GameBoardTypes.Tower.value}
+    assert next_action.controlling_type_id == GameBoardTypes.Luxor.value
+    assert game.game_board.x_to_y_to_board_type[1][1] == GameBoardTypes.Luxor.value
+    assert game.game_board.x_to_y_to_board_type[2][1] == GameBoardTypes.Luxor.value
+    assert game.score_sheet.chain_size[GameBoardTypes.Luxor.value] == 4
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 80
+    assert game.score_sheet.player_data[1][ScoreSheetIndexes.Cash.value] == 70
+    assert game.tile_racks.determine_calls == [None]
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.MergedChains.value,
+                0,
+                [GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value],
+            ),
+            {},
+        ),
+        (
+            (
+                GameHistoryMessages.ReceivedBonus.value,
+                0,
+                GameBoardTypes.Tower.value,
+                20,
+            ),
+            {},
+        ),
+        (
+            (
+                GameHistoryMessages.ReceivedBonus.value,
+                1,
+                GameBoardTypes.Tower.value,
+                10,
+            ),
+            {},
+        ),
+    ]
+
+
+def test_select_chain_to_dispose_prepare_prompts_when_multiple_defunct_chains_remain():
+    game = RecordingGame()
+    action = server.ActionSelectChainToDisposeOfNext(
+        game,
+        0,
+        {GameBoardTypes.Tower.value, GameBoardTypes.American.value},
+        GameBoardTypes.Luxor.value,
+    )
+
+    result = action.prepare()
+
+    assert result is None
+    assert action.additional_params == [
+        [GameBoardTypes.Tower.value, GameBoardTypes.American.value]
+    ]
+
+
+def test_select_chain_to_dispose_execute_returns_disposal_actions_in_turn_order():
+    game = RecordingGame()
+    game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 1
+    game.score_sheet.player_data[1][GameBoardTypes.Tower.value] = 2
+    action = server.ActionSelectChainToDisposeOfNext(
+        game,
+        1,
+        {GameBoardTypes.Tower.value, GameBoardTypes.American.value},
+        GameBoardTypes.Luxor.value,
+    )
+
+    result = action.execute(GameBoardTypes.Tower.value)
+
+    assert len(result) == 3
+    assert [next_action.player_id for next_action in result[:2]] == [1, 0]
+    assert all(isinstance(next_action, server.ActionDisposeOfShares) for next_action in result[:2])
+    assert isinstance(result[2], server.ActionSelectChainToDisposeOfNext)
+    assert result[2].defunct_type_ids == {GameBoardTypes.American.value}
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.SelectedChainToDisposeOfNext.value,
+                1,
+                GameBoardTypes.Tower.value,
+            ),
+            {},
+        )
+    ]
+
+
+def test_dispose_of_shares_execute_trades_sells_and_records_history():
+    game = RecordingGame()
+    game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 5
+    game.score_sheet.available[GameBoardTypes.Luxor.value] = 25
+    game.score_sheet.price[GameBoardTypes.Tower.value] = 3
+    action = server.ActionDisposeOfShares(
+        game,
+        0,
+        GameBoardTypes.Tower.value,
+        GameBoardTypes.Luxor.value,
+    )
+    action.prepare()
+
+    result = action.execute(2, 3)
+
+    assert result is True
+    assert game.score_sheet.player_data[0][GameBoardTypes.Tower.value] == 0
+    assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 1
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 69
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.DisposedOfShares.value,
+                0,
+                GameBoardTypes.Tower.value,
+                2,
+                3,
+            ),
+            {},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("trade_amount", "sell_amount"),
+    [
+        (1, 0),
+        (-2, 0),
+        (4, 0),
+        (2, -1),
+        (2, 4),
+        ("2", 0),
+        (0, "1"),
+    ],
+)
+def test_dispose_of_shares_execute_ignores_invalid_amounts(trade_amount, sell_amount):
+    game = RecordingGame()
+    game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 5
+    game.score_sheet.available[GameBoardTypes.Luxor.value] = 1
+    action = server.ActionDisposeOfShares(
+        game,
+        0,
+        GameBoardTypes.Tower.value,
+        GameBoardTypes.Luxor.value,
+    )
+    action.prepare()
+
+    result = action.execute(trade_amount, sell_amount)
+
+    assert result is None
+    assert game.score_sheet.player_data[0][GameBoardTypes.Tower.value] == 5
+    assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 0
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 60
     assert game.history_messages == []
