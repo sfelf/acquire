@@ -31,24 +31,35 @@ Constraints:
 
 ## Phase 2: Test Foundation
 
-Status: in progress.
+Status: complete.
 
-- Create a dedicated `tests/` layout.
+- Create a dedicated `tests/` layout. Complete.
 - Move or mirror the existing `server/test.py` coverage under pytest. Complete.
-- Add fixtures for game-server behavior.
-- Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`.
+- Add fixtures for game-server behavior. Complete.
+- Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`. Complete.
 - Add coverage reporting as informational only. Complete.
-- Keep fast tests separate from MySQL and end-to-end tests.
+- Keep fast tests separate from MySQL and end-to-end tests. Complete.
+
+Notes:
+
+- The pytest suite now covers the core Python server modules, log parser/processor helpers, ORM helpers, cron helpers, and replay fixtures without requiring MySQL for fast checks.
+- Coverage remains informational while refactor-safety coverage continues to expand.
 
 ## Phase 3: Golden Replay Tests
 
 Status: in progress.
 
-- Use historical game logs as replay fixtures. Started with a redacted real-server fixture.
-- Add a replay harness for current game behavior. Started with parser-level and individual-game extraction golden fixtures.
-- Store expected outputs or final states as golden files. Started with `LogProcessor` replay summaries for the redacted real-server fixture.
-- Document how to add new replay fixtures.
-- Use replay tests as the main safety net for the major refactor.
+- Use historical game logs as replay fixtures. Complete for the initial redacted real-server fixture.
+- Add a replay harness for current game behavior. Complete for parser-level replay, individual-game extraction, and `LogProcessor` replay summaries.
+- Store expected outputs or final states as golden files. Complete for the current fixture set.
+- Document how to add new replay fixtures. Complete.
+- Use replay tests as the main safety net for the major refactor. In progress.
+
+Remaining work:
+
+- Add fuller replay coverage from the available sample server log.
+- Add richer final-state golden assertions around replayed games.
+- Add more historical log fixtures for edge cases before beginning the major refactor.
 
 ## Phase 4: Local Development Docker
 
