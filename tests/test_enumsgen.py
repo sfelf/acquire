@@ -98,5 +98,5 @@ def test_replace_enums_rewrites_enum_references_in_files(tmp_path):
     assert path.read_text() == (
         f"const start = {GameModes.Singles.value};\n"
         f"const sound = {Options.Sound.value};\n"
-        f"const untouched = other.{Options.Sound.value};\n"
+        "const untouched = other.enums.Options.Sound;\n"
     )
