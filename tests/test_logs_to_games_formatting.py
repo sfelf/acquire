@@ -113,6 +113,18 @@ def test_parameter_strings_render_action_specific_inputs(logs_to_games_without_d
     assert logs_to_games_without_database.to_parameter_strings(
         server_game,
         0,
+        GameActions.SelectMergerSurvivor,
+        [GameBoardTypes.American.value],
+    ) == ["A"]
+    assert logs_to_games_without_database.to_parameter_strings(
+        server_game,
+        0,
+        GameActions.SelectChainToDisposeOfNext,
+        [GameBoardTypes.Festival.value],
+    ) == ["F"]
+    assert logs_to_games_without_database.to_parameter_strings(
+        server_game,
+        0,
         GameActions.DisposeOfShares,
         [2, 3],
     ) == ["2", "3"]
@@ -163,6 +175,9 @@ def test_next_action_string_renders_action_prompts(logs_to_games_without_databas
     ("message", "expected"),
     [
         ([GameHistoryMessages.TurnBegan.value, 0], "0 TurnBegan"),
+        ([GameHistoryMessages.StartedGame.value, 1], "1 StartedGame"),
+        ([GameHistoryMessages.DrewTile.value, 0, 4, 5], "0 DrewTile 5F"),
+        ([GameHistoryMessages.HasNoPlayableTile.value, 1], "1 HasNoPlayableTile"),
         ([GameHistoryMessages.PlayedTile.value, 1, 3, 4], "1 PlayedTile 4E"),
         ([GameHistoryMessages.FormedChain.value, 0, GameBoardTypes.Luxor.value], "0 FormedChain L"),
         (
@@ -175,11 +190,67 @@ def test_next_action_string_renders_action_prompts(logs_to_games_without_databas
         ),
         (
             [
+                GameHistoryMessages.SelectedMergerSurvivor.value,
+                1,
+                GameBoardTypes.American.value,
+            ],
+            "1 SelectedMergerSurvivor A",
+        ),
+        (
+            [
+                GameHistoryMessages.SelectedChainToDisposeOfNext.value,
+                0,
+                GameBoardTypes.Festival.value,
+            ],
+            "0 SelectedChainToDisposeOfNext F",
+        ),
+        (
+            [
+                GameHistoryMessages.ReceivedBonus.value,
+                0,
+                GameBoardTypes.Tower.value,
+                3000,
+            ],
+            "0 ReceivedBonus T 3000",
+        ),
+        (
+            [
+                GameHistoryMessages.DisposedOfShares.value,
+                1,
+                GameBoardTypes.Luxor.value,
+                2,
+                1,
+            ],
+            "1 DisposedOfShares L 2 1",
+        ),
+        (
+            [
+                GameHistoryMessages.CouldNotAffordAnyShares.value,
+                0,
+            ],
+            "0 CouldNotAffordAnyShares",
+        ),
+        (
+            [
                 GameHistoryMessages.PurchasedShares.value,
                 1,
                 [[GameBoardTypes.Luxor.value, 2], [GameBoardTypes.Tower.value, 1]],
             ],
             "1 PurchasedShares 2L,1T",
+        ),
+        (
+            [GameHistoryMessages.PurchasedShares.value, 0, []],
+            "0 PurchasedShares x",
+        ),
+        ([GameHistoryMessages.DrewLastTile.value, 1], "1 DrewLastTile"),
+        (
+            [GameHistoryMessages.ReplacedDeadTile.value, 0, 10, 8],
+            "0 ReplacedDeadTile 11I",
+        ),
+        ([GameHistoryMessages.EndedGame.value, 1], "1 EndedGame"),
+        (
+            [GameHistoryMessages.NoTilesPlayedForEntireRound.value, None],
+            "NoTilesPlayedForEntireRound",
         ),
         ([GameHistoryMessages.AllTilesPlayed.value, None], "AllTilesPlayed"),
     ],
