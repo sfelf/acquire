@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This repository is in the first phase of a modernization and refactor effort. The current goal is to add safe tooling, documentation, and CI before changing runtime behavior.
+This repository is in a modernization and refactor effort. Tooling, documentation, CI, and the pytest foundation are in place; the current goal is to deepen golden replay coverage before changing runtime behavior.
 
 ## Current Architecture
 
@@ -19,6 +19,7 @@ This repository is in the first phase of a modernization and refactor effort. Th
 - Do not edit generated client assets directly.
 - Keep linting and type checking permissive until golden tests protect behavior.
 - Prefer small, reviewable changes with clear validation notes.
+- Prefer module-sized test coverage PRs when a module can be covered cleanly without changing runtime behavior.
 
 ## Setup
 
