@@ -5,6 +5,7 @@ from enums import (
     GameActions,
     GameBoardTypes,
     GameHistoryMessages,
+    GameStates,
     ScoreSheetIndexes,
 )
 
@@ -18,6 +19,7 @@ class RecordingGame:
         self.client_ids = {10, 11}
         self.pending_messages = []
         self.history_messages = []
+        self.state_changes = []
         self.turn_player_id = None
         self.turns_without_played_tiles_count = 0
         self.game_board = server.GameBoard(self, board)
@@ -34,12 +36,18 @@ class RecordingGame:
     def add_history_message(self, *args, **kwargs):
         self.history_messages.append((args, kwargs))
 
+    def set_state(self, state, mode=None, max_players=None):
+        self.state_changes.append((state, mode, max_players))
+
 
 class RecordingTileRacks:
     def __init__(self, racks=None):
         self.racks = racks if racks is not None else [[None] * 6, [None] * 6]
         self.removed_tiles = []
         self.determine_calls = []
+        self.draw_calls = []
+        self.replace_dead_tiles_calls = []
+        self.empty_results = [False]
 
     def remove_tile(self, player_id, tile_index):
         self.removed_tiles.append((player_id, tile_index))
@@ -47,6 +55,17 @@ class RecordingTileRacks:
 
     def determine_tile_game_board_types(self, player_ids=None):
         self.determine_calls.append(player_ids)
+
+    def draw_tile(self, player_id):
+        self.draw_calls.append(player_id)
+
+    def replace_dead_tiles(self, player_id):
+        self.replace_dead_tiles_calls.append(player_id)
+
+    def are_racks_empty(self):
+        if len(self.empty_results) > 1:
+            return self.empty_results.pop(0)
+        return self.empty_results[0]
 
 
 def make_empty_board():
@@ -423,3 +442,169 @@ def test_dispose_of_shares_execute_ignores_invalid_amounts(trade_amount, sell_am
     assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 0
     assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 60
     assert game.history_messages == []
+
+
+def test_purchase_shares_prepare_keeps_action_pending_when_player_can_buy():
+    board = make_empty_board()
+    board[0][0] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 2
+
+    result = server.ActionPurchaseShares(game, 0).prepare()
+
+    assert result is None
+    assert game.tile_racks.determine_calls == [None]
+    assert game.tile_racks.draw_calls == []
+    assert game.history_messages == []
+
+
+def test_purchase_shares_prepare_completes_turn_when_player_cannot_afford_available_shares():
+    board = make_empty_board()
+    board[0][0] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] = 1
+
+    result = server.ActionPurchaseShares(game, 0).prepare()
+
+    assert [type(action) for action in result] == [
+        server.ActionPlayTile,
+        server.ActionPurchaseShares,
+    ]
+    assert [action.player_id for action in result] == [1, 1]
+    assert game.tile_racks.determine_calls == [None, [0]]
+    assert game.tile_racks.draw_calls == [0]
+    assert game.tile_racks.replace_dead_tiles_calls == [0]
+    assert game.history_messages == [
+        ((GameHistoryMessages.CouldNotAffordAnyShares.value, 0), {})
+    ]
+
+
+def test_purchase_shares_execute_buys_shares_and_advances_to_next_player():
+    board = make_empty_board()
+    board[0][0] = GameBoardTypes.Luxor.value
+    board[1][0] = GameBoardTypes.Tower.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.chain_size[GameBoardTypes.Tower.value] = 3
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.price[GameBoardTypes.Tower.value] = 3
+    action = server.ActionPurchaseShares(game, 0)
+
+    result = action.execute(
+        [GameBoardTypes.Luxor.value, GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value],
+        0,
+    )
+
+    assert [type(next_action) for next_action in result] == [
+        server.ActionPlayTile,
+        server.ActionPurchaseShares,
+    ]
+    assert [next_action.player_id for next_action in result] == [1, 1]
+    assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 2
+    assert game.score_sheet.player_data[0][GameBoardTypes.Tower.value] == 1
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 53
+    assert game.tile_racks.draw_calls == [0]
+    assert game.tile_racks.determine_calls == [[0]]
+    assert game.tile_racks.replace_dead_tiles_calls == [0]
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.PurchasedShares.value,
+                0,
+                [[GameBoardTypes.Luxor.value, 2], [GameBoardTypes.Tower.value, 1]],
+            ),
+            {},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("game_board_type_ids", "end_game"),
+    [
+        ([GameBoardTypes.Luxor.value] * 4, 0),
+        ([GameBoardTypes.Luxor.value], 2),
+        ("not-a-list", 0),
+        ([GameBoardTypes.Nothing.value], 0),
+        ([GameBoardTypes.Tower.value], 0),
+    ],
+)
+def test_purchase_shares_execute_ignores_invalid_purchase_requests(
+    game_board_type_ids,
+    end_game,
+):
+    board = make_empty_board()
+    board[0][0] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 2
+    action = server.ActionPurchaseShares(game, 0)
+
+    result = action.execute(game_board_type_ids, end_game)
+
+    assert result is None
+    assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 0
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 60
+    assert game.history_messages == []
+    assert game.tile_racks.draw_calls == []
+
+
+def test_purchase_shares_execute_can_end_game_when_chain_is_large_enough():
+    board = make_empty_board()
+    for y in range(9):
+        board[0][y] = GameBoardTypes.Luxor.value
+        board[1][y] = GameBoardTypes.Luxor.value
+        board[2][y] = GameBoardTypes.Luxor.value
+        board[3][y] = GameBoardTypes.Luxor.value
+        board[4][y] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 41
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 8
+    action = server.ActionPurchaseShares(game, 0)
+    action.prepare()
+
+    result = action.execute([], 1)
+
+    assert len(result) == 1
+    assert isinstance(result[0], server.ActionGameOver)
+    assert result[0].player_id == 0
+    assert game.turn_player_id is None
+    assert game.pending_messages[-1] == (
+        [[CommandsToClient.SetTurn.value, None]],
+        {10, 11},
+    )
+    assert game.state_changes == [(GameStates.Completed.value, None, None)]
+    assert game.history_messages == [
+        ((GameHistoryMessages.PurchasedShares.value, 0, []), {}),
+        ((GameHistoryMessages.EndedGame.value, 0), {}),
+    ]
+
+
+def test_purchase_shares_complete_action_ends_game_when_all_tiles_are_played():
+    game = RecordingGame()
+    game.tile_racks.empty_results = [True]
+
+    result = server.ActionPurchaseShares(game, 0)._complete_action()
+
+    assert len(result) == 1
+    assert isinstance(result[0], server.ActionGameOver)
+    assert game.history_messages == [
+        ((GameHistoryMessages.AllTilesPlayed.value, None), {})
+    ]
+    assert game.state_changes == [(GameStates.Completed.value, None, None)]
+
+
+def test_purchase_shares_complete_action_ends_game_after_round_without_played_tiles():
+    game = RecordingGame()
+    game.turns_without_played_tiles_count = game.num_players
+
+    result = server.ActionPurchaseShares(game, 0)._complete_action()
+
+    assert len(result) == 1
+    assert isinstance(result[0], server.ActionGameOver)
+    assert game.history_messages == [
+        ((GameHistoryMessages.NoTilesPlayedForEntireRound.value, None), {})
+    ]
+    assert game.state_changes == [(GameStates.Completed.value, None, None)]
