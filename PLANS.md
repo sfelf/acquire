@@ -81,4 +81,5 @@ Status: in progress.
 - MySQL remains the database until test coverage is strong.
 - Docker starts as local-development tooling only.
 - AWS is the preferred future cloud target.
+- README coverage badges should be added after the coverage reporting source is finalized.
 - Runtime dependency upgrades are intentionally deferred.
