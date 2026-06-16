@@ -1,4 +1,8 @@
+import pytest
 import server
+
+
+pytestmark = pytest.mark.unit
 
 
 class RecordingClient:

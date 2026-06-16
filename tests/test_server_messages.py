@@ -1,4 +1,8 @@
+import pytest
 import server
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_add_pending_messages_splits_overlapping_client_groups():

@@ -37,7 +37,7 @@ Status: in progress.
 - Move or mirror the existing `server/test.py` coverage under pytest. Complete.
 - Add fixtures for game-server behavior.
 - Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`.
-- Add coverage reporting as informational only.
+- Add coverage reporting as informational only. Complete.
 - Keep fast tests separate from MySQL and end-to-end tests.
 
 ## Phase 3: Golden Replay Tests

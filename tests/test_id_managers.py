@@ -4,6 +4,9 @@ import pytest
 import server
 
 
+pytestmark = pytest.mark.unit
+
+
 @pytest.fixture
 def reuse_id_manager():
     return server.ReuseIdManager(0)

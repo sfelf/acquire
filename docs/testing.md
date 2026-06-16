@@ -20,7 +20,13 @@ Testing is the main safety mechanism for the planned refactor.
 
 ## Coverage Policy
 
-Coverage should be reported early, but strict thresholds should wait until meaningful coverage exists. The first target is useful regression protection, not an arbitrary percentage.
+Coverage is reported in CI, but strict thresholds should wait until meaningful coverage exists. The first target is useful regression protection, not an arbitrary percentage.
+
+Run coverage locally with:
+
+```bash
+uv run pytest --cov=server --cov-report=term-missing:skip-covered
+```
 
 ## Test Layout
 
@@ -29,6 +35,8 @@ Coverage should be reported early, but strict thresholds should wait until meani
 - `tests/test_server_protocol.py` covers the Python server line protocol parser.
 - `tests/test_server_messages.py` covers pending-message grouping and flushing behavior.
 - `tests/fixtures/game_logs/` is reserved for historical log replay fixtures.
+
+Use `pytest -m unit` for fast unit coverage and `pytest -m golden` for fixture-based replay coverage.
 
 ## Golden Replay Plan
 
