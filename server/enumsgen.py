@@ -98,7 +98,7 @@ def replace_enums(pathnames):
         with open(pathname, "r") as f:
             contents = f.read()
         contents = re.sub(
-            r"(?<![A-Za-z0-9])enums\.([A-Za-z0-9]+)\.([A-Za-z0-9_]+)(?:\.value)?(?![A-Za-z0-9])",
+            r"(?<![A-Za-z0-9_.])enums\.([A-Za-z0-9]+)\.([A-Za-z0-9_]+)(?:\.value)?(?![A-Za-z0-9])",
             lambda match: str(all_enums[match.group(1)][match.group(2)]),
             contents,
         )
