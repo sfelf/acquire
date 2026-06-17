@@ -74,7 +74,7 @@ services:
       - .:/app
       - mysql-socket:/var/run/mysqld
     working_dir: /app/server
-    command: sh -c "cd /app && npm install && cd /app/server && node server.js"
+    command: sh -c "rm -f javascript.sock && cd /app && npm install && cd /app/server && node server.js"
 
 volumes:
   mysql-data:

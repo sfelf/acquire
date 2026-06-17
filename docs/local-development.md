@@ -41,6 +41,7 @@ docker compose --profile legacy-node up --build mysql python-server node-gateway
 ```
 
 The profile generates the gitignored `client/main/js/enums.js` file before starting `server/server.js`, then waits for the Python server to report a healthy `python.sock`.
+The gateway removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
 
 This profile exists to support the current split while Python backend parity is built out. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
 

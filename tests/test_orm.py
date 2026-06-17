@@ -129,7 +129,7 @@ def test_engine_uses_mysql_environment(monkeypatch):
         assert orm.engine == (
             "engine",
             (
-                "mysql+mysqlconnector://custom_user:custom+password@localhost/custom_acquire?unix_socket=%2Ftmp%2Fmysql.sock",
+                "mysql+mysqlconnector://custom_user:custom%20password@localhost/custom_acquire?unix_socket=%2Ftmp%2Fmysql.sock",
             ),
             {"connect_args": {"auth_plugin": "mysql_native_password"}},
         )
