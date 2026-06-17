@@ -82,3 +82,19 @@ def test_redacted_real_server_log_matches_final_state_golden(
         expected = json.load(expected_file)
 
     assert actual == expected
+
+
+def test_sample_server_log_matches_final_state_golden(logs_to_games_without_database):
+    log_path = FIXTURES_DIR / "sample_server.txt"
+    expected_path = FIXTURES_DIR / "sample_server.final_state.expected.json"
+
+    with log_path.open() as log_file:
+        games = logs_to_games_without_database.LogProcessor(1700000000, log_file).go()
+        actual = json.loads(
+            json.dumps([summarize_replayed_final_state(game) for game in games])
+        )
+
+    with expected_path.open() as expected_file:
+        expected = json.load(expected_file)
+
+    assert actual == expected
