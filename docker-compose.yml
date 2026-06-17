@@ -11,7 +11,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-acquire}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-acquire}
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\""]
       interval: 5s
       timeout: 5s
       retries: 20
