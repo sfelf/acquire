@@ -47,7 +47,7 @@ Notes:
 
 ## Phase 3: Golden Replay Tests
 
-Status: in progress.
+Status: complete for the current fixture set.
 
 - Use historical game logs as replay fixtures. Complete for the initial redacted real-server fixture.
 - Add a replay harness for current game behavior. Complete for parser-level replay, individual-game extraction, and `LogProcessor` replay summaries.
@@ -55,21 +55,22 @@ Status: in progress.
 - Document how to add new replay fixtures. Complete.
 - Use replay tests as the main safety net for the major refactor. In progress.
 
-Remaining work:
+Remaining work before the major refactor:
 
-- Add fuller replay coverage from the available sample server log.
-- Add richer final-state golden assertions around replayed games. Complete for the initial redacted real-server fixture.
-- Add more historical log fixtures for edge cases before beginning the major refactor.
+- Add more historical log fixtures when representative edge cases are available.
+- Add richer final-state golden assertions for future historical fixtures as they are added.
 
 ## Phase 4: Local Development Docker
 
-- Status: in progress.
+Status: complete.
 
-- Add Docker Compose for local development.
-- Include MySQL as a local service.
-- Support the current Node.js and Python split without over-investing in Node.js as a long-term runtime.
-- Add `.env.example`.
-- Document local setup and teardown commands.
+- Add Docker Compose for local development. Complete.
+- Include MySQL as a local service. Complete.
+- Support the current Node.js and Python split without over-investing in Node.js as a long-term runtime. Complete.
+- Expose the legacy Node gateway for browser UI parity checks. Complete.
+- Generate legacy client assets inside the local Docker profile. Complete.
+- Add `.env.example`. Complete.
+- Document local setup, UI access, and teardown commands. Complete.
 
 ## Phase 5: Python Backend Consolidation
 

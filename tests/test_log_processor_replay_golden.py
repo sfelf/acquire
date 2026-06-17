@@ -49,3 +49,17 @@ def test_log_processor_replays_redacted_real_server_log(logs_to_games_without_da
         expected = json.load(expected_file)
 
     assert actual == expected
+
+
+def test_log_processor_replays_sample_server_log(logs_to_games_without_database):
+    log_path = FIXTURES_DIR / "sample_server.txt"
+    expected_path = FIXTURES_DIR / "sample_server.replay.expected.json"
+
+    with log_path.open() as log_file:
+        games = logs_to_games_without_database.LogProcessor(1700000000, log_file).go()
+        actual = json.loads(json.dumps([summarize_replayed_game(game) for game in games]))
+
+    with expected_path.open() as expected_file:
+        expected = json.load(expected_file)
+
+    assert actual == expected
