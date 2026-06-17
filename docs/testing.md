@@ -20,7 +20,9 @@ Testing is the main safety mechanism for the planned refactor.
 
 ## Coverage Policy
 
-Coverage is reported in CI, but strict thresholds should wait until meaningful coverage exists. The first target is useful regression protection, not an arbitrary percentage.
+Coverage is reported in CI and must stay at or above 90%. The threshold should continue to rise only when the added tests protect behavior that matters for the Python refactor.
+
+All Python source included in the coverage target should count toward the coverage metric. Do not add coverage exclusions for legacy paths solely because they are difficult to exercise; add focused tests or move code out of the measured source set only when the project intentionally stops treating it as maintained Python source.
 
 Run coverage locally with:
 

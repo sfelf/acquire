@@ -5,6 +5,7 @@ from enums import (
     GameActions,
     GameBoardTypes,
     GameHistoryMessages,
+    GameModes,
     GameStates,
     ScoreSheetIndexes,
 )
@@ -22,6 +23,7 @@ class RecordingGame:
         self.state_changes = []
         self.turn_player_id = None
         self.turns_without_played_tiles_count = 0
+        self.mode = GameModes.Singles.value
         self.game_board = server.GameBoard(self, board)
         self.score_sheet = server.ScoreSheet(self)
         self.score_sheet.player_data = [
@@ -29,6 +31,7 @@ class RecordingGame:
             [0, 0, 0, 0, 0, 0, 0, 60, 60, "player_1", None, None],
         ]
         self.tile_racks = RecordingTileRacks()
+        self.tile_bag = [(x, y) for x in range(12) for y in range(9)]
 
     def add_pending_messages(self, messages, client_ids=None):
         self.pending_messages.append((messages, client_ids))
@@ -188,6 +191,39 @@ def test_play_tile_execute_returns_new_chain_selection_action():
     ]
 
 
+@pytest.mark.parametrize("tile_index", ["0", -1, 6])
+def test_play_tile_execute_ignores_invalid_tile_indexes(tile_index):
+    game = RecordingGame()
+    game.tile_racks.racks[0][0] = [
+        (1, 1),
+        GameBoardTypes.WillPutLonelyTileDown.value,
+        False,
+    ]
+
+    result = server.ActionPlayTile(game, 0).execute(tile_index)
+
+    assert result is None
+    assert game.tile_racks.removed_tiles == []
+    assert game.history_messages == []
+
+
+def test_play_tile_execute_ignores_empty_and_unrecognized_rack_slots():
+    game = RecordingGame()
+    action = server.ActionPlayTile(game, 0)
+
+    assert action.execute(0) is None
+
+    game.tile_racks.racks[0][0] = [
+        (1, 1),
+        GameBoardTypes.CantPlayNow.value,
+        False,
+    ]
+
+    assert action.execute(0) is None
+    assert game.tile_racks.removed_tiles == []
+    assert game.history_messages == []
+
+
 def test_select_new_chain_prepare_auto_creates_only_available_chain():
     board = make_empty_board()
     board[1][1] = GameBoardTypes.NothingYet.value
@@ -268,6 +304,47 @@ def test_select_merger_survivor_prepare_prompts_when_largest_chains_are_tied():
             ),
             {},
         )
+    ]
+
+
+def test_select_merger_survivor_execute_records_selected_survivor():
+    board = make_empty_board()
+    board[0][1] = GameBoardTypes.Luxor.value
+    board[2][1] = GameBoardTypes.Tower.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 1
+    game.score_sheet.chain_size[GameBoardTypes.Tower.value] = 1
+    game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 1
+    game.score_sheet.price[GameBoardTypes.Tower.value] = 2
+    action = server.ActionSelectMergerSurvivor(
+        game,
+        0,
+        {GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value},
+        (1, 1),
+    )
+
+    result = action.execute(GameBoardTypes.Luxor.value)
+
+    assert len(result) == 1
+    assert isinstance(result[0], server.ActionSelectChainToDisposeOfNext)
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.SelectedMergerSurvivor.value,
+                0,
+                GameBoardTypes.Luxor.value,
+            ),
+            {},
+        ),
+        (
+            (
+                GameHistoryMessages.ReceivedBonus.value,
+                0,
+                GameBoardTypes.Tower.value,
+                30,
+            ),
+            {},
+        ),
     ]
 
 
@@ -459,6 +536,20 @@ def test_purchase_shares_prepare_keeps_action_pending_when_player_can_buy():
     assert game.history_messages == []
 
 
+def test_purchase_shares_prepare_clears_stale_chain_size_when_board_is_empty():
+    game = RecordingGame()
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 3
+    action = server.ActionPurchaseShares(game, 0)
+
+    result = action.prepare()
+
+    assert [type(next_action) for next_action in result] == [
+        server.ActionPlayTile,
+        server.ActionPurchaseShares,
+    ]
+    assert game.score_sheet.chain_size[GameBoardTypes.Luxor.value] == 0
+
+
 def test_purchase_shares_prepare_completes_turn_when_player_cannot_afford_available_shares():
     board = make_empty_board()
     board[0][0] = GameBoardTypes.Luxor.value
@@ -551,6 +642,21 @@ def test_purchase_shares_execute_ignores_invalid_purchase_requests(
     assert game.tile_racks.draw_calls == []
 
 
+def test_purchase_shares_execute_ignores_purchase_player_cannot_afford():
+    board = make_empty_board()
+    board[0][0] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 61
+
+    result = server.ActionPurchaseShares(game, 0).execute([GameBoardTypes.Luxor.value], 0)
+
+    assert result is None
+    assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 0
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 60
+    assert game.history_messages == []
+
+
 def test_purchase_shares_execute_can_end_game_when_chain_is_large_enough():
     board = make_empty_board()
     for y in range(9):
@@ -608,3 +714,39 @@ def test_purchase_shares_complete_action_ends_game_after_round_without_played_ti
         ((GameHistoryMessages.NoTilesPlayedForEntireRound.value, None), {})
     ]
     assert game.state_changes == [(GameStates.Completed.value, None, None)]
+
+
+def test_purchase_shares_complete_action_ends_when_draw_empties_racks():
+    game = RecordingGame()
+    game.tile_racks.empty_results = [False, True]
+
+    result = server.ActionPurchaseShares(game, 0)._complete_action()
+
+    assert len(result) == 1
+    assert isinstance(result[0], server.ActionGameOver)
+    assert game.tile_racks.draw_calls == [0]
+    assert game.tile_racks.determine_calls == [[0]]
+    assert game.tile_racks.replace_dead_tiles_calls == [0]
+    assert game.history_messages == [
+        ((GameHistoryMessages.AllTilesPlayed.value, None), {})
+    ]
+
+
+def test_start_game_downgrades_short_teams_game_to_singles():
+    game = RecordingGame()
+    game.mode = GameModes.Teams.value
+    game.num_players = 2
+    game.tile_bag = [(x, y) for x in range(12) for y in range(9)]
+
+    result = server.ActionStartGame(game, 0).execute()
+
+    assert [type(next_action) for next_action in result] == [
+        server.ActionPlayTile,
+        server.ActionPurchaseShares,
+    ]
+    assert game.state_changes[0] == (
+        GameStates.InProgress.value,
+        GameModes.Singles.value,
+        None,
+    )
+    assert isinstance(game.tile_racks, server.TileRacks)
