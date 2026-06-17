@@ -9,6 +9,7 @@
 .venv
 __pycache__
 *.pyc
+*.sock
 coverage.xml
 .coverage
 client/main/css/main.css
