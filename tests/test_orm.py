@@ -26,6 +26,12 @@ class FakeDeclarativeBase:
             setattr(self, key, value)
 
 
+class FakeURL:
+    def __init__(self, drivername, **kwargs):
+        self.drivername = drivername
+        self.kwargs = kwargs
+
+
 def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
     fake_sqlalchemy.create_engine = lambda *args, **kwargs: ("engine", args, kwargs)
@@ -47,17 +53,24 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_declarative = types.ModuleType("sqlalchemy.ext.declarative")
     fake_declarative.declarative_base = lambda: FakeDeclarativeBase
 
+    fake_engine = types.ModuleType("sqlalchemy.engine")
+    fake_engine_url = types.ModuleType("sqlalchemy.engine.url")
+    fake_engine_url.URL = FakeURL
+
     fake_orm = types.ModuleType("sqlalchemy.orm")
     fake_orm.relationship = lambda *args, **kwargs: ("relationship", args, kwargs)
     fake_orm.sessionmaker = lambda bind=None: lambda autoflush=False: None
 
     fake_sqlalchemy.dialects = types.SimpleNamespace(mysql=fake_mysql)
+    fake_sqlalchemy.engine = types.SimpleNamespace(url=fake_engine_url)
     fake_sqlalchemy.ext = types.SimpleNamespace(declarative=fake_declarative)
     fake_sqlalchemy.orm = fake_orm
 
     monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects", fake_sqlalchemy.dialects)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.engine", fake_engine)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.engine.url", fake_engine_url)
     monkeypatch.setitem(sys.modules, "sqlalchemy.ext", fake_sqlalchemy.ext)
     monkeypatch.setitem(sys.modules, "sqlalchemy.ext.declarative", fake_declarative)
     monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_orm)
@@ -107,18 +120,26 @@ def test_session_scope_commits_and_closes(orm_module, monkeypatch):
 
 
 def test_engine_uses_default_mysql_settings(orm_module):
+    url = orm_module.engine[1][0]
+
+    assert url.drivername == "mysql+mysqlconnector"
+    assert url.kwargs == {
+        "username": "acquire",
+        "password": "acquire",
+        "host": "localhost",
+        "database": "acquire",
+        "query": {"unix_socket": "/var/run/mysqld/mysqld.sock"},
+    }
     assert orm_module.engine == (
         "engine",
-        (
-            "mysql+mysqlconnector://acquire:acquire@localhost/acquire?unix_socket=%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock",
-        ),
+        (url,),
         {"connect_args": {"auth_plugin": "mysql_native_password"}},
     )
 
 
 def test_engine_uses_mysql_environment(monkeypatch):
     monkeypatch.delitem(sys.modules, "orm", raising=False)
-    monkeypatch.setenv("MYSQL_DATABASE", "custom_acquire")
+    monkeypatch.setenv("MYSQL_DATABASE", "custom db")
     monkeypatch.setenv("MYSQL_PASSWORD", "custom password")
     monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
     monkeypatch.setenv("MYSQL_USER", "custom_user")
@@ -126,11 +147,19 @@ def test_engine_uses_mysql_environment(monkeypatch):
 
     try:
         orm = importlib.import_module("orm")
+        url = orm.engine[1][0]
+
+        assert url.drivername == "mysql+mysqlconnector"
+        assert url.kwargs == {
+            "username": "custom_user",
+            "password": "custom password",
+            "host": "localhost",
+            "database": "custom db",
+            "query": {"unix_socket": "/tmp/mysql.sock"},
+        }
         assert orm.engine == (
             "engine",
-            (
-                "mysql+mysqlconnector://custom_user:custom%20password@localhost/custom_acquire?unix_socket=%2Ftmp%2Fmysql.sock",
-            ),
+            (url,),
             {"connect_args": {"auth_plugin": "mysql_native_password"}},
         )
     finally:
