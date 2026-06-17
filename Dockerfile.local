@@ -13,9 +13,9 @@ RUN apt-get update \
         zopfli \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.local-docker.txt .
 RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install --trusted-host cdn.mysql.com -r requirements.txt
+    && python -m pip install -r requirements.local-docker.txt
 
 COPY . .
 

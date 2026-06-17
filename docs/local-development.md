@@ -8,6 +8,8 @@ This project is still in the legacy split-runtime phase:
 
 The Docker Compose setup is intended for local development only while test coverage expands and the Node.js gateway is being retired.
 
+The local Python image intentionally installs from `requirements.local-docker.txt` instead of the legacy `requirements.txt`. The legacy file still contains an old MySQL connector zip URL that is no longer reliably fetchable, and broad runtime dependency upgrades are deferred until coverage is stronger.
+
 ## Start MySQL And Python
 
 Copy the example environment file if you want to customize local credentials:
