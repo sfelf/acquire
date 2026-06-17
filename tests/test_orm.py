@@ -83,6 +83,7 @@ def orm_module(monkeypatch):
     monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
     monkeypatch.delenv("MYSQL_SOCKET", raising=False)
     monkeypatch.delenv("MYSQL_USER", raising=False)
+    monkeypatch.delenv("MYSQL_AUTH_PLUGIN", raising=False)
     install_fake_sqlalchemy(monkeypatch)
 
     try:
@@ -143,6 +144,7 @@ def test_engine_uses_mysql_environment(monkeypatch):
     monkeypatch.setenv("MYSQL_PASSWORD", "custom password")
     monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
     monkeypatch.setenv("MYSQL_USER", "custom_user")
+    monkeypatch.setenv("MYSQL_AUTH_PLUGIN", "")
     install_fake_sqlalchemy(monkeypatch)
 
     try:
@@ -160,7 +162,7 @@ def test_engine_uses_mysql_environment(monkeypatch):
         assert orm.engine == (
             "engine",
             (url,),
-            {"connect_args": {"auth_plugin": "mysql_native_password"}},
+            {"connect_args": {}},
         )
     finally:
         sys.modules.pop("orm", None)

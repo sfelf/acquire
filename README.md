@@ -35,6 +35,12 @@ cp .env.example .env
 docker compose up --build mysql python-server
 ```
 
+The browser UI still runs through the legacy Node.js gateway during this phase. To launch it locally, use the legacy profile and open [http://localhost:9000/](http://localhost:9000/):
+
+```bash
+docker compose --profile legacy-node up --build mysql python-server node-gateway
+```
+
 See [docs/local-development.md](docs/local-development.md) for database initialization, teardown, and the optional legacy Node.js gateway profile.
 
 ## Install dependencies

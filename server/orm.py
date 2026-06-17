@@ -20,6 +20,10 @@ mysql_user = os.environ.get("MYSQL_USER", "acquire")
 mysql_password = os.environ.get("MYSQL_PASSWORD", "acquire")
 mysql_database = os.environ.get("MYSQL_DATABASE", "acquire")
 mysql_socket = os.environ.get("MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock")
+mysql_auth_plugin = os.environ.get("MYSQL_AUTH_PLUGIN", "mysql_native_password")
+connect_args = {}
+if mysql_auth_plugin:
+    connect_args["auth_plugin"] = mysql_auth_plugin
 engine = create_engine(
     URL(
         "mysql+mysqlconnector",
@@ -29,7 +33,7 @@ engine = create_engine(
         database=mysql_database,
         query={"unix_socket": mysql_socket},
     ),
-    connect_args={"auth_plugin": "mysql_native_password"},
+    connect_args=connect_args,
 )
 Session = sessionmaker(bind=engine)
 

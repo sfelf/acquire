@@ -24,6 +24,8 @@ Start MySQL and the Python game server:
 docker compose up --build mysql python-server
 ```
 
+This starts the Python backend only. It does not expose the browser UI because the current UI still depends on the legacy Node.js gateway.
+
 Initialize the local database in another terminal:
 
 ```bash
@@ -40,8 +42,28 @@ The Node.js gateway is available as an opt-in profile for local parity checks:
 docker compose --profile legacy-node up --build mysql python-server node-gateway
 ```
 
-The profile generates the gitignored `client/main/js/enums.js` file before starting `server/server.js`, then waits for the Python server to report a healthy `python.sock`.
-The gateway removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
+Initialize the local database in another terminal if you have not already done so:
+
+```bash
+docker compose run --rm python-server python initialize_database.py
+```
+
+Then open the local UI:
+
+```text
+http://localhost:9000/
+```
+
+Set `ACQUIRE_UI_PORT` in `.env` to use a different host port:
+
+```env
+ACQUIRE_UI_PORT=9001
+```
+
+The profile generates the gitignored client assets before starting `server/server.js`: `client/main/css/main.css`, `client/stats/css/stats.css`, `client/main/js/enums.js`, and `client/main/js/main.js`.
+In Docker, the gateway listens on port `9000`, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
+Outside Docker, the gateway keeps the legacy default of listening on `javascript.sock`.
+The gateway still removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
 
 This profile exists to support the current split while Python backend parity is built out. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
 
@@ -53,7 +75,7 @@ Stop containers:
 docker compose down
 ```
 
-Stop containers and remove the local MySQL data volume:
+Stop containers and remove the local MySQL data volume, MySQL socket volume, and container-side Node dependency cache:
 
 ```bash
 docker compose down --volumes
