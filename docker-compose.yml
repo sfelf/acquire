@@ -1,0 +1,52 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-acquire}
+      MYSQL_USER: ${MYSQL_USER:-acquire}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-acquire}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - mysql-socket:/var/run/mysqld
+
+  python-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - mysql-socket:/var/run/mysqld
+    working_dir: /app/server
+    command: python server.py
+
+  node-gateway:
+    image: node:6
+    profiles:
+      - legacy-node
+    depends_on:
+      mysql:
+        condition: service_healthy
+      python-server:
+        condition: service_started
+    volumes:
+      - .:/app
+      - mysql-socket:/var/run/mysqld
+    working_dir: /app/server
+    command: sh -c "cd /app && npm install && cd /app/server && node server.js"
+
+volumes:
+  mysql-data:
+  mysql-socket:
