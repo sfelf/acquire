@@ -23,24 +23,53 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.local
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-acquire}
+      MYSQL_USER: ${MYSQL_USER:-acquire}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-acquire}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_SOCKET: /var/run/mysqld/mysqld.sock
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /app/server/python.sock"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
     volumes:
       - .:/app
       - mysql-socket:/var/run/mysqld
     working_dir: /app/server
-    command: python server.py
+    command: sh -c "rm -f python.sock && python server.py"
+
+  client-enums:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    profiles:
+      - legacy-node
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: sh -c "python server/enumsgen.py js development > client/main/js/enums.js"
 
   node-gateway:
     image: node:6
     profiles:
       - legacy-node
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-acquire}
+      MYSQL_USER: ${MYSQL_USER:-acquire}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-acquire}
+      MYSQL_SOCKET: /var/run/mysqld/mysqld.sock
     depends_on:
+      client-enums:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       python-server:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - .:/app
       - mysql-socket:/var/run/mysqld

@@ -26,10 +26,7 @@ class FakeDeclarativeBase:
             setattr(self, key, value)
 
 
-@pytest.fixture
-def orm_module(monkeypatch):
-    monkeypatch.delitem(sys.modules, "orm", raising=False)
-
+def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
     fake_sqlalchemy.create_engine = lambda *args, **kwargs: ("engine", args, kwargs)
     fake_sqlalchemy.Column = FakeColumn
@@ -62,10 +59,18 @@ def orm_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects", fake_sqlalchemy.dialects)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
     monkeypatch.setitem(sys.modules, "sqlalchemy.ext", fake_sqlalchemy.ext)
-    monkeypatch.setitem(
-        sys.modules, "sqlalchemy.ext.declarative", fake_declarative
-    )
+    monkeypatch.setitem(sys.modules, "sqlalchemy.ext.declarative", fake_declarative)
     monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_orm)
+
+
+@pytest.fixture
+def orm_module(monkeypatch):
+    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delenv("MYSQL_DATABASE", raising=False)
+    monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
+    monkeypatch.delenv("MYSQL_SOCKET", raising=False)
+    monkeypatch.delenv("MYSQL_USER", raising=False)
+    install_fake_sqlalchemy(monkeypatch)
 
     try:
         yield importlib.import_module("orm")
@@ -99,6 +104,37 @@ def test_session_scope_commits_and_closes(orm_module, monkeypatch):
     assert session.committed is True
     assert session.rolled_back is False
     assert session.closed is True
+
+
+def test_engine_uses_default_mysql_settings(orm_module):
+    assert orm_module.engine == (
+        "engine",
+        (
+            "mysql+mysqlconnector://acquire:acquire@localhost/acquire?unix_socket=%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock",
+        ),
+        {"connect_args": {"auth_plugin": "mysql_native_password"}},
+    )
+
+
+def test_engine_uses_mysql_environment(monkeypatch):
+    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.setenv("MYSQL_DATABASE", "custom_acquire")
+    monkeypatch.setenv("MYSQL_PASSWORD", "custom password")
+    monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
+    monkeypatch.setenv("MYSQL_USER", "custom_user")
+    install_fake_sqlalchemy(monkeypatch)
+
+    try:
+        orm = importlib.import_module("orm")
+        assert orm.engine == (
+            "engine",
+            (
+                "mysql+mysqlconnector://custom_user:custom+password@localhost/custom_acquire?unix_socket=%2Ftmp%2Fmysql.sock",
+            ),
+            {"connect_args": {"auth_plugin": "mysql_native_password"}},
+        )
+    finally:
+        sys.modules.pop("orm", None)
 
 
 def test_session_scope_rolls_back_and_closes_on_error(orm_module, monkeypatch):

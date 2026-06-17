@@ -1,4 +1,5 @@
 .git
+.env
 .mypy_cache
 .pre-commit-cache
 .pytest_cache

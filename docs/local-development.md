@@ -30,7 +30,7 @@ Initialize the local database in another terminal:
 docker compose run --rm python-server python initialize_database.py
 ```
 
-The initializer currently uses the legacy root password and Unix socket assumptions from the existing codebase.
+The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, and the legacy Node gateway.
 
 ## Legacy Node Gateway
 
@@ -39,6 +39,8 @@ The Node.js gateway is available as an opt-in profile for local parity checks:
 ```bash
 docker compose --profile legacy-node up --build mysql python-server node-gateway
 ```
+
+The profile generates the gitignored `client/main/js/enums.js` file before starting `server/server.js`, then waits for the Python server to report a healthy `python.sock`.
 
 This profile exists to support the current split while Python backend parity is built out. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
 

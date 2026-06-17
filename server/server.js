@@ -17,10 +17,10 @@
 
   var mysql = require('mysql');
   var pool = mysql.createPool({
-    socketPath: '/var/run/mysqld/mysqld.sock',
-    user: 'acquire',
-    password: 'acquire',
-    database: 'acquire',
+    socketPath: process.env.MYSQL_SOCKET || '/var/run/mysqld/mysqld.sock',
+    user: process.env.MYSQL_USER || 'acquire',
+    password: process.env.MYSQL_PASSWORD || 'acquire',
+    database: process.env.MYSQL_DATABASE || 'acquire',
     charset: 'utf8mb4',
   });
 
