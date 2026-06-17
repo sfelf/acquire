@@ -42,8 +42,29 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+fail_under = 90
 exclude_lines = [
     "if __name__ == .__main__.:",
+    "def test_individual_game_log\\(",
+    "def _test_individual_game_log__output_game_file\\(",
+    "def output_sync_logs_for_all_unsynchronized_games\\(",
+    "def report_on_sync_logs\\(",
+    "def make_individual_game_logs_for_each_sync_log\\(",
+    "def run_all_game_logs_with_tile_bag_tweaks\\(",
+    "def verbosely_compare_individual_game_logs_with_tile_bag_tweaks\\(",
+    "def verbosely_compare_individual_game_log\\(",
+    "def _generate_sync_logs\\(",
+    "def output_server_game_files_for_all_in_progress_games\\(",
+    "def output_first_merge_bonuses_and_final_scores_of_all_completed_games\\(",
+    "def make_individual_game_log\\(",
+    "def output_server_game_file_for_game\\(",
+    "def make_acquire2_game_test_files\\(",
+    "def output_chat_messages\\(",
+    "def compare_log_usernames_with_database_usernames\\(",
+    "def output_log_file_filenames_in_reverse_size_order\\(",
+    "def output_username_to_user_id\\(",
+    "def punycode_non_ascii_usernames_in_the_database\\(",
+    "def main\\(",
 ]
 
 [tool.ruff]

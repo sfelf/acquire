@@ -20,7 +20,9 @@ Testing is the main safety mechanism for the planned refactor.
 
 ## Coverage Policy
 
-Coverage is reported in CI, but strict thresholds should wait until meaningful coverage exists. The first target is useful regression protection, not an arbitrary percentage.
+Coverage is reported in CI and must stay at or above 90%. The threshold should continue to rise only when the added tests protect behavior that matters for the Python refactor.
+
+Legacy one-off log export and reporting commands in `server/logs_to_games.py` are excluded from the coverage denominator. The parser, replay, formatting, extraction, game-rule, persistence, and protocol paths remain covered because those are the surfaces most likely to catch behavior regressions during the refactor.
 
 Run coverage locally with:
 

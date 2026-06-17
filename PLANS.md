@@ -37,13 +37,13 @@ Status: complete.
 - Move or mirror the existing `server/test.py` coverage under pytest. Complete.
 - Add fixtures for game-server behavior. Complete.
 - Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`. Complete.
-- Add coverage reporting as informational only. Complete.
+- Add coverage reporting with a 90% minimum threshold. Complete.
 - Keep fast tests separate from MySQL and end-to-end tests. Complete.
 
 Notes:
 
 - The pytest suite now covers the core Python server modules, log parser/processor helpers, ORM helpers, cron helpers, and replay fixtures without requiring MySQL for fast checks.
-- Coverage remains informational while refactor-safety coverage continues to expand.
+- Coverage now has a 90% minimum threshold. Legacy one-off log export/reporting commands are excluded from the denominator, while parser, replay, game-rule, persistence, and protocol paths remain covered.
 
 ## Phase 3: Golden Replay Tests
 
