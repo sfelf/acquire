@@ -5,6 +5,7 @@
   var app = express();
   var body_parser = require('body-parser');
   var http = require('http');
+  var path = require('path');
   var server = http.createServer(app);
 
   var sockjs = require('sockjs');
@@ -13,19 +14,42 @@
     transports: ['websocket', 'websocket-raw'],
   });
 
-  server.listen('javascript.sock');
+  if (process.env.SERVE_CLIENT_STATIC === '1') {
+    app.use('/stats', express.static(path.join(__dirname, '../client/stats')));
+    app.use(express.static(path.join(__dirname, '../client/main')));
+  }
+
+  if (process.env.JAVASCRIPT_PORT) {
+    server.listen(Number(process.env.JAVASCRIPT_PORT), '0.0.0.0');
+  } else {
+    server.listen('javascript.sock');
+  }
 
   var mysql = require('mysql');
   var pool = mysql.createPool({
-    socketPath: '/var/run/mysqld/mysqld.sock',
-    user: 'acquire',
-    password: 'acquire',
-    database: 'acquire',
+    socketPath: process.env.MYSQL_SOCKET || '/var/run/mysqld/mysqld.sock',
+    user: process.env.MYSQL_USER || 'acquire',
+    password: process.env.MYSQL_PASSWORD || 'acquire',
+    database: process.env.MYSQL_DATABASE || 'acquire',
     charset: 'utf8mb4',
   });
 
   var server_version = 'VERSION';
   var enums = require('../client/main/js/enums');
+
+  function getRequestIpAddress(req) {
+    if (Object.prototype.hasOwnProperty.call(req.headers, 'x-real-ip')) {
+      return req.headers['x-real-ip'];
+    } else if (req.ip) {
+      return req.ip;
+    } else if (req.connection && req.connection.remoteAddress) {
+      return req.connection.remoteAddress;
+    } else if (req.socket && req.socket.remoteAddress) {
+      return req.socket.remoteAddress;
+    } else {
+      return null;
+    }
+  }
 
   function isASCII(string) {
     var i,
@@ -60,7 +84,7 @@
     var version = Object.prototype.hasOwnProperty.call(req.body, 'version') ? req.body.version.replace(/\s+/g, ' ').trim() : '',
       username = Object.prototype.hasOwnProperty.call(req.body, 'username') ? req.body.username.replace(/\s+/g, ' ').trim() : '',
       password = Object.prototype.hasOwnProperty.call(req.body, 'password') ? req.body.password.replace(/\s+/g, ' ').trim() : '',
-      ip_address = Object.prototype.hasOwnProperty.call(req.headers, 'x-real-ip') ? req.headers['x-real-ip'] : req.address.address,
+      ip_address = getRequestIpAddress(req),
       fields;
 
     res.setHeader('Content-Type', 'application/json');

@@ -58,10 +58,12 @@ Status: in progress.
 Remaining work:
 
 - Add fuller replay coverage from the available sample server log.
-- Add richer final-state golden assertions around replayed games.
+- Add richer final-state golden assertions around replayed games. Complete for the initial redacted real-server fixture.
 - Add more historical log fixtures for edge cases before beginning the major refactor.
 
 ## Phase 4: Local Development Docker
+
+- Status: in progress.
 
 - Add Docker Compose for local development.
 - Include MySQL as a local service.

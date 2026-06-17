@@ -26,10 +26,13 @@ class FakeDeclarativeBase:
             setattr(self, key, value)
 
 
-@pytest.fixture
-def orm_module(monkeypatch):
-    monkeypatch.delitem(sys.modules, "orm", raising=False)
+class FakeURL:
+    def __init__(self, drivername, **kwargs):
+        self.drivername = drivername
+        self.kwargs = kwargs
 
+
+def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
     fake_sqlalchemy.create_engine = lambda *args, **kwargs: ("engine", args, kwargs)
     fake_sqlalchemy.Column = FakeColumn
@@ -50,22 +53,38 @@ def orm_module(monkeypatch):
     fake_declarative = types.ModuleType("sqlalchemy.ext.declarative")
     fake_declarative.declarative_base = lambda: FakeDeclarativeBase
 
+    fake_engine = types.ModuleType("sqlalchemy.engine")
+    fake_engine_url = types.ModuleType("sqlalchemy.engine.url")
+    fake_engine_url.URL = FakeURL
+
     fake_orm = types.ModuleType("sqlalchemy.orm")
     fake_orm.relationship = lambda *args, **kwargs: ("relationship", args, kwargs)
     fake_orm.sessionmaker = lambda bind=None: lambda autoflush=False: None
 
     fake_sqlalchemy.dialects = types.SimpleNamespace(mysql=fake_mysql)
+    fake_sqlalchemy.engine = types.SimpleNamespace(url=fake_engine_url)
     fake_sqlalchemy.ext = types.SimpleNamespace(declarative=fake_declarative)
     fake_sqlalchemy.orm = fake_orm
 
     monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects", fake_sqlalchemy.dialects)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.engine", fake_engine)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.engine.url", fake_engine_url)
     monkeypatch.setitem(sys.modules, "sqlalchemy.ext", fake_sqlalchemy.ext)
-    monkeypatch.setitem(
-        sys.modules, "sqlalchemy.ext.declarative", fake_declarative
-    )
+    monkeypatch.setitem(sys.modules, "sqlalchemy.ext.declarative", fake_declarative)
     monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_orm)
+
+
+@pytest.fixture
+def orm_module(monkeypatch):
+    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delenv("MYSQL_DATABASE", raising=False)
+    monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
+    monkeypatch.delenv("MYSQL_SOCKET", raising=False)
+    monkeypatch.delenv("MYSQL_USER", raising=False)
+    monkeypatch.delenv("MYSQL_AUTH_PLUGIN", raising=False)
+    install_fake_sqlalchemy(monkeypatch)
 
     try:
         yield importlib.import_module("orm")
@@ -99,6 +118,54 @@ def test_session_scope_commits_and_closes(orm_module, monkeypatch):
     assert session.committed is True
     assert session.rolled_back is False
     assert session.closed is True
+
+
+def test_engine_uses_default_mysql_settings(orm_module):
+    url = orm_module.engine[1][0]
+
+    assert url.drivername == "mysql+mysqlconnector"
+    assert url.kwargs == {
+        "username": "acquire",
+        "password": "acquire",
+        "host": "localhost",
+        "database": "acquire",
+        "query": {"unix_socket": "/var/run/mysqld/mysqld.sock"},
+    }
+    assert orm_module.engine == (
+        "engine",
+        (url,),
+        {"connect_args": {"auth_plugin": "mysql_native_password"}},
+    )
+
+
+def test_engine_uses_mysql_environment(monkeypatch):
+    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.setenv("MYSQL_DATABASE", "custom db")
+    monkeypatch.setenv("MYSQL_PASSWORD", "custom password")
+    monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
+    monkeypatch.setenv("MYSQL_USER", "custom_user")
+    monkeypatch.setenv("MYSQL_AUTH_PLUGIN", "")
+    install_fake_sqlalchemy(monkeypatch)
+
+    try:
+        orm = importlib.import_module("orm")
+        url = orm.engine[1][0]
+
+        assert url.drivername == "mysql+mysqlconnector"
+        assert url.kwargs == {
+            "username": "custom_user",
+            "password": "custom password",
+            "host": "localhost",
+            "database": "custom db",
+            "query": {"unix_socket": "/tmp/mysql.sock"},
+        }
+        assert orm.engine == (
+            "engine",
+            (url,),
+            {"connect_args": {}},
+        )
+    finally:
+        sys.modules.pop("orm", None)
 
 
 def test_session_scope_rolls_back_and_closes_on_error(orm_module, monkeypatch):

@@ -86,6 +86,8 @@ def test_initialize_database_resets_schema_creates_tables_and_seeds_rows(
     assert subprocess_calls == [
         [
             "mysql",
+            "--socket",
+            "/var/run/mysqld/mysqld.sock",
             "-u",
             "root",
             "-proot",
@@ -105,4 +107,29 @@ def test_initialize_database_resets_schema_creates_tables_and_seeds_rows(
         RatingType(name="Singles3"),
         RatingType(name="Singles4"),
         RatingType(name="Teams"),
+    ]
+
+
+def test_initialize_database_uses_mysql_environment(
+    initialize_database_with_stubbed_orm,
+    monkeypatch,
+):
+    initialize_database, _, _ = initialize_database_with_stubbed_orm
+    subprocess_calls = []
+    monkeypatch.setattr(initialize_database.subprocess, "call", subprocess_calls.append)
+    monkeypatch.setenv("MYSQL_DATABASE", "custom_acquire")
+    monkeypatch.setenv("MYSQL_ROOT_PASSWORD", "custom-root")
+    monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
+
+    initialize_database.main()
+
+    assert subprocess_calls[0] == [
+        "mysql",
+        "--socket",
+        "/tmp/mysql.sock",
+        "-u",
+        "root",
+        "-pcustom-root",
+        "-e",
+        "drop schema if exists `custom_acquire`; create schema `custom_acquire` default character set utf8mb4 collate utf8mb4_bin;",
     ]

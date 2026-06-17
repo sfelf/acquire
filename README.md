@@ -26,6 +26,23 @@ uv run pytest --cov=server --cov-report=term-missing:skip-covered --cov-report=x
 
 Current coverage is informational while golden replay tests are expanded before the major refactor. The coverage command generates `coverage.xml`, and CI uploads that report to Codecov so the README coverage badge can update without committing generated badge files to the repository. The repository must be connected to Codecov for uploads and the badge to resolve.
 
+## Local Docker development
+
+Docker Compose support is available for local MySQL and the current Python game server:
+
+```bash
+cp .env.example .env
+docker compose up --build mysql python-server
+```
+
+The browser UI still runs through the legacy Node.js gateway during this phase. To launch it locally, use the legacy profile and open [http://localhost:9000/](http://localhost:9000/):
+
+```bash
+docker compose --profile legacy-node up --build mysql python-server node-gateway
+```
+
+See [docs/local-development.md](docs/local-development.md) for database initialization, teardown, and the optional legacy Node.js gateway profile.
+
 ## Install dependencies
 
 Install nodejs. I followed the [official instructions](https://nodejs.org/en/download/package-manager/#debian-and-ubuntu-based-linux-distributions):

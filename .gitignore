@@ -8,6 +8,7 @@
 /node_modules
 /__pycache__/
 *.py[cod]
+*.sock
 /tests/__pycache__/
 /server/__pycache__
 /uv-cache
@@ -22,4 +23,5 @@
 /.ruff_cache
 /.coverage
 /coverage.xml
+/.env
 /.vscode
