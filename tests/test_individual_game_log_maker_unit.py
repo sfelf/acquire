@@ -104,6 +104,78 @@ def test_individual_game_log_maker_disconnect_removes_connect_batch(
     assert maker._client_id_to_add_batch == {}
 
 
+def test_individual_game_log_maker_player_client_id_updates_membership(
+    logs_to_games_without_database,
+):
+    maker = make_maker(logs_to_games_without_database)
+    maker._handle_connect(10, "alice")
+    maker._handle_connect(20, "bob")
+    maker._handle_log({"_": "game", "game-id": 77, "external-game-id": 7})
+    maker._handle_log(
+        {
+            "_": "game-player",
+            "game-id": 77,
+            "external-game-id": 7,
+            "player-id": 1,
+            "username": "bob",
+        }
+    )
+    set_game_player_client_id = logs_to_games_without_database.Enums.lookups[
+        "CommandsToClient"
+    ].index("SetGamePlayerClientId")
+
+    maker._handle_command_to_client__set_game_player_client_id(
+        [],
+        [set_game_player_client_id, 7, 1, 20],
+    )
+    maker._handle_command_to_client__set_game_player_client_id(
+        [],
+        [set_game_player_client_id, 7, 1, None],
+    )
+
+    assert maker._batch_game_id == 7
+    assert 20 not in maker._client_id_to_game_id
+
+
+def test_individual_game_log_maker_remove_helpers_ignore_unknown_ids(
+    logs_to_games_without_database,
+):
+    maker = make_maker(logs_to_games_without_database)
+    maker._handle_connect(10, "alice")
+    maker._handle_log({"_": "game", "game-id": 77, "external-game-id": 7})
+    maker._game_id_to_game_log[7].player_id_to_username[0] = "alice"
+
+    maker._remove_client_id_from_game(99)
+    maker._remove_player_id_from_game(7, 0)
+
+    assert maker._batch_game_id is None
+
+
+def test_individual_game_log_maker_command_handlers_continue_after_errors(
+    logs_to_games_without_database,
+    capsys,
+):
+    maker = make_maker(logs_to_games_without_database)
+
+    def raise_error(*_args):
+        raise RuntimeError("batch handler failed")
+
+    maker._commands_to_client_handlers[CommandsToClient.SetTurn.value] = raise_error
+    maker._commands_to_server_handlers[CommandsToServer.DoGameAction.value] = raise_error
+
+    maker._handle_command_to_client(
+        [10],
+        [[CommandsToClient.SetTurn.value, 0]],
+    )
+    maker._handle_command_to_server(
+        10,
+        [CommandsToServer.DoGameAction.value, 1],
+    )
+
+    captured = capsys.readouterr()
+    assert "RuntimeError: batch handler failed" in captured.err
+
+
 def test_username_helpers_normalize_known_and_non_ascii_names(
     logs_to_games_without_database,
 ):

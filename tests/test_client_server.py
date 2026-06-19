@@ -299,6 +299,26 @@ def test_client_game_membership_commands_forward_to_existing_game(
     assert client.game_id == 7
 
 
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "_on_message_join_game",
+        "_on_message_rejoin_game",
+        "_on_message_watch_game",
+    ],
+)
+def test_client_game_membership_commands_ignore_missing_or_busy_games(method_name):
+    game_server, client, _writes = make_client()
+    game = RecordingGame()
+    game_server.game_id_to_game[7] = game
+
+    getattr(client, method_name)(99)
+    client.game_id = 7
+    getattr(client, method_name)(7)
+
+    assert game.calls == []
+
+
 def test_client_leave_game_forwards_to_current_game():
     game_server, client, _writes = make_client()
     game = RecordingGame()
@@ -311,6 +331,16 @@ def test_client_leave_game_forwards_to_current_game():
     assert client.game_id is None
 
 
+def test_client_leave_game_ignores_client_outside_game():
+    game_server, client, _writes = make_client()
+    game = RecordingGame()
+    game_server.game_id_to_game[7] = game
+
+    client._on_message_leave_game()
+
+    assert game.calls == []
+
+
 def test_client_do_game_action_forwards_action_id_and_data_tuple():
     game_server, client, _writes = make_client()
     game = RecordingGame()
@@ -320,6 +350,27 @@ def test_client_do_game_action_forwards_action_id_and_data_tuple():
     client._on_message_do_game_action(3, "alpha", 4)
 
     assert game.calls == [("action", client.client_id, 3, ("alpha", 4))]
+
+
+def test_client_do_game_action_ignores_client_outside_game():
+    game_server, client, _writes = make_client()
+    game = RecordingGame()
+    game_server.game_id_to_game[7] = game
+
+    client._on_message_do_game_action(3, "alpha", 4)
+
+    assert game.calls == []
+
+
+def test_client_game_chat_message_ignores_blank_or_client_outside_game():
+    game_server, client, _writes = make_client()
+
+    client._on_message_send_game_chat_message("hello")
+    client.game_id = 7
+    game_server.game_id_to_game[7] = GameWithClients({client.client_id})
+    client._on_message_send_game_chat_message(" \n\t ")
+
+    assert game_server.client_ids_and_messages == []
 
 
 def test_client_create_game_validates_input_and_stores_created_game(monkeypatch):

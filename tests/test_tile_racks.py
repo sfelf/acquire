@@ -97,6 +97,20 @@ def test_determine_tile_game_board_types_marks_isolated_tile_as_lonely_and_repor
     ]
 
 
+def test_determine_tile_game_board_types_records_draw_without_connected_client():
+    game = RecordingGame()
+    game.score_sheet.player_data[0][-1] = None
+    tile_racks = make_tile_racks(game, [[(0, 0), None, False], None, None, None, None, None])
+
+    tile_racks.determine_tile_game_board_types()
+
+    assert tile_racks.racks[0][0][1] == GameBoardTypes.WillPutLonelyTileDown.value
+    assert game.history_messages == [
+        ((GameHistoryMessages.DrewTile.value, 0, 0, 0), {"player_id": 0}),
+    ]
+    assert game.pending_messages == []
+
+
 def test_determine_tile_game_board_types_marks_adjacent_lonely_tiles_as_neighbors():
     game = RecordingGame()
     tile_racks = make_tile_racks(
@@ -156,6 +170,26 @@ def test_determine_tile_game_board_types_marks_safe_chain_merge_as_unplayable():
     tile_racks.determine_tile_game_board_types()
 
     assert tile_racks.racks[0][0][1] == GameBoardTypes.CantPlayEver.value
+
+
+def test_determine_tile_game_board_types_updates_existing_tile_type():
+    board = make_empty_board()
+    board[1][0] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    tile_racks = make_tile_racks(
+        game,
+        [[(0, 0), GameBoardTypes.WillPutLonelyTileDown.value, False], None, None, None, None, None],
+    )
+
+    tile_racks.determine_tile_game_board_types()
+
+    assert tile_racks.racks[0][0][1] == GameBoardTypes.Luxor.value
+    assert game.pending_messages == [
+        (
+            [[CommandsToClient.SetTileGameBoardType.value, 0, GameBoardTypes.Luxor.value]],
+            {10},
+        )
+    ]
 
 
 def test_replace_dead_tiles_removes_marks_and_draws_replacement_tile():

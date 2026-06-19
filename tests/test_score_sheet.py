@@ -11,6 +11,9 @@ class RecordingGame:
         self.client_ids = {1, 2}
         self.pending_messages = []
         self.game_board = None
+        self.game_id = "game-1"
+        self.internal_game_id = 123
+        self.logging_enabled = False
 
     def add_pending_messages(self, messages, client_ids=None):
         self.pending_messages.append((messages, client_ids))
@@ -155,3 +158,50 @@ def test_update_net_worths_counts_cash_stock_value_and_active_chain_bonuses():
 
     assert score_sheet.player_data[0][ScoreSheetIndexes.Net.value] == 130
     assert score_sheet.player_data[1][ScoreSheetIndexes.Net.value] == 95
+
+
+def test_join_game_updates_shifted_player_ids_and_sends_prior_position_tiles():
+    game, score_sheet = make_score_sheet()
+    first_client = type("Client", (), {"username": "alice", "client_id": 10})()
+    second_client = type("Client", (), {"username": "bob", "client_id": 20})()
+
+    score_sheet.join_game(first_client, (5, 5))
+    game.pending_messages.clear()
+    score_sheet.join_game(second_client, (1, 1))
+
+    assert first_client.player_id == 1
+    assert second_client.player_id == 0
+    assert score_sheet.creator_username == "alice"
+    assert score_sheet.username_to_player_id == {"alice": 1, "bob": 0}
+    assert game.pending_messages == [
+        (
+            [[CommandsToClient.SetGamePlayerJoin.value, "game-1", 0, 20]],
+            None,
+        ),
+        (
+            [
+                [
+                    CommandsToClient.SetGameBoardCell.value,
+                    5,
+                    5,
+                    GameBoardTypes.NothingYet.value,
+                ]
+            ],
+            {20},
+        ),
+    ]
+
+
+def test_join_game_leaves_disconnected_existing_player_without_client_update():
+    game, score_sheet = make_score_sheet(
+        [[0, 0, 0, 0, 0, 0, 0, 60, 60, "alice", (5, 5), None]]
+    )
+    score_sheet.creator_username = "alice"
+    score_sheet.username_to_player_id = {"alice": 0}
+    client = type("Client", (), {"username": "bob", "client_id": 20})()
+
+    score_sheet.join_game(client, (1, 1))
+
+    assert client.player_id == 0
+    assert score_sheet.player_data[1][ScoreSheetIndexes.Client.value] is None
+    assert score_sheet.username_to_player_id == {"alice": 1, "bob": 0}

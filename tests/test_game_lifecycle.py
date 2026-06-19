@@ -1,4 +1,5 @@
 import json
+import types
 
 import pytest
 import server
@@ -86,6 +87,48 @@ def test_join_game_adds_player_position_tile_history_and_start_action():
     assert [CommandsToClient.SetGameAction.value, GameActions.StartGame.value, 0] in messages
 
 
+def test_init_without_tile_bag_generates_and_shuffles_full_tile_set(monkeypatch):
+    shuffled = []
+    pending = []
+
+    def shuffle(tiles):
+        shuffled.append(list(tiles))
+        tiles.reverse()
+
+    monkeypatch.setattr(server.random, "shuffle", shuffle)
+    game = server.Game(
+        "game-1",
+        123,
+        GameModes.Singles.value,
+        3,
+        lambda messages, client_ids=None: pending.append((messages, client_ids)),
+        logging_enabled=False,
+    )
+
+    assert len(shuffled) == 1
+    assert shuffled[0][:3] == [(0, 0), (0, 1), (0, 2)]
+    assert len(game.tile_bag) == 108
+    assert len(set(game.tile_bag)) == 108
+    assert game.tile_bag[0] == (11, 8)
+
+
+def test_join_game_ignores_duplicate_username_and_non_starting_state():
+    game, pending = make_game()
+    player = RecordingClient(10, "alice")
+    game.join_game(player)
+    pending.clear()
+
+    game.join_game(RecordingClient(11, "alice"))
+    assert pending == []
+    assert game.num_players == 1
+
+    game.state = GameStates.InProgress.value
+    game.join_game(RecordingClient(12, "bob"))
+
+    assert pending == []
+    assert game.num_players == 1
+
+
 def test_watch_game_sends_initialization_history_and_action_without_joining():
     game, pending = make_game()
     player = RecordingClient(10, "alice")
@@ -110,6 +153,18 @@ def test_watch_game_sends_initialization_history_and_action_without_joining():
     ] in messages
 
 
+def test_watch_game_ignores_username_already_in_game():
+    game, pending = make_game()
+    player = RecordingClient(10, "alice")
+    game.join_game(player)
+    pending.clear()
+
+    game.watch_game(RecordingClient(20, "alice"))
+
+    assert pending == []
+    assert game.watcher_client_ids == set()
+
+
 def test_rejoin_game_restores_player_client_and_initializes_state():
     game, pending = make_game()
     original = RecordingClient(10, "alice")
@@ -128,6 +183,16 @@ def test_rejoin_game_restores_player_client_and_initializes_state():
     assert [CommandsToClient.SetGamePlayerRejoin.value, "game-1", 0, 20] in messages
     assert [CommandsToClient.SetGameBoard.value, game.game_board.x_to_y_to_board_type] in messages
     assert [CommandsToClient.SetTurn.value, None] in messages
+
+
+def test_rejoin_game_ignores_unknown_username():
+    game, pending = make_game()
+
+    game.rejoin_game(RecordingClient(20, "alice"))
+
+    assert pending == [
+        ([[CommandsToClient.SetGameState.value, "game-1", 0, 0, 3]], None),
+    ]
 
 
 def test_leave_game_returns_watcher_to_lobby_without_touching_score_sheet():
@@ -166,6 +231,16 @@ def test_leave_game_clears_player_client_and_announces_missing_player():
     ]
 
 
+def test_leave_game_ignores_client_not_in_game():
+    game, pending = make_game()
+
+    game.leave_game(RecordingClient(99, "visitor"))
+
+    assert pending == [
+        ([[CommandsToClient.SetGameState.value, "game-1", 0, 0, 3]], None),
+    ]
+
+
 def test_send_past_history_messages_filters_private_history_to_rejoining_player():
     game, pending = make_game()
     game.score_sheet.player_data = [
@@ -199,6 +274,72 @@ def test_send_past_history_messages_filters_private_history_to_rejoining_player(
     ]
 
 
+def test_add_history_message_sends_private_string_message_to_connected_player():
+    game, pending = make_game()
+    client = RecordingClient(10, "alice", player_id=0)
+    game.client_ids = {10}
+    game.score_sheet.player_data = [
+        [0, 0, 0, 0, 0, 0, 0, 60, 60, "alice", None, client],
+    ]
+    game.score_sheet.username_to_player_id = {"alice": 0}
+    pending.clear()
+
+    game.add_history_message(
+        GameHistoryMessages.DrewPositionTile.value,
+        "alice",
+        1,
+        2,
+        player_id=0,
+    )
+
+    assert game.history_messages == [
+        [0, [GameHistoryMessages.DrewPositionTile.value, "alice", 1, 2]]
+    ]
+    assert pending == [
+        (
+            [[CommandsToClient.AddGameHistoryMessage.value, GameHistoryMessages.DrewPositionTile.value, 0, 1, 2]],
+            {10},
+        )
+    ]
+
+
+def test_add_history_message_records_private_message_for_disconnected_player():
+    game, pending = make_game()
+    game.score_sheet.player_data = [
+        [0, 0, 0, 0, 0, 0, 0, 60, 60, "alice", None, None],
+    ]
+    pending.clear()
+
+    game.add_history_message(GameHistoryMessages.DrewTile.value, 0, 1, 2, player_id=0)
+
+    assert game.history_messages == [
+        [0, [GameHistoryMessages.DrewTile.value, 0, 1, 2]]
+    ]
+    assert pending == []
+
+
+def test_send_initialization_messages_includes_player_tiles():
+    game, pending = make_game()
+    client = RecordingClient(10, "alice", player_id=0)
+    game.tile_racks = types.SimpleNamespace(
+        racks=[
+            [[(1, 2), GameBoardTypes.Luxor.value, False], None, None, None, None, None],
+        ]
+    )
+    game.actions = [RecordingAction(0, GameActions.PlayTile.value)]
+    pending.clear()
+
+    game._send_initialization_messages(client)
+
+    assert flatten_pending(pending) == [
+        [CommandsToClient.SetGameBoard.value, game.game_board.x_to_y_to_board_type],
+        [CommandsToClient.SetScoreSheet.value, [[], [0, 0, 0, 0, 0, 0, 0]]],
+        [CommandsToClient.SetTile.value, 0, 1, 2, GameBoardTypes.Luxor.value],
+        [CommandsToClient.SetTurn.value, None],
+    ]
+    assert game.actions[0].send_calls == [{10}]
+
+
 def test_do_game_action_ignores_wrong_player_or_action_id():
     game, _pending = make_game()
     action = RecordingAction(0, GameActions.PlayTile.value, execute_result=True)
@@ -206,6 +347,21 @@ def test_do_game_action_ignores_wrong_player_or_action_id():
 
     game.do_game_action(RecordingClient(10, "alice", player_id=1), GameActions.PlayTile.value, [0])
     game.do_game_action(RecordingClient(10, "alice", player_id=0), GameActions.PurchaseShares.value, [0])
+
+    assert action.execute_calls == []
+    assert action.send_calls == []
+
+
+def test_do_game_action_ignores_client_without_player_id():
+    game, _pending = make_game()
+    action = RecordingAction(0, GameActions.PlayTile.value, execute_result=True)
+    game.actions = [action]
+
+    game.do_game_action(
+        RecordingClient(10, "watcher", player_id=None),
+        GameActions.PlayTile.value,
+        [0],
+    )
 
     assert action.execute_calls == []
     assert action.send_calls == []
@@ -253,4 +409,25 @@ def test_set_state_logs_overridden_completed_score(capsys):
         GameModes.Singles.value,
         3,
         [60, 60],
+    ]
+
+
+def test_set_state_sends_mode_when_only_mode_changes():
+    game, pending = make_game()
+    pending.clear()
+
+    game.set_state(GameStates.InProgress.value, mode=GameModes.Teams.value)
+
+    assert pending == [
+        (
+            [
+                [
+                    CommandsToClient.SetGameState.value,
+                    "game-1",
+                    GameStates.InProgress.value,
+                    GameModes.Teams.value,
+                ]
+            ],
+            None,
+        )
     ]
