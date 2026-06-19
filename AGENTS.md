@@ -20,6 +20,7 @@ This repository is in a modernization and refactor effort. Tooling, documentatio
 - Keep linting and type checking permissive until golden tests protect behavior.
 - Prefer small, reviewable changes with clear validation notes.
 - Prefer module-sized test coverage PRs when a module can be covered cleanly without changing runtime behavior.
+- In PR descriptions, list validation using canonical project commands such as `uv run pytest`; do not include local cache paths, virtualenv paths, or machine-specific environment overrides unless they are required for reviewers to reproduce the check.
 
 ## Setup
 
