@@ -215,6 +215,49 @@ def test_process_logs_dispatches_complete_json_lines(cron_module):
     ]
 
 
+def test_process_logs_keeps_existing_log_time_and_ignores_non_json_lines(cron_module):
+    logs2db = cron_module.Logs2DB(FakeSession(), FakeLookup())
+    calls = []
+    logs2db.method_lookup = {
+        "game": lambda params: calls.append(params),
+    }
+    file = io.StringIO(
+        "\n"
+        "not-json\n"
+        '{"_":"game","game-id":1,"log-time":999}\n'
+        '{"_":"game","game-id":2}\n'
+    )
+
+    offset, _completed_game_users = logs2db.process_logs(file, log_time=123)
+
+    assert offset == len(file.getvalue())
+    assert calls == [
+        {"_": "game", "game-id": 1, "log-time": 999},
+        {"_": "game", "game-id": 2, "log-time": 123},
+    ]
+
+
+def test_process_game_handles_minimal_state_update_without_optional_fields(
+    cron_module,
+):
+    lookup = FakeLookup()
+    logs2db = cron_module.Logs2DB(FakeSession(), lookup)
+
+    logs2db.process_game(
+        {
+            "log-time": 10,
+            "game-id": 20,
+            "state": "Starting",
+        }
+    )
+
+    game = lookup.get_game(10, 20)
+    assert game.begin_time is None
+    assert game.end_time is None
+    assert game.game_state.name == "Starting"
+    assert game.game_mode.name == "Singles"
+
+
 def test_process_game_updates_game_fields_and_delegates_scores(cron_module, monkeypatch):
     lookup = FakeLookup()
     logs2db = cron_module.Logs2DB(FakeSession(), lookup)
@@ -315,6 +358,36 @@ def test_calculate_new_ratings_adds_initial_and_result_ratings(cron_module):
     assert len([item for item in session.added if isinstance(item, FakeRating)]) == 4
 
 
+def test_calculate_new_ratings_reuses_existing_rating_without_initial_add(
+    cron_module,
+):
+    session = FakeSession()
+    lookup = FakeLookup()
+    logs2db = cron_module.Logs2DB(session, lookup)
+    game = FakeGame(mode="Singles")
+    game.begin_time = 100
+    game.end_time = 200
+    rating_type = lookup.get_rating_type("Singles2")
+    users = [FakeUser(1, "alice"), FakeUser(2, "bob")]
+    lookup.ratings[(users[0].user_id, rating_type.name)] = FakeRating(
+        user=users[0], rating_type=rating_type, time=50, mu=30, sigma=7
+    )
+    game_players = [
+        FakeGamePlayer(users[0], score=90),
+        FakeGamePlayer(users[1], score=70),
+    ]
+
+    logs2db.calculate_new_ratings(game, game_players)
+
+    initial_ratings = [
+        item
+        for item in session.added
+        if isinstance(item, FakeRating) and item.time == game.begin_time
+    ]
+    assert len(initial_ratings) == 1
+    assert initial_ratings[0].user is users[1]
+
+
 def test_calculate_new_ratings_handles_teams(cron_module):
     lookup = FakeLookup()
     logs2db = cron_module.Logs2DB(FakeSession(), lookup)
@@ -400,6 +473,53 @@ def test_update_records_combines_team_scores(cron_module):
     assert ujson.decode(lookup.get_record(users[2]).encoded)[3] == [1, 0]
     assert ujson.decode(lookup.get_record(users[1]).encoded)[3] == [0, 1]
     assert ujson.decode(lookup.get_record(users[3]).encoded)[3] == [0, 1]
+
+
+def test_update_records_tracks_four_player_singles_record_bucket(cron_module):
+    lookup = FakeLookup()
+    logs2db = cron_module.Logs2DB(FakeSession(), lookup)
+    game = FakeGame(mode="Singles")
+    users = [
+        FakeUser(1, "alice"),
+        FakeUser(2, "bob"),
+        FakeUser(3, "carol"),
+        FakeUser(4, "dave"),
+    ]
+    game_players = [
+        FakeGamePlayer(users[0], score=100),
+        FakeGamePlayer(users[1], score=90),
+        FakeGamePlayer(users[2], score=80),
+        FakeGamePlayer(users[3], score=70),
+    ]
+
+    logs2db.update_records(game, game_players)
+
+    assert ujson.decode(lookup.get_record(users[0]).encoded)[2] == [1, 0, 0, 0]
+    assert ujson.decode(lookup.get_record(users[3]).encoded)[2] == [0, 0, 0, 1]
+
+
+def test_update_records_updates_existing_record_without_session_add(cron_module):
+    session = FakeSession()
+    lookup = FakeLookup()
+    logs2db = cron_module.Logs2DB(session, lookup)
+    game = FakeGame(mode="Singles")
+    user = FakeUser(1, "alice")
+    lookup.records[user.user_id] = FakeRecord(
+        user=user,
+        encoded=ujson.encode([[0, 1], [0, 0, 0], [0, 0, 0, 0], [0, 0]]),
+    )
+
+    logs2db.update_records(
+        game,
+        [
+            FakeGamePlayer(user, score=100),
+            FakeGamePlayer(FakeUser(2, "bob"), score=50),
+        ],
+    )
+
+    assert ujson.decode(lookup.get_record(user).encoded)[0] == [1, 1]
+    assert lookup.added_records[-1].user.name == "bob"
+    assert lookup.get_record(user) not in session.added
 
 
 def test_update_records_ignores_unsupported_modes(cron_module):
@@ -584,6 +704,97 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(
     ]
 
 
+def test_process_logs_publishes_compressed_stats_files(
+    cron_module, monkeypatch, tmp_path
+):
+    session = FakeSession()
+    lookup = FakeLookup()
+    user = FakeUser(1, "alice")
+    lookup.records[user.user_id] = FakeRecord(
+        user=user,
+        encoded=ujson.encode([[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]]),
+    )
+    subprocess_calls = []
+
+    class FakeLogs2DB:
+        def __init__(self, session_arg, lookup_arg):
+            assert session_arg is session
+            assert lookup_arg is lookup
+
+        def process_logs(self, file, log_timestamp):
+            return 0, {user}
+
+    class FakeStatsGen:
+        def __init__(self, session_arg, output_dir):
+            assert session_arg is session
+            assert output_dir == "stats_temp"
+
+        def output_ratings(self):
+            return None
+
+        def output_user(self, user_id, username, records):
+            return None
+
+    @contextlib.contextmanager
+    def session_scope():
+        yield session
+
+    monkeypatch.setattr(cron_module.orm, "session_scope", session_scope)
+    monkeypatch.setattr(cron_module.orm, "Lookup", lambda session_arg: lookup)
+    monkeypatch.setattr(cron_module, "Logs2DB", FakeLogs2DB)
+    monkeypatch.setattr(cron_module, "StatsGen", FakeStatsGen)
+    monkeypatch.setattr(
+        cron_module.util,
+        "get_log_file_filenames",
+        lambda log_type, begin: [(1408905413, "server.log")],
+    )
+    monkeypatch.setattr(
+        cron_module.util,
+        "open_possibly_gzipped_file",
+        lambda filename: io.StringIO("log\n"),
+    )
+    monkeypatch.setattr(
+        cron_module.glob,
+        "glob",
+        lambda pattern: {
+            "stats_temp/*.json": ["stats_temp/ratings.json"],
+            "stats_temp/users/*.json": ["stats_temp/users/alice.json"],
+        }[pattern],
+    )
+    monkeypatch.setattr(
+        cron_module.subprocess,
+        "call",
+        lambda command: subprocess_calls.append(command),
+    )
+
+    cron_module.process_logs(write_stats_files=True)
+
+    assert subprocess_calls == [
+        ["zopfli", "stats_temp/ratings.json", "stats_temp/users/alice.json"],
+        [
+            "touch",
+            "-r",
+            "stats_temp/ratings.json",
+            "stats_temp/ratings.json",
+            "stats_temp/ratings.json.gz",
+            "stats_temp/users/alice.json",
+            "stats_temp/users/alice.json.gz",
+        ],
+        [
+            "mv",
+            "stats_temp/ratings.json",
+            "stats_temp/ratings.json.gz",
+            "web/stats/data",
+        ],
+        [
+            "mv",
+            "stats_temp/users/alice.json",
+            "stats_temp/users/alice.json.gz",
+            "web/stats/data/users",
+        ],
+    ]
+
+
 def test_output_all_stats_files_writes_ratings_and_each_user(
     cron_module, monkeypatch, capsys
 ):
@@ -625,3 +836,24 @@ def test_output_all_stats_files_writes_ratings_and_each_user(
         "1 alice [[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]]",
         "2 bob [[0, 1], [0, 0, 0], [0, 0, 0, 0], [0, 0]]",
     ]
+
+
+def test_main_continues_after_process_logs_error(cron_module, monkeypatch, capsys):
+    calls = []
+
+    def process_logs(write_stats_files):
+        calls.append(write_stats_files)
+        raise RuntimeError("boom")
+
+    def sleep(seconds):
+        assert seconds == 60
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cron_module, "process_logs", process_logs)
+    monkeypatch.setattr(cron_module.time, "sleep", sleep)
+
+    with pytest.raises(KeyboardInterrupt):
+        cron_module.main()
+
+    assert calls == [True]
+    assert "RuntimeError: boom" in capsys.readouterr().out

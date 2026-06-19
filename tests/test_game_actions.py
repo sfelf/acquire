@@ -89,6 +89,12 @@ def test_action_send_message_includes_action_and_player_ids():
     ]
 
 
+def test_base_action_prepare_is_noop():
+    game = RecordingGame()
+
+    assert server.Action(game, 0, GameActions.StartGame.value).prepare() is None
+
+
 def test_play_tile_prepare_sets_turn_and_resets_no_tile_counter_when_playable():
     game = RecordingGame()
     game.turns_without_played_tiles_count = 2
@@ -276,6 +282,28 @@ def test_select_new_chain_execute_ignores_unavailable_chain_id():
     assert game.history_messages == []
 
 
+def test_select_new_chain_execute_creates_selected_available_chain():
+    board = make_empty_board()
+    board[1][1] = GameBoardTypes.NothingYet.value
+    game = RecordingGame(board)
+    action = server.ActionSelectNewChain(
+        game,
+        0,
+        [GameBoardTypes.Tower.value, GameBoardTypes.American.value],
+        (1, 1),
+    )
+
+    result = action.execute(GameBoardTypes.American.value)
+
+    assert result is True
+    assert game.game_board.x_to_y_to_board_type[1][1] == GameBoardTypes.American.value
+    assert game.score_sheet.chain_size[GameBoardTypes.American.value] == 1
+    assert game.score_sheet.player_data[0][GameBoardTypes.American.value] == 1
+    assert game.history_messages == [
+        ((GameHistoryMessages.FormedChain.value, 0, GameBoardTypes.American.value), {})
+    ]
+
+
 def test_select_merger_survivor_prepare_prompts_when_largest_chains_are_tied():
     game = RecordingGame()
     game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 3
@@ -425,6 +453,23 @@ def test_select_chain_to_dispose_prepare_prompts_when_multiple_defunct_chains_re
     ]
 
 
+def test_select_chain_to_dispose_prepare_auto_selects_single_defunct_chain():
+    game = RecordingGame()
+    game.score_sheet.player_data[1][GameBoardTypes.Tower.value] = 2
+
+    result = server.ActionSelectChainToDisposeOfNext(
+        game,
+        0,
+        {GameBoardTypes.Tower.value},
+        GameBoardTypes.Luxor.value,
+    ).prepare()
+
+    assert len(result) == 1
+    assert isinstance(result[0], server.ActionDisposeOfShares)
+    assert result[0].player_id == 1
+    assert result[0].defunct_type_id == GameBoardTypes.Tower.value
+
+
 def test_select_chain_to_dispose_execute_returns_disposal_actions_in_turn_order():
     game = RecordingGame()
     game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 1
@@ -482,6 +527,37 @@ def test_dispose_of_shares_execute_trades_sells_and_records_history():
                 GameBoardTypes.Tower.value,
                 2,
                 3,
+            ),
+            {},
+        )
+    ]
+
+
+def test_dispose_of_shares_execute_records_zero_trade_zero_sale_choice():
+    game = RecordingGame()
+    game.score_sheet.player_data[0][GameBoardTypes.Tower.value] = 5
+    action = server.ActionDisposeOfShares(
+        game,
+        0,
+        GameBoardTypes.Tower.value,
+        GameBoardTypes.Luxor.value,
+    )
+    action.prepare()
+
+    result = action.execute(0, 0)
+
+    assert result is True
+    assert game.score_sheet.player_data[0][GameBoardTypes.Tower.value] == 5
+    assert game.score_sheet.player_data[0][GameBoardTypes.Luxor.value] == 0
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Cash.value] == 60
+    assert game.history_messages == [
+        (
+            (
+                GameHistoryMessages.DisposedOfShares.value,
+                0,
+                GameBoardTypes.Tower.value,
+                0,
+                0,
             ),
             {},
         )
@@ -688,6 +764,27 @@ def test_purchase_shares_execute_can_end_game_when_chain_is_large_enough():
     ]
 
 
+def test_purchase_shares_execute_ignores_end_game_flag_when_not_allowed():
+    board = make_empty_board()
+    board[0][0] = GameBoardTypes.Luxor.value
+    game = RecordingGame(board)
+    game.score_sheet.chain_size[GameBoardTypes.Luxor.value] = 2
+    game.score_sheet.price[GameBoardTypes.Luxor.value] = 2
+    action = server.ActionPurchaseShares(game, 0)
+    action.prepare()
+
+    result = action.execute([], 1)
+
+    assert [type(next_action) for next_action in result] == [
+        server.ActionPlayTile,
+        server.ActionPurchaseShares,
+    ]
+    assert game.state_changes == []
+    assert game.history_messages == [
+        ((GameHistoryMessages.PurchasedShares.value, 0, []), {})
+    ]
+
+
 def test_purchase_shares_complete_action_ends_game_when_all_tiles_are_played():
     game = RecordingGame()
     game.tile_racks.empty_results = [True]
@@ -749,4 +846,26 @@ def test_start_game_downgrades_short_teams_game_to_singles():
         GameModes.Singles.value,
         None,
     )
+    assert isinstance(game.tile_racks, server.TileRacks)
+
+
+def test_start_game_keeps_full_teams_game_in_teams_mode():
+    game = RecordingGame()
+    game.mode = GameModes.Teams.value
+    game.num_players = 4
+    game.score_sheet.player_data.extend(
+        [
+            [0, 0, 0, 0, 0, 0, 0, 60, 60, "player_2", None, None],
+            [0, 0, 0, 0, 0, 0, 0, 60, 60, "player_3", None, None],
+        ]
+    )
+    game.tile_bag = [(x, y) for x in range(12) for y in range(9)]
+
+    result = server.ActionStartGame(game, 0).execute()
+
+    assert [type(next_action) for next_action in result] == [
+        server.ActionPlayTile,
+        server.ActionPurchaseShares,
+    ]
+    assert game.state_changes[0] == (GameStates.InProgress.value, None, None)
     assert isinstance(game.tile_racks, server.TileRacks)

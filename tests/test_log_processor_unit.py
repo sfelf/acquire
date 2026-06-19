@@ -315,6 +315,35 @@ def test_game_initial_tile_bag_is_derived_from_history(logs_to_games_without_dat
     assert len(set(tile_bag)) == 108
 
 
+def test_game_initial_tile_bag_applies_verbose_tweaks(
+    logs_to_games_without_database,
+    monkeypatch,
+    capsys,
+):
+    game = make_game(logs_to_games_without_database)
+    game._verbose = True
+    game.username_to_game_history = {
+        "alice": [[GameHistoryMessages.DrewTile.value, 0, 0, 0]],
+        "bob": [[GameHistoryMessages.DrewTile.value, 1, 1, 1]],
+    }
+    monkeypatch.setattr(
+        logs_to_games_without_database.Game,
+        "tile_bag_tweaks",
+        {(1700000000, 77): [[1, (2, 2)], [2, None]]},
+    )
+    monkeypatch.setattr(
+        logs_to_games_without_database.random,
+        "sample",
+        lambda population, count: [(3, 3)],
+    )
+
+    tile_bag = game._get_initial_tile_bag()
+
+    assert tile_bag[-4:] == [(1, 1), (3, 3), (2, 2), (0, 0)]
+    assert len(tile_bag) == 108
+    assert "specified tile for insertion: (2, 2)" in capsys.readouterr().out
+
+
 def test_game_sync_compare_records_diffs(logs_to_games_without_database):
     game = make_game(logs_to_games_without_database)
     game.is_server_game_synchronized = True
@@ -463,3 +492,125 @@ def test_game_make_server_game_file_serializes_snapshot(
     assert data["log_time"] == 1700000000
     assert data["begin"] == 100
     assert data["end"] == 200
+
+
+def test_game_make_server_game_replays_joins_and_ignores_action_errors(
+    logs_to_games_without_database,
+    monkeypatch,
+):
+    game = make_game(logs_to_games_without_database)
+    game.mode = "Singles"
+    game.max_players = 2
+    game.player_join_order = ["alice", "bob"]
+    game.actions = [
+        [0, [CommandsToServer.DoGameAction.value, "ok"], 10],
+        [1, [CommandsToServer.DoGameAction.value, "boom"], 11],
+    ]
+    monkeypatch.setattr(game, "_get_initial_tile_bag", lambda: [(0, 0), (1, 1)])
+
+    class FakeServerGame:
+        def __init__(self, game_id, internal_game_id, mode, max_players, add, logging, bag):
+            self.game_id = game_id
+            self.internal_game_id = internal_game_id
+            self.mode = mode
+            self.max_players = max_players
+            self.tile_bag = bag
+            self.joined = []
+            self.actions = []
+
+        def join_game(self, client):
+            client.player_id = len(self.joined)
+            self.joined.append((client.client_id, client.username))
+
+        def do_game_action(self, client, game_action_id, data):
+            self.actions.append((client.username, game_action_id, data))
+            if data == ["boom"]:
+                raise RuntimeError("legacy replay mismatch")
+
+    monkeypatch.setattr(
+        logs_to_games_without_database.server,
+        "Game",
+        FakeServerGame,
+    )
+
+    game.make_server_game()
+
+    assert game.server_game.joined == [(1, "alice"), (2, "bob")]
+    assert game.server_game.actions == [
+        ("alice", CommandsToServer.DoGameAction.value, ["ok"]),
+        ("bob", CommandsToServer.DoGameAction.value, ["boom"]),
+    ]
+
+
+def test_log_processor_verbose_blank_line_writes_server_game_snapshot(
+    logs_to_games_without_database,
+    tmp_path,
+    capsys,
+):
+    processor = logs_to_games_without_database.LogProcessor(
+        1700000000,
+        io.StringIO(""),
+        verbose=True,
+        verbose_output_path=str(tmp_path),
+    )
+    game = make_game(logs_to_games_without_database)
+    game.make_server_game = lambda: None
+    game.compare_with_server_game = lambda: None
+    game.is_server_game_synchronized = True
+    game.sync_log = ["sync detail"]
+    written = []
+    game.make_server_game_file = lambda filename: written.append(filename)
+    processor._line_number = 42
+    processor._game_id_to_game[game.game_id] = game
+
+    processor._handle_blank_line()
+
+    assert written == [str(tmp_path / "1700000000_00077_000042.bin")]
+    output = capsys.readouterr().out
+    assert "sync detail" in output
+    assert "1700000000 77 42 yay!" in output
+
+
+def test_log_processor_verbose_command_handlers_continue_after_errors(
+    logs_to_games_without_database,
+    capsys,
+):
+    processor = logs_to_games_without_database.LogProcessor(
+        1700000000,
+        io.StringIO(""),
+        verbose=True,
+    )
+    processor._client_id_to_username = {10: "alice"}
+
+    def raise_error(*_args):
+        raise RuntimeError("handler failed")
+
+    processor._commands_to_client_handlers[CommandsToClient.SetTurn.value] = raise_error
+    processor._commands_to_server_handlers[CommandsToServer.DoGameAction.value] = raise_error
+
+    processor._handle_command_to_client(
+        [10],
+        [[CommandsToClient.SetTurn.value, 0]],
+    )
+    processor._handle_command_to_server(
+        10,
+        [CommandsToServer.DoGameAction.value, 1],
+    )
+
+    captured = capsys.readouterr()
+    assert "~~~ ['alice']" in captured.out
+    assert "~~~ alice" in captured.out
+    assert "RuntimeError: handler failed" in captured.err
+
+
+def test_log_processor_disconnect_reports_duplicate_username_map(
+    logs_to_games_without_database,
+    capsys,
+):
+    processor = make_processor(logs_to_games_without_database)
+    processor._client_id_to_username = {10: "alice", 20: "alice", 30: "bob"}
+    processor._username_to_client_id = {"alice": 20, "bob": 30}
+
+    processor._handle_disconnect(30)
+
+    assert "remove_client: huh?" in capsys.readouterr().out
