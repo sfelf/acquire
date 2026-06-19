@@ -334,6 +334,81 @@ def test_game_sync_compare_records_diffs(logs_to_games_without_database):
     ]
 
 
+def make_server_game_snapshot(tile_racks=True):
+    return types.SimpleNamespace(
+        game_board=types.SimpleNamespace(
+            x_to_y_to_board_type=[
+                [GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)
+            ]
+        ),
+        score_sheet=types.SimpleNamespace(
+            player_data=[
+                [1, 0, 0, 0, 0, 0, 0, 61],
+                [0, 1, 0, 0, 0, 0, 0, 62],
+            ],
+            chain_size=[2, 0, 0, 0, 0, 0, 0],
+            username_to_player_id={"alice": 0, "bob": 1},
+        ),
+        tile_racks=types.SimpleNamespace(
+            racks=[
+                [[(0, 0), 1], None, None, None, None, None],
+                [[(1, 1), 1], None, None, None, None, None],
+            ],
+        )
+        if tile_racks
+        else None,
+        history_messages=[
+            [None, [GameHistoryMessages.StartedGame.value, 0]],
+            [1, [GameHistoryMessages.DrewTile.value, 1, 1, 1]],
+        ],
+    )
+
+
+def test_game_compare_with_server_game_marks_matching_snapshot_synchronized(
+    logs_to_games_without_database,
+):
+    game = make_game(logs_to_games_without_database)
+    game.score_sheet_players[0] = [1, 0, 0, 0, 0, 0, 0, 61]
+    game.score_sheet_players[1] = [0, 1, 0, 0, 0, 0, 0, 62]
+    game.score_sheet_chain_size = [2, 0, 0, 0, 0, 0, 0]
+    game.tile_racks[0][0] = (0, 0)
+    game.tile_racks[1][0] = (1, 1)
+    game.username_to_game_history = {
+        "alice": [[GameHistoryMessages.StartedGame.value, 0]],
+        "bob": [
+            [GameHistoryMessages.StartedGame.value, 0],
+            [GameHistoryMessages.DrewTile.value, 1, 1, 1],
+        ],
+    }
+    game.server_game = make_server_game_snapshot()
+
+    game.compare_with_server_game()
+
+    assert game.is_server_game_synchronized is True
+    assert game.sync_log == []
+
+
+def test_game_compare_with_server_game_reports_history_mismatch_verbose(
+    logs_to_games_without_database,
+):
+    game = make_game(logs_to_games_without_database)
+    game._verbose = True
+    game.score_sheet_players[0] = [1, 0, 0, 0, 0, 0, 0, 61]
+    game.score_sheet_players[1] = [0, 1, 0, 0, 0, 0, 0, 62]
+    game.score_sheet_chain_size = [2, 0, 0, 0, 0, 0, 0]
+    game.username_to_game_history = {
+        "alice": [[GameHistoryMessages.StartedGame.value, 0]],
+        "bob": [[GameHistoryMessages.DrewTile.value, 1, 1, 1]],
+    }
+    game.server_game = make_server_game_snapshot(tile_racks=False)
+
+    game.compare_with_server_game()
+
+    assert game.is_server_game_synchronized is False
+    assert "player_id_to_game_history:" in game.sync_log
+    assert "player_id_to_game_history diff for player_id 1!" in game.sync_log
+
+
 def test_game_make_server_game_file_serializes_snapshot(
     logs_to_games_without_database,
     tmp_path,

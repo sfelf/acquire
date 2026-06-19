@@ -156,3 +156,25 @@ def test_determine_tile_game_board_types_marks_safe_chain_merge_as_unplayable():
     tile_racks.determine_tile_game_board_types()
 
     assert tile_racks.racks[0][0][1] == GameBoardTypes.CantPlayEver.value
+
+
+def test_replace_dead_tiles_removes_marks_and_draws_replacement_tile():
+    game = RecordingGame()
+    game.tile_bag = [(2, 2)]
+    tile_racks = make_tile_racks(
+        game,
+        [[(1, 7), GameBoardTypes.CantPlayEver.value, False], None, None, None, None, None],
+    )
+
+    tile_racks.replace_dead_tiles(0)
+
+    assert game.game_board.x_to_y_to_board_type[1][7] == GameBoardTypes.CantPlayEver.value
+    assert tile_racks.racks[0][0][0] == (2, 2)
+    assert game.pending_messages[0] == (
+        [[CommandsToClient.RemoveTile.value, 0]],
+        {10},
+    )
+    assert game.history_messages[0] == (
+        (GameHistoryMessages.ReplacedDeadTile.value, 0, 1, 7),
+        {},
+    )

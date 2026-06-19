@@ -23,5 +23,6 @@
 /.ruff_cache
 /.coverage
 /coverage.xml
+/coverage.json
 /.env
 /.vscode

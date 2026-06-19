@@ -77,3 +77,15 @@ def test_connection_made_sets_transport_writer():
 
     assert protocol.transport is transport
     assert transport.writes == [b"hello"]
+
+
+def test_connection_lost_only_logs_disconnect(capsys):
+    game_server = server.Server()
+    protocol = server.ServerProtocol(game_server)
+
+    protocol.connection_lost(RuntimeError("closed"))
+
+    assert capsys.readouterr().out.splitlines()[-2:] == [
+        "connection_lost",
+        "",
+    ]

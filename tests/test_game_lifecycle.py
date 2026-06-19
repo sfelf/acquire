@@ -1,6 +1,8 @@
+import json
+
 import pytest
 import server
-from enums import CommandsToClient, GameActions, GameBoardTypes, GameHistoryMessages, GameModes
+from enums import CommandsToClient, GameActions, GameBoardTypes, GameHistoryMessages, GameModes, GameStates, ScoreSheetIndexes
 
 
 pytestmark = pytest.mark.unit
@@ -108,6 +110,26 @@ def test_watch_game_sends_initialization_history_and_action_without_joining():
     ] in messages
 
 
+def test_rejoin_game_restores_player_client_and_initializes_state():
+    game, pending = make_game()
+    original = RecordingClient(10, "alice")
+    game.join_game(original)
+    game.leave_game(original)
+    pending.clear()
+
+    rejoining = RecordingClient(20, "alice")
+    game.rejoin_game(rejoining)
+
+    assert rejoining.game_id == "game-1"
+    assert rejoining.player_id == 0
+    assert game.client_ids == {20}
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Client.value] is rejoining
+    messages = flatten_pending(pending)
+    assert [CommandsToClient.SetGamePlayerRejoin.value, "game-1", 0, 20] in messages
+    assert [CommandsToClient.SetGameBoard.value, game.game_board.x_to_y_to_board_type] in messages
+    assert [CommandsToClient.SetTurn.value, None] in messages
+
+
 def test_leave_game_returns_watcher_to_lobby_without_touching_score_sheet():
     game, pending = make_game()
     watcher = RecordingClient(20, "viewer")
@@ -123,6 +145,24 @@ def test_leave_game_returns_watcher_to_lobby_without_touching_score_sheet():
     assert pending == [
         ([[CommandsToClient.SetGameState.value, "game-1", 0, 0, 3]], None),
         ([[CommandsToClient.ReturnWatcherToLobby.value, "game-1", 20]], None),
+    ]
+
+
+def test_leave_game_clears_player_client_and_announces_missing_player():
+    game, pending = make_game()
+    player = RecordingClient(10, "alice")
+    game.join_game(player)
+    pending.clear()
+
+    game.leave_game(player)
+
+    assert player.game_id is None
+    assert player.player_id is None
+    assert game.client_ids == set()
+    assert game.score_sheet.player_data[0][ScoreSheetIndexes.Client.value] is None
+    assert game.expiration_time is not None
+    assert pending == [
+        ([[CommandsToClient.SetGamePlayerLeave.value, "game-1", 0, 10]], None),
     ]
 
 
@@ -188,3 +228,29 @@ def test_do_game_action_replaces_completed_action_with_prepared_follow_up_action
     assert follow_up.prepare_calls == 1
     assert follow_up.send_calls == [{10, 11}]
     assert game.actions == [follow_up]
+
+
+def test_set_state_logs_overridden_completed_score(capsys):
+    game, pending = make_game()
+    game.logging_enabled = True
+    game.log_data_overrides = {"log-time": 1234, "score": [99, 88]}
+    game.score_sheet.player_data = [
+        [0, 0, 0, 0, 0, 0, 0, 60, 75, "alice", None, None],
+        [0, 0, 0, 0, 0, 0, 0, 60, 80, "bob", None, None],
+    ]
+
+    game.set_state(GameStates.Completed.value)
+
+    log = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert log["state"] == "Completed"
+    assert log["score"] == [99, 88]
+    assert log["log-time"] == 1234
+    assert log["used-log-data-overrides"] is True
+    assert flatten_pending(pending)[-1] == [
+        CommandsToClient.SetGameState.value,
+        "game-1",
+        GameStates.Completed.value,
+        GameModes.Singles.value,
+        3,
+        [60, 60],
+    ]

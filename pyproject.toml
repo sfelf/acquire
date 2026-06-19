@@ -42,6 +42,7 @@ omit = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+fail_under = 90
 exclude_lines = [
     "if __name__ == .__main__.:",
 ]
