@@ -44,7 +44,7 @@ Notes:
 
 - The pytest suite now covers the core Python server modules, log parser/processor helpers, ORM helpers, cron helpers, and replay fixtures without requiring MySQL for fast checks.
 - Coverage now has a 90% minimum threshold across the measured Python source without legacy-function exclusions.
-- Docker-backed `mysql` and `e2e` marker fixtures are in place; continue adding meaningful tests behind those markers before refactoring.
+- Docker-backed `mysql` and `e2e` marker fixtures are in place. MySQL coverage now exercises schema creation, seed data, runtime constraints, lookup persistence, transaction behavior, and completed-game log import persistence.
 
 ## Phase 3: Golden Replay Tests
 
@@ -58,7 +58,7 @@ Status: expanded for the current fixture set; continue adding representative his
 
 Remaining work before the major refactor:
 
-- Add MySQL-backed integration coverage for schema creation, seed data, and persistence behavior.
+- Add MySQL-backed integration coverage for schema creation, seed data, and persistence behavior. Complete for the current refactor safety baseline; expand when refactor work changes persistence behavior.
 - Add fuller integration and e2e coverage around the current Python/Node split.
 - Add more historical log fixtures when representative edge cases are available.
 - Add richer final-state and replay-to-server synchronization golden assertions for future historical fixtures as they are added.
