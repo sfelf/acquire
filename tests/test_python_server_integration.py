@@ -9,6 +9,23 @@ from enums import CommandsToClient, CommandsToServer
 pytestmark = pytest.mark.integration
 
 
+class FakeTransport:
+    def __init__(self):
+        self.writes = []
+
+    def write(self, data):
+        self.writes.append(data)
+
+
+def _decode_transport_writes(transport):
+    lines = b"".join(transport.writes).decode().splitlines()
+    messages = []
+    for line in lines:
+        recipient, payload = line.split(" ", 1)
+        messages.append((recipient, ujson.decode(payload)))
+    return messages
+
+
 async def _read_protocol_messages(reader, expected_command, timeout=1):
     deadline = asyncio.get_running_loop().time() + timeout
     messages = []
@@ -45,6 +62,35 @@ def test_protocol_reader_ignores_control_lines_and_preserves_messages():
     )
 
     assert messages == [[CommandsToClient.SetClientId.value, 1]]
+
+
+def test_server_protocol_accepts_fragmented_connect_messages():
+    game_server = server.Server()
+    server_protocol = server.ServerProtocol(game_server)
+    transport = FakeTransport()
+    server_protocol.connection_made(transport)
+
+    server_protocol.data_received(b'connect ["alice","127.0.')
+    server_protocol.data_received(b'0.1","socket-1",false]\n')
+
+    assert game_server.client_ids == {1}
+    assert game_server.username_to_client["alice"].client_id == 1
+    assert _decode_transport_writes(transport)[0] == ("connect", ["socket-1", 1])
+
+
+def test_server_protocol_disconnect_removes_connected_client():
+    game_server = server.Server()
+    server_protocol = server.ServerProtocol(game_server)
+    transport = FakeTransport()
+    server_protocol.connection_made(transport)
+    server_protocol.data_received(b'connect ["alice","127.0.0.1","socket-1",false]\n')
+
+    server_protocol.data_received(b"disconnect 1\n")
+
+    assert game_server.client_ids == set()
+    assert game_server.client_id_to_client == {}
+    assert game_server.username_to_client == {}
+    assert _decode_transport_writes(transport)[-1] == ("disconnect", 1)
 
 
 def test_python_server_protocol_handles_connect_and_global_chat():
