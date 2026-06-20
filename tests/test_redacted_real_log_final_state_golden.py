@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from enums import GameStates, ScoreSheetIndexes
+
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 LOG_TIMESTAMP = 1780589302
@@ -66,6 +68,45 @@ def summarize_replayed_final_state(game):
     }
 
 
+def summarize_server_sync(game):
+    game.make_server_game()
+    game.compare_with_server_game()
+    net_index = ScoreSheetIndexes.Net.value
+    num_players = len(game.player_id_to_username)
+    rebuilt_history_counts = [0 for _ in range(num_players)]
+    for target_player_id, _ in game.server_game.history_messages:
+        if target_player_id is None:
+            rebuilt_history_counts = [count + 1 for count in rebuilt_history_counts]
+        elif target_player_id < num_players:
+            rebuilt_history_counts[target_player_id] += 1
+
+    return {
+        "internal_game_id": game.internal_game_id,
+        "external_game_id": game.game_id,
+        "parsed_state": game.state,
+        "rebuilt_state": GameStates(game.server_game.state).name,
+        "expired": game.expired,
+        "parsed_score": game.score,
+        "rebuilt_score": [
+            player_datum[net_index]
+            for player_datum in game.server_game.score_sheet.player_data[:num_players]
+        ],
+        "action_count": len(game.actions),
+        "played_tiles_count": len(game.played_tiles_order),
+        "history_counts_by_player": [
+            {
+                "player_id": player_id,
+                "username": username,
+                "parsed": len(game.username_to_game_history[username]),
+                "rebuilt": rebuilt_history_counts[player_id],
+            }
+            for player_id, username in sorted(game.player_id_to_username.items())
+        ],
+        "is_server_game_synchronized": game.is_server_game_synchronized,
+        "sync_log": game.sync_log,
+    }
+
+
 def test_redacted_real_server_log_matches_final_state_golden(
     logs_to_games_without_database,
 ):
@@ -77,6 +118,22 @@ def test_redacted_real_server_log_matches_final_state_golden(
         actual = json.loads(
             json.dumps([summarize_replayed_final_state(game) for game in games])
         )
+
+    with expected_path.open() as expected_file:
+        expected = json.load(expected_file)
+
+    assert actual == expected
+
+
+def test_redacted_real_server_log_replays_against_server_game_golden(
+    logs_to_games_without_database,
+):
+    log_path = FIXTURES_DIR / "redacted_real_server.txt"
+    expected_path = FIXTURES_DIR / "redacted_real_server.sync.expected.json"
+
+    with log_path.open() as log_file:
+        games = logs_to_games_without_database.LogProcessor(LOG_TIMESTAMP, log_file).go()
+        actual = json.loads(json.dumps([summarize_server_sync(game) for game in games]))
 
     with expected_path.open() as expected_file:
         expected = json.load(expected_file)

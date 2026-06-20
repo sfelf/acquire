@@ -1,0 +1,188 @@
+[
+  {
+    "internal_game_id": 1,
+    "external_game_id": 1,
+    "parsed_state": "Starting",
+    "rebuilt_state": "Starting",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 0,
+    "played_tiles_count": 1,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_1",
+        "parsed": 1,
+        "rebuilt": 1
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 2,
+    "external_game_id": 2,
+    "parsed_state": "InProgress",
+    "rebuilt_state": "InProgress",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 1,
+    "played_tiles_count": 1,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_1",
+        "parsed": 9,
+        "rebuilt": 9
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 3,
+    "external_game_id": 1,
+    "parsed_state": "InProgress",
+    "rebuilt_state": "InProgress",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 120,
+    "played_tiles_count": 65,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_2",
+        "parsed": 290,
+        "rebuilt": 290
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 4,
+    "external_game_id": 1,
+    "parsed_state": "Completed",
+    "rebuilt_state": "Completed",
+    "expired": true,
+    "parsed_score": [
+      1568
+    ],
+    "rebuilt_score": [
+      1568
+    ],
+    "action_count": 185,
+    "played_tiles_count": 99,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_2",
+        "parsed": 428,
+        "rebuilt": 428
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 5,
+    "external_game_id": 1,
+    "parsed_state": "InProgress",
+    "rebuilt_state": "InProgress",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 140,
+    "played_tiles_count": 104,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_2",
+        "parsed": 410,
+        "rebuilt": 410
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 6,
+    "external_game_id": 1,
+    "parsed_state": "InProgress",
+    "rebuilt_state": "InProgress",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 158,
+    "played_tiles_count": 103,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_2",
+        "parsed": 413,
+        "rebuilt": 413
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 7,
+    "external_game_id": 1,
+    "parsed_state": "InProgress",
+    "rebuilt_state": "InProgress",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 38,
+    "played_tiles_count": 19,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_2",
+        "parsed": 84,
+        "rebuilt": 84
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  },
+  {
+    "internal_game_id": 8,
+    "external_game_id": 1,
+    "parsed_state": "Starting",
+    "rebuilt_state": "Starting",
+    "expired": true,
+    "parsed_score": null,
+    "rebuilt_score": [
+      60
+    ],
+    "action_count": 0,
+    "played_tiles_count": 1,
+    "history_counts_by_player": [
+      {
+        "player_id": 0,
+        "username": "player_1",
+        "parsed": 1,
+        "rebuilt": 1
+      }
+    ],
+    "is_server_game_synchronized": true,
+    "sync_log": []
+  }
+]

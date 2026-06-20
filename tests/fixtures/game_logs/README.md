@@ -11,5 +11,6 @@ This directory stores small redacted log fixtures and expected parser output for
 - `redacted_real_server.summary.expected.json` is a compact expected summary for that real-server fixture.
 - `redacted_real_server.replay.expected.json` is the expected `LogProcessor` replay summary for the real-server fixture.
 - `redacted_real_server.final_state.expected.json` is a compact final-state replay snapshot covering board rows, score sheets, tile racks, action boundaries, and history boundaries.
+- `redacted_real_server.sync.expected.json` is the expected replay-to-server synchronization summary for the real-server fixture.
 
 Historical game logs can be added here in later PRs after sensitive data is redacted or replaced with representative samples.

@@ -48,7 +48,7 @@ Notes:
 
 ## Phase 3: Golden Replay Tests
 
-Status: complete for the current fixture set.
+Status: expanded for the current fixture set; continue adding representative historical logs before refactoring.
 
 - Use historical game logs as replay fixtures. Complete for the initial redacted real-server fixture.
 - Add a replay harness for current game behavior. Complete for parser-level replay, individual-game extraction, and `LogProcessor` replay summaries.
@@ -61,7 +61,7 @@ Remaining work before the major refactor:
 - Add MySQL-backed integration coverage for schema creation, seed data, and persistence behavior.
 - Add fuller integration and e2e coverage around the current Python/Node split.
 - Add more historical log fixtures when representative edge cases are available.
-- Add richer final-state golden assertions for future historical fixtures as they are added.
+- Add richer final-state and replay-to-server synchronization golden assertions for future historical fixtures as they are added.
 
 ## Phase 4: Local Development Docker
 
