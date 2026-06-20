@@ -94,4 +94,4 @@ uv run pytest -m mysql
 uv run pytest -m e2e
 ```
 
-By default, the MySQL marker uses host port `33061` and the e2e marker exposes the local UI on host port `19000`. Override those with `ACQUIRE_MYSQL_TEST_PORT` or `ACQUIRE_E2E_PORT` if either port is already in use. Set `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack instead of starting disposable Compose projects.
+By default, the MySQL marker uses host port `33061` and the e2e marker exposes the local UI on host port `19000`. Override those with `ACQUIRE_MYSQL_TEST_PORT` or `ACQUIRE_E2E_PORT` if either port is already in use. Set `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack instead of starting disposable Compose projects. `ACQUIRE_MYSQL_TEST_URL` must point at a disposable test schema because MySQL integration tests may create and drop ORM tables.
