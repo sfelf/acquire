@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This repository is in a modernization and refactor effort. Tooling, documentation, CI, and the pytest foundation are in place; the current goal is to deepen golden replay coverage before changing runtime behavior.
+This repository is in a modernization and refactor effort. Tooling, documentation, CI, Docker-backed local development, and the pytest foundation are in place; the current goal is to deepen marker coverage, including MySQL, integration, e2e, and golden replay tests, before changing runtime behavior.
 
 ## Current Architecture
 
