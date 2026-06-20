@@ -33,12 +33,23 @@ uv run pytest --cov=server --cov-report=term-missing:skip-covered
 ## Test Layout
 
 - `tests/conftest.py` makes the legacy `server/` modules importable without changing runtime paths.
+- `tests/conftest.py` also provides Docker-backed fixtures for marker tests that need MySQL or the local browser UI.
 - `tests/test_id_managers.py` contains the migrated ID manager coverage.
 - `tests/test_server_protocol.py` covers the Python server line protocol parser.
 - `tests/test_server_messages.py` covers pending-message grouping and flushing behavior.
 - `tests/fixtures/game_logs/` is reserved for historical log replay fixtures.
 
-Use `pytest -m unit` for fast unit coverage and `pytest -m golden` for fixture-based replay coverage.
+Run individual marker layers with:
+
+```bash
+uv run pytest -m unit
+uv run pytest -m golden
+uv run pytest -m integration
+uv run pytest -m mysql
+uv run pytest -m e2e
+```
+
+The `mysql` marker starts a disposable Docker Compose MySQL service when `ACQUIRE_MYSQL_TEST_URL` is not set. The `e2e` marker starts the local Compose stack with the legacy Node gateway when `ACQUIRE_E2E_URL` is not set. Set those URL variables only when you want the tests to use existing services instead of disposable Compose projects.
 
 ## Golden Replay Plan
 

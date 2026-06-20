@@ -86,3 +86,12 @@ Run the test suite outside Docker with the modernization tooling:
 ```bash
 uv run pytest
 ```
+
+Run Docker-backed marker tests with the same marker commands used in CI and review:
+
+```bash
+uv run pytest -m mysql
+uv run pytest -m e2e
+```
+
+By default, the MySQL marker uses host port `33061` and the e2e marker exposes the local UI on host port `19000`. Override those with `ACQUIRE_MYSQL_TEST_PORT` or `ACQUIRE_E2E_PORT` if either port is already in use. Set `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack instead of starting disposable Compose projects.
