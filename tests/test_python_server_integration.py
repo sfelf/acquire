@@ -3,7 +3,7 @@ import asyncio
 import pytest
 import server
 import ujson
-from enums import CommandsToClient, CommandsToServer
+from enums import CommandsToClient, CommandsToServer, GameActions, GameModes, GameStates
 
 
 pytestmark = pytest.mark.integration
@@ -24,6 +24,47 @@ def _decode_transport_writes(transport):
         recipient, payload = line.split(" ", 1)
         messages.append((recipient, ujson.decode(payload)))
     return messages
+
+
+def _decode_transport_writes_since(transport, start_index):
+    lines = b"".join(transport.writes[start_index:]).decode().splitlines()
+    messages = []
+    for line in lines:
+        recipient, payload = line.split(" ", 1)
+        messages.append((recipient, ujson.decode(payload)))
+    return messages
+
+
+def _flatten_client_messages(decoded_writes):
+    messages = []
+    for recipient, payload in decoded_writes:
+        if recipient in {"connect", "disconnect"}:
+            continue
+        if payload and isinstance(payload[0], list):
+            messages.extend(payload)
+        else:
+            messages.append(payload)
+    return messages
+
+
+def _send_protocol_line(protocol, client_id, message):
+    protocol.data_received(
+        ("%d %s\n" % (client_id, ujson.dumps(message))).encode("utf-8")
+    )
+
+
+def _connect_protocol_client(protocol, username, socket_id=None):
+    socket_id = socket_id or "socket-%s" % username
+    protocol.data_received(
+        (
+            'connect ["%s","127.0.0.1","%s",false]\n'
+            % (username, socket_id)
+        ).encode("utf-8")
+    )
+
+
+def _messages_after(transport, start_index):
+    return _flatten_client_messages(_decode_transport_writes_since(transport, start_index))
 
 
 async def _read_protocol_messages(reader, expected_command, timeout=1):
@@ -148,3 +189,171 @@ def test_python_server_protocol_handles_connect_and_global_chat():
             await tcp_server.wait_closed()
 
     asyncio.run(run_protocol_smoke())
+
+
+def test_protocol_handles_create_join_start_and_game_chat_flow():
+    game_server = server.Server()
+    server_protocol = server.ServerProtocol(game_server)
+    transport = FakeTransport()
+    server_protocol.connection_made(transport)
+
+    _connect_protocol_client(server_protocol, "alice", "socket-alice")
+    alice_id = game_server.username_to_client["alice"].client_id
+    write_index = len(transport.writes)
+
+    _send_protocol_line(
+        server_protocol,
+        alice_id,
+        [CommandsToServer.CreateGame.value, GameModes.Singles.value, 2],
+    )
+    create_messages = _messages_after(transport, write_index)
+    game_id = next(
+        message[1]
+        for message in create_messages
+        if message[:3]
+        == [
+            CommandsToClient.SetGameState.value,
+            1,
+            GameStates.Starting.value,
+        ]
+    )
+    assert game_id == 1
+    assert [
+        CommandsToClient.SetGamePlayerJoin.value,
+        game_id,
+        0,
+        alice_id,
+    ] in create_messages
+    assert [CommandsToClient.SetGameAction.value, GameActions.StartGame.value] in [
+        message[:2] for message in create_messages
+    ]
+
+    _connect_protocol_client(server_protocol, "bob", "socket-bob")
+    bob_id = game_server.username_to_client["bob"].client_id
+    write_index = len(transport.writes)
+
+    _send_protocol_line(
+        server_protocol,
+        bob_id,
+        [CommandsToServer.JoinGame.value, game_id],
+    )
+    join_messages = _messages_after(transport, write_index)
+    bob_player_id = next(
+        message[2]
+        for message in join_messages
+        if message[:2] == [CommandsToClient.SetGamePlayerJoin.value, game_id]
+        and message[3] == bob_id
+    )
+    assert bob_player_id in {0, 1}
+    assert [
+        CommandsToClient.SetGameState.value,
+        game_id,
+        GameStates.StartingFull.value,
+    ] in join_messages
+
+    write_index = len(transport.writes)
+    _send_protocol_line(
+        server_protocol,
+        alice_id,
+        [CommandsToServer.SendGameChatMessage.value, " hello game "],
+    )
+    game_chat_messages = _decode_transport_writes_since(transport, write_index)
+    assert game_chat_messages == [
+        (
+            "1,2",
+            [[CommandsToClient.AddGameChatMessage.value, alice_id, "hello game"]],
+        )
+    ]
+
+    _send_protocol_line(
+        server_protocol,
+        alice_id,
+        [CommandsToServer.DoGameAction.value, GameActions.StartGame.value],
+    )
+    _send_protocol_line(
+        server_protocol,
+        bob_id,
+        [CommandsToServer.DoGameAction.value, GameActions.StartGame.value],
+    )
+
+    assert game_server.game_id_to_game[game_id].state == GameStates.InProgress.value
+    assert any(
+        message == [CommandsToClient.SetTurn.value, 0]
+        for message in _messages_after(transport, 0)
+    )
+
+
+def test_protocol_handles_watch_leave_disconnect_and_rejoin_flow():
+    game_server = server.Server()
+    server_protocol = server.ServerProtocol(game_server)
+    transport = FakeTransport()
+    server_protocol.connection_made(transport)
+
+    _connect_protocol_client(server_protocol, "alice", "socket-alice-1")
+    alice_id = game_server.username_to_client["alice"].client_id
+    _send_protocol_line(
+        server_protocol,
+        alice_id,
+        [CommandsToServer.CreateGame.value, GameModes.Singles.value, 2],
+    )
+    game_id = 1
+
+    _connect_protocol_client(server_protocol, "watcher", "socket-watcher")
+    watcher_id = game_server.username_to_client["watcher"].client_id
+    write_index = len(transport.writes)
+    _send_protocol_line(
+        server_protocol,
+        watcher_id,
+        [CommandsToServer.WatchGame.value, game_id],
+    )
+    watch_messages = _messages_after(transport, write_index)
+    assert [
+        CommandsToClient.SetGameWatcherClientId.value,
+        game_id,
+        watcher_id,
+    ] in watch_messages
+    assert game_server.client_id_to_client[watcher_id].game_id == game_id
+    assert watcher_id in game_server.game_id_to_game[game_id].watcher_client_ids
+
+    write_index = len(transport.writes)
+    _send_protocol_line(
+        server_protocol,
+        watcher_id,
+        [CommandsToServer.LeaveGame.value],
+    )
+    leave_messages = _messages_after(transport, write_index)
+    assert [
+        CommandsToClient.ReturnWatcherToLobby.value,
+        game_id,
+        watcher_id,
+    ] in leave_messages
+    assert game_server.client_id_to_client[watcher_id].game_id is None
+
+    write_index = len(transport.writes)
+    server_protocol.data_received(("disconnect %d\n" % alice_id).encode("utf-8"))
+    disconnect_messages = _messages_after(transport, write_index)
+    assert [
+        CommandsToClient.SetGamePlayerLeave.value,
+        game_id,
+        0,
+        alice_id,
+    ] in disconnect_messages
+    assert alice_id not in game_server.client_id_to_client
+    assert "alice" not in game_server.username_to_client
+
+    _connect_protocol_client(server_protocol, "alice", "socket-alice-2")
+    reconnected_alice_id = game_server.username_to_client["alice"].client_id
+    write_index = len(transport.writes)
+    _send_protocol_line(
+        server_protocol,
+        reconnected_alice_id,
+        [CommandsToServer.RejoinGame.value, game_id],
+    )
+    rejoin_messages = _messages_after(transport, write_index)
+    assert [
+        CommandsToClient.SetGamePlayerRejoin.value,
+        game_id,
+        0,
+        reconnected_alice_id,
+    ] in rejoin_messages
+    assert game_server.client_id_to_client[reconnected_alice_id].game_id == game_id
