@@ -32,11 +32,11 @@ Run specific pytest marker layers with:
 uv run pytest -m unit
 uv run pytest -m golden
 uv run pytest -m integration
-ACQUIRE_MYSQL_TEST_URL='mysql+mysqlconnector://acquire:acquire@localhost/acquire?unix_socket=/path/to/mysqld.sock' uv run pytest -m mysql
-ACQUIRE_E2E_URL='http://localhost:9000/' uv run pytest -m e2e
+uv run pytest -m mysql
+uv run pytest -m e2e
 ```
 
-MySQL and e2e tests skip when their service URL environment variables are not set. Integration tests skip when the local environment blocks socket binding.
+MySQL and e2e marker runs create isolated Docker Compose projects when service URL environment variables are not set. Use `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want to point those tests at already-running services. Integration tests skip when the local environment blocks socket binding.
 
 ## Local Docker development
 
