@@ -1,17 +1,16 @@
 import collections
-import enums
 import glob
 import inspect
 import re
 import sys
 
+import enums
+
 
 def get_server_enums():
     lookups = {}
 
-    for class_name in [
-        obj[0] for obj in inspect.getmembers(enums) if inspect.isclass(obj[1])
-    ]:
+    for class_name in [obj[0] for obj in inspect.getmembers(enums) if inspect.isclass(obj[1])]:
         class_obj = getattr(enums, class_name)
         lookup = collections.OrderedDict()
         for name, member in class_obj.__members__.items():
@@ -30,7 +29,7 @@ def get_pubsub_enums():
     names = set()
     for filename in glob.glob("client/main/js/*.js"):
         if filename != "client/main/js/main.js":
-            with open(filename, "r") as f:
+            with open(filename) as f:
                 contents = f.read()
             for match in re.finditer(
                 r"(?<![A-Za-z0-9])enums\.PubSub\.([A-Za-z0-9]+)_([A-Za-z0-9]+)(?![A-Za-z0-9])",
@@ -55,20 +54,18 @@ def get_all_enums():
 
 def generate_enums_js(mode):
     if mode == "release":
-        class_names = set()
+        class_names_set = set()
         for filename in glob.glob("dist/build/js/*.js"):
-            with open(filename, "r") as f:
+            with open(filename) as f:
                 contents = f.read()
             for match in re.finditer(
                 r"(?<![A-Za-z0-9])enums\.([A-Za-z0-9]+)(?![A-Za-z0-9])", contents
             ):
-                class_names.add(match.group(1))
-        class_names = sorted(class_names)
+                class_names_set.add(match.group(1))
+        class_names = sorted(class_names_set)
         class_names_include_str_to_int = {"GameModes", "Options"}
     elif mode == "development":
-        class_names_set = {
-            obj[0] for obj in inspect.getmembers(enums) if inspect.isclass(obj[1])
-        }
+        class_names_set = {obj[0] for obj in inspect.getmembers(enums) if inspect.isclass(obj[1])}
         class_names_set.add("PubSub")
         class_names = sorted(class_names_set)
         class_names_include_str_to_int = class_names_set
@@ -83,8 +80,8 @@ def generate_enums_js(mode):
         lookups = []
         for name, value in all_enums[class_name].items():
             if class_name in class_names_include_str_to_int:
-                lookups.append("\t\t{}: {}".format(name, value))
-            lookups.append("\t\t{}: '{}'".format(value, name))
+                lookups.append(f"\t\t{name}: {value}")
+            lookups.append(f"\t\t{value}: '{name}'")
         parts.append("\t" + class_name + ": {\n" + ",\n".join(lookups) + "\n\t}")
 
     print("module.exports = {")
@@ -95,7 +92,7 @@ def generate_enums_js(mode):
 def replace_enums(pathnames):
     all_enums = get_all_enums()
     for pathname in pathnames:
-        with open(pathname, "r") as f:
+        with open(pathname) as f:
             contents = f.read()
         contents = re.sub(
             r"(?<![A-Za-z0-9_.])enums\.([A-Za-z0-9]+)\.([A-Za-z0-9_]+)(?:\.value)?(?![A-Za-z0-9])",

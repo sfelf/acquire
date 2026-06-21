@@ -5,7 +5,6 @@ import types
 import pytest
 from enums import GameActions, GameBoardTypes, GameHistoryMessages
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -23,9 +22,7 @@ class FakeLogProcessor:
         self.file = file
         self.verbose = verbose
         self.verbose_output_path = verbose_output_path
-        FakeLogProcessor.calls.append(
-            (log_timestamp, verbose, verbose_output_path)
-        )
+        FakeLogProcessor.calls.append((log_timestamp, verbose, verbose_output_path))
 
     def go(self):
         yield from FakeLogProcessor.games
@@ -143,17 +140,13 @@ def test_individual_game_log_round_trip_tool_writes_stage_files(
     FakeIndividualGameLogMaker.logs = [individual_game_log]
     install_fake_log_inputs(monkeypatch, logs_to_games, [(1432798259, "server.log")])
     monkeypatch.setattr(logs_to_games, "LogProcessor", FakeLogProcessor)
-    monkeypatch.setattr(
-        logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker
-    )
+    monkeypatch.setattr(logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker)
 
     logs_to_games.test_individual_game_log(output_dir)
 
     assert (output_dir / "1" / "1700000000_00077.json").exists()
     assert (output_dir / "2" / "1700000000_00077.json").exists()
-    assert individual_game_log.written_filenames == [
-        str(output_dir / "1700000000_00077.txt")
-    ]
+    assert individual_game_log.written_filenames == [str(output_dir / "1700000000_00077.txt")]
     assert capsys.readouterr().out.splitlines() == [
         "stage1 77",
         "stage2 77",
@@ -170,9 +163,7 @@ def test_sync_log_tools_generate_and_report_outputs(
     logs_to_games = logs_to_games_without_database
     output_dir = tmp_path / "out"
     output_dir.mkdir()
-    unsynchronized = make_replay_game(
-        logs_to_games, internal_game_id=77, synchronized=False
-    )
+    unsynchronized = make_replay_game(logs_to_games, internal_game_id=77, synchronized=False)
     synchronized = make_replay_game(logs_to_games, internal_game_id=78)
     FakeLogProcessor.games = [unsynchronized, synchronized]
     install_fake_log_inputs(monkeypatch, logs_to_games, [(1700000000, "server.log")])
@@ -206,15 +197,11 @@ def test_make_individual_game_logs_for_each_sync_log_extracts_matching_games(
     skipped_log = FakeIndividualGameLog(internal_game_id=78)
     FakeIndividualGameLogMaker.logs = [matching_log, skipped_log]
     install_fake_log_inputs(monkeypatch, logs_to_games, [(1700000000, "server.log")])
-    monkeypatch.setattr(
-        logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker
-    )
+    monkeypatch.setattr(logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker)
 
     logs_to_games.make_individual_game_logs_for_each_sync_log(input_dir, output_dir)
 
-    assert matching_log.written_filenames == [
-        str(output_dir / "1700000000_00077.txt")
-    ]
+    assert matching_log.written_filenames == [str(output_dir / "1700000000_00077.txt")]
     assert skipped_log.written_filenames == []
     assert "server.log" in capsys.readouterr().out
 
@@ -240,9 +227,7 @@ def test_tile_bag_tweak_tools_delegate_to_sync_and_verbose_comparison(
         ),
     )
 
-    logs_to_games.run_all_game_logs_with_tile_bag_tweaks(
-        tmp_path / "in", tmp_path / "out"
-    )
+    logs_to_games.run_all_game_logs_with_tile_bag_tweaks(tmp_path / "in", tmp_path / "out")
 
     assert calls == [
         (1, str(tmp_path / "in" / "1_00010.txt"), str(tmp_path / "out")),
@@ -274,17 +259,13 @@ def test_verbose_compare_outputs_sync_details(
     capsys,
 ):
     logs_to_games = logs_to_games_without_database
-    unsynchronized = make_replay_game(
-        logs_to_games, internal_game_id=77, synchronized=False
-    )
+    unsynchronized = make_replay_game(logs_to_games, internal_game_id=77, synchronized=False)
     synchronized = make_replay_game(logs_to_games, internal_game_id=78)
     FakeLogProcessor.games = [unsynchronized, synchronized]
     install_fake_log_inputs(monkeypatch, logs_to_games, [])
     monkeypatch.setattr(logs_to_games, "LogProcessor", FakeLogProcessor)
 
-    logs_to_games.verbosely_compare_individual_game_log(
-        1700000000, 77, tmp_path, tmp_path / "out"
-    )
+    logs_to_games.verbosely_compare_individual_game_log(1700000000, 77, tmp_path, tmp_path / "out")
 
     output = capsys.readouterr().out
     assert "sync_log:\nsync\ndiff" in output
@@ -332,9 +313,7 @@ def test_first_merge_bonus_export_writes_pickle(
     install_fake_log_inputs(monkeypatch, logs_to_games, [(1700000000, "server.log")])
     monkeypatch.setattr(logs_to_games, "LogProcessor", FakeLogProcessor)
 
-    logs_to_games.output_first_merge_bonuses_and_final_scores_of_all_completed_games(
-        tmp_path
-    )
+    logs_to_games.output_first_merge_bonuses_and_final_scores_of_all_completed_games(tmp_path)
 
     with (tmp_path / "first_merge_bonuses_and_final_scores_of_all_completed_games.bin").open(
         "rb"
@@ -354,17 +333,31 @@ def test_make_individual_game_log_writes_only_requested_game(
     skipped_log = FakeIndividualGameLog(internal_game_id=78)
     FakeIndividualGameLogMaker.logs = [skipped_log, matching_log]
     install_fake_log_inputs(monkeypatch, logs_to_games, [(1700000000, "server.log")])
-    monkeypatch.setattr(
-        logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker
-    )
+    monkeypatch.setattr(logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker)
 
     logs_to_games.make_individual_game_log(1700000000, 77, tmp_path)
 
-    assert matching_log.written_filenames == [
-        str(tmp_path / "1700000000_00077.txt")
-    ]
+    assert matching_log.written_filenames == [str(tmp_path / "1700000000_00077.txt")]
     assert skipped_log.written_filenames == []
     assert "1700000000 77" in capsys.readouterr().out
+
+
+def test_make_individual_game_log_exhausts_logs_when_game_is_not_found(
+    logs_to_games_without_database,
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    logs_to_games = logs_to_games_without_database
+    skipped_log = FakeIndividualGameLog(internal_game_id=78)
+    FakeIndividualGameLogMaker.logs = [skipped_log]
+    install_fake_log_inputs(monkeypatch, logs_to_games, [(1700000000, "server.log")])
+    monkeypatch.setattr(logs_to_games, "IndividualGameLogMaker", FakeIndividualGameLogMaker)
+
+    logs_to_games.make_individual_game_log(1700000000, 77, tmp_path)
+
+    assert skipped_log.written_filenames == []
+    assert capsys.readouterr().out == ""
 
 
 def test_chat_and_username_database_tools_print_expected_output(
@@ -545,8 +538,7 @@ def test_make_acquire2_game_test_files_writes_replay_text(
             self.score_sheet = FakeScoreSheet()
             self.game_board = types.SimpleNamespace(
                 x_to_y_to_board_type=[
-                    [GameBoardTypes.Nothing.value for _y in range(9)]
-                    for _x in range(12)
+                    [GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)
                 ]
             )
             self.tile_racks = types.SimpleNamespace(
@@ -566,9 +558,7 @@ def test_make_acquire2_game_test_files_writes_replay_text(
             return None
 
         def do_game_action(self, client, game_action_id, data):
-            self.history_messages.append(
-                [None, [GameHistoryMessages.AllTilesPlayed.value, None]]
-            )
+            self.history_messages.append([None, [GameHistoryMessages.AllTilesPlayed.value, None]])
             self.actions = [
                 types.SimpleNamespace(
                     player_id=0,
@@ -588,3 +578,70 @@ def test_make_acquire2_game_test_files_writes_replay_text(
     assert "timestamp: 12345" in text
     assert "action: 0 PurchaseShares x 0" in text
     assert "history messages:" in text
+
+
+def test_make_acquire2_game_test_files_continues_after_action_errors(
+    logs_to_games_without_database,
+    monkeypatch,
+    tmp_path,
+):
+    logs_to_games = logs_to_games_without_database
+    game = make_replay_game(logs_to_games, state="Completed")
+    game.actions = [
+        [0, [GameActions.PurchaseShares.value, [], 0], 12.345],
+        [0, [GameActions.PlayTile.value, 0], 13.0],
+    ]
+    FakeLogProcessor.games = [game]
+    install_fake_log_inputs(monkeypatch, logs_to_games, [(1700000000, "server.log")])
+    monkeypatch.setattr(logs_to_games, "LogProcessor", FakeLogProcessor)
+    monkeypatch.setattr(logs_to_games, "username_to_user_id", {"alice": 101, "bob": 102})
+
+    calls = []
+
+    def fake_to_parameter_strings(*_args):
+        calls.append("parameters")
+        if len(calls) == 1:
+            raise RuntimeError("parameters failed")
+        return ["x 0"]
+
+    class FakeScoreSheet:
+        username_to_player_id = {"alice": 0, "bob": 1}
+        player_data = [[0, 0, 0, 0, 0, 0, 0, 60, 60], [0, 0, 0, 0, 0, 0, 0, 60, 60]]
+        available = [25] * 7
+        chain_size = [0] * 7
+        price = [0] * 7
+
+        def update_net_worths(self):
+            return None
+
+    class FakeServerGame:
+        def __init__(self, *args):
+            self.score_sheet = FakeScoreSheet()
+            self.game_board = types.SimpleNamespace(
+                x_to_y_to_board_type=[
+                    [GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)
+                ]
+            )
+            self.tile_racks = types.SimpleNamespace(racks=[[], []])
+            self.turn_player_id = 0
+            self.history_messages = []
+            self.actions = [
+                types.SimpleNamespace(
+                    player_id=0,
+                    game_action_id=GameActions.PlayTile.value,
+                    additional_params=[],
+                )
+            ]
+
+        def join_game(self, client):
+            return None
+
+        def do_game_action(self, client, game_action_id, data):
+            raise RuntimeError("action failed")
+
+    monkeypatch.setattr(logs_to_games, "to_parameter_strings", fake_to_parameter_strings)
+    monkeypatch.setattr(logs_to_games.server, "Game", FakeServerGame)
+
+    logs_to_games.make_acquire2_game_test_files(1700000000, tmp_path)
+
+    assert calls == ["parameters", "parameters"]

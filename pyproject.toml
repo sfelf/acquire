@@ -52,7 +52,7 @@ exclude_lines = [
 ]
 
 [tool.ruff]
-line-length = 160
+line-length = 100
 target-version = "py312"
 extend-exclude = [
     "dist",
@@ -62,24 +62,44 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# Keep the first pass intentionally lenient. Tighten this after golden tests
-# protect the legacy behavior.
-select = ["E9", "F63", "F7", "F82"]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+]
 
 [tool.mypy]
 python_version = "3.12"
 files = ["server"]
 ignore_missing_imports = true
-follow_imports = "silent"
-allow_untyped_defs = true
-allow_incomplete_defs = true
-check_untyped_defs = false
-warn_unused_ignores = false
-no_implicit_optional = false
-strict_optional = false
 show_error_codes = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+strict_optional = true
+check_untyped_defs = true
+disallow_incomplete_defs = true
 disable_error_code = [
     "misc",
     "valid-type",
     "var-annotated",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "logs_to_games",
+    "server",
+]
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "operator",
+    "union-attr",
 ]

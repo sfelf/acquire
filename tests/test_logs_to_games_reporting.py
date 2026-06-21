@@ -2,7 +2,6 @@ import pickle
 
 import pytest
 
-
 pytestmark = pytest.mark.unit
 
 

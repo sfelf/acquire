@@ -7,7 +7,6 @@ import types
 import pytest
 import ujson
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -63,10 +62,7 @@ def cron_module(monkeypatch):
 
         def rate(self, rating_groups, ranks):
             return [
-                [
-                    Rating(rating.mu + index + 1, rating.sigma - 1)
-                    for rating in rating_group
-                ]
+                [Rating(rating.mu + index + 1, rating.sigma - 1) for rating in rating_group]
                 for index, rating_group in enumerate(rating_groups)
             ]
 
@@ -149,8 +145,8 @@ class FakeLookup:
     def get_game_player(self, game, player_index):
         key = (game.log_time, game.game_id, player_index)
         user = self.users.setdefault(
-            "player%d" % player_index,
-            FakeUser(player_index + 1, "player%d" % player_index),
+            f"player{player_index}",
+            FakeUser(player_index + 1, f"player{player_index}"),
         )
         return self.game_players.setdefault(key, FakeGamePlayer(user))
 
@@ -201,9 +197,7 @@ def test_process_logs_dispatches_complete_json_lines(cron_module):
         "game-player": lambda params: calls.append(("game-player", params)),
     }
     file = io.StringIO(
-        '{"_":"game","game-id":1}\n'
-        '{"_":"ignored","game-id":1}\n'
-        '{"_":"game-player","game-id":1}'
+        '{"_":"game","game-id":1}\n{"_":"ignored","game-id":1}\n{"_":"game-player","game-id":1}'
     )
 
     offset, completed_game_users = logs2db.process_logs(file, log_time=123)
@@ -222,10 +216,7 @@ def test_process_logs_keeps_existing_log_time_and_ignores_non_json_lines(cron_mo
         "game": lambda params: calls.append(params),
     }
     file = io.StringIO(
-        "\n"
-        "not-json\n"
-        '{"_":"game","game-id":1,"log-time":999}\n'
-        '{"_":"game","game-id":2}\n'
+        '\nnot-json\n{"_":"game","game-id":1,"log-time":999}\n{"_":"game","game-id":2}\n'
     )
 
     offset, _completed_game_users = logs2db.process_logs(file, log_time=123)
@@ -313,9 +304,7 @@ def test_process_game_player_assigns_user_to_player(cron_module):
     assert game_player.user.name == "alice"
 
 
-def test_process_game_result_updates_scores_and_completed_users(
-    cron_module, monkeypatch
-):
+def test_process_game_result_updates_scores_and_completed_users(cron_module, monkeypatch):
     lookup = FakeLookup()
     logs2db = cron_module.Logs2DB(FakeSession(), lookup)
     logs2db.completed_game_users = set()
@@ -552,7 +541,11 @@ def test_statsgen_get_users_with_completed_games_decodes_records(cron_module):
         StatsSession(
             {
                 cron_module.StatsGen.users_with_completed_games_sql: [
-                    Row(user_id=1, name=b"alice", encoded=ujson.encode([[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]])),
+                    Row(
+                        user_id=1,
+                        name=b"alice",
+                        encoded=ujson.encode([[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]]),
+                    ),
                     Row(user_id=2, name=b"bob", encoded=None),
                 ]
             }
@@ -570,14 +563,23 @@ def test_statsgen_output_ratings_groups_rows(cron_module, monkeypatch):
     session = StatsSession(
         {
             cron_module.StatsGen.ratings_sql: [
-                Row(name=b"alice", rating_type=b"Singles2", time=100, mu=25.0, sigma=8.0, num_games=3),
+                Row(
+                    name=b"alice",
+                    rating_type=b"Singles2",
+                    time=100,
+                    mu=25.0,
+                    sigma=8.0,
+                    num_games=3,
+                ),
                 Row(name=b"bob", rating_type=b"Teams", time=200, mu=27.0, sigma=7.5, num_games=5),
             ]
         }
     )
     statsgen = cron_module.StatsGen(session, "unused")
     written = {}
-    monkeypatch.setattr(statsgen, "write_file", lambda name, contents: written.update({name: contents}))
+    monkeypatch.setattr(
+        statsgen, "write_file", lambda name, contents: written.update({name: contents})
+    )
 
     statsgen.output_ratings()
 
@@ -597,15 +599,28 @@ def test_statsgen_output_user_writes_encoded_user_payload(cron_module, monkeypat
                 Row(name=b"Teams", time=200, mu=27.0, sigma=7.5),
             ],
             cron_module.StatsGen.user_games_sql: [
-                Row(game_id=10, end_time=500, game_mode_id=1, player_index=0, name=b"alice", score=90),
-                Row(game_id=10, end_time=500, game_mode_id=1, player_index=1, name=b"bob", score=70),
-                Row(game_id=9, end_time=400, game_mode_id=4, player_index=0, name=b"alice", score=80),
+                Row(
+                    game_id=10,
+                    end_time=500,
+                    game_mode_id=1,
+                    player_index=0,
+                    name=b"alice",
+                    score=90,
+                ),
+                Row(
+                    game_id=10, end_time=500, game_mode_id=1, player_index=1, name=b"bob", score=70
+                ),
+                Row(
+                    game_id=9, end_time=400, game_mode_id=4, player_index=0, name=b"alice", score=80
+                ),
             ],
         }
     )
     statsgen = cron_module.StatsGen(session, "unused")
     written = {}
-    monkeypatch.setattr(statsgen, "write_file", lambda name, contents: written.update({name: contents}))
+    monkeypatch.setattr(
+        statsgen, "write_file", lambda name, contents: written.update({name: contents})
+    )
 
     statsgen.output_user(123, "a+b/c", [[1, 2], [0, 0, 0], [0, 0, 0, 0], [3, 4]])
 
@@ -637,9 +652,7 @@ def test_statsgen_write_file_outputs_json(cron_module, tmp_path):
     assert (output_dir / "ratings.json").read_text() == '{"Singles2":[]}'
 
 
-def test_process_logs_updates_offsets_and_writes_changed_user_stats(
-    cron_module, monkeypatch
-):
+def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module, monkeypatch):
     session = FakeSession()
     lookup = FakeLookup()
     lookup.get_key_value("cron last log timestamp").value = "100"
@@ -704,9 +717,7 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(
     ]
 
 
-def test_process_logs_publishes_compressed_stats_files(
-    cron_module, monkeypatch, tmp_path
-):
+def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch, tmp_path):
     session = FakeSession()
     lookup = FakeLookup()
     user = FakeUser(1, "alice")
@@ -795,9 +806,7 @@ def test_process_logs_publishes_compressed_stats_files(
     ]
 
 
-def test_output_all_stats_files_writes_ratings_and_each_user(
-    cron_module, monkeypatch, capsys
-):
+def test_output_all_stats_files_writes_ratings_and_each_user(cron_module, monkeypatch, capsys):
     session = FakeSession()
     calls = []
 

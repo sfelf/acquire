@@ -5,9 +5,8 @@ import time
 
 import pytest
 import sqlalchemy
-from sqlalchemy.orm import sessionmaker
 import ujson
-
+from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.mysql
 
@@ -112,8 +111,7 @@ def test_orm_metadata_creates_expected_mysql_tables(
         "game_mode_id",
     }
     assert ("rating_type_id", "user_id") in {
-        tuple(sorted(index["column_names"]))
-        for index in inspector.get_indexes("rating")
+        tuple(sorted(index["column_names"])) for index in inspector.get_indexes("rating")
     }
 
 
@@ -178,18 +176,18 @@ def test_session_scope_commits_and_rolls_back_against_mysql(
     with real_orm_module.session_scope() as session:
         session.add(real_orm_module.User(name="committed", password="secret"))
 
-    with pytest.raises(RuntimeError, match="rollback"):
-        with real_orm_module.session_scope() as session:
-            session.add(real_orm_module.User(name="rolled-back", password="secret"))
-            raise RuntimeError("rollback")
+    with (
+        pytest.raises(RuntimeError, match="rollback"),
+        real_orm_module.session_scope() as session,
+    ):
+        session.add(real_orm_module.User(name="rolled-back", password="secret"))
+        raise RuntimeError("rollback")
 
     session = make_mysql_session(mysql_engine)
     try:
         names = [
             row.name
-            for row in session.query(real_orm_module.User).order_by(
-                real_orm_module.User.name
-            )
+            for row in session.query(real_orm_module.User).order_by(real_orm_module.User.name)
         ]
     finally:
         session.close()
@@ -297,11 +295,7 @@ def test_logs2db_persists_completed_game_ratings_and_records_against_mysql(
         assert offset == len(log.getvalue())
         assert {user.name for user in completed_game_users} == {"alice", "bob"}
 
-        persisted_game = (
-            session.query(real_orm_module.Game)
-            .filter_by(log_time=555, number=1)
-            .one()
-        )
+        persisted_game = session.query(real_orm_module.Game).filter_by(log_time=555, number=1).one()
         assert persisted_game.begin_time == 1000
         assert persisted_game.end_time == 1100
         assert persisted_game.game_state.name == "Completed"
@@ -326,10 +320,7 @@ def test_logs2db_persists_completed_game_ratings_and_records_against_mysql(
             .order_by(real_orm_module.User.name, real_orm_module.Rating.time)
             .all()
         )
-        assert [
-            (rating.user.name, rating.rating_type.name, rating.time)
-            for rating in ratings
-        ] == [
+        assert [(rating.user.name, rating.rating_type.name, rating.time) for rating in ratings] == [
             ("alice", "Singles2", 1000),
             ("alice", "Singles2", 1100),
             ("bob", "Singles2", 1000),

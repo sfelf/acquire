@@ -3,15 +3,12 @@ import types
 import pytest
 from enums import GameActions, GameBoardTypes, GameHistoryMessages
 
-
 pytestmark = pytest.mark.unit
 
 
 def make_empty_board(logs_to_games):
     return types.SimpleNamespace(
-        x_to_y_to_board_type=[
-            [GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)
-        ]
+        x_to_y_to_board_type=[[GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)]
     )
 
 
@@ -81,10 +78,7 @@ def test_tile_rack_string_renders_tiles_and_empty_slots(logs_to_games_without_da
         [(11, 8), GameBoardTypes.WillFormNewChain.value],
     ]
 
-    assert (
-        logs_to_games_without_database.get_tile_rack_string(tiles)
-        == "1A(L) none 12I(n)"
-    )
+    assert logs_to_games_without_database.get_tile_rack_string(tiles) == "1A(L) none 12I(n)"
 
 
 def test_parameter_strings_render_action_specific_inputs(logs_to_games_without_database):
@@ -148,9 +142,7 @@ def test_next_action_string_renders_action_prompts(logs_to_games_without_databas
     )
     select_action.player_id = 1
     select_action.game_action_id = GameActions.SelectNewChain.value
-    select_action.additional_params = [
-        [GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value]
-    ]
+    select_action.additional_params = [[GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value]]
     dispose_action = logs_to_games_without_database.server.ActionDisposeOfShares.__new__(
         logs_to_games_without_database.server.ActionDisposeOfShares
     )

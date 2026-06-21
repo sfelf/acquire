@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 LOG_TIMESTAMP = 1780589302
 
@@ -33,8 +32,7 @@ def summarize_real_log_fixture(logs_to_games, log_path):
                 "first_batch_line": line_numbers[0] if line_numbers else None,
                 "last_batch_line": line_numbers[-1] if line_numbers else None,
                 "player_id_to_username": {
-                    str(key): value
-                    for key, value in sorted(game_log.player_id_to_username.items())
+                    str(key): value for key, value in sorted(game_log.player_id_to_username.items())
                 },
             }
         )

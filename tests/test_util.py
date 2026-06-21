@@ -4,7 +4,6 @@ import pytest
 import settings
 import util
 
-
 pytestmark = pytest.mark.unit
 
 

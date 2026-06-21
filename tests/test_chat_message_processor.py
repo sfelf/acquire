@@ -3,7 +3,6 @@ import io
 import pytest
 from enums import CommandsToClient
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -71,3 +70,24 @@ time: 1700000001.0
     assert run_chat_processor(logs_to_games_without_database, log_text, capsys) == [
         "1700000001.0 GLOBAL charlie -> still global",
     ]
+
+
+def test_chat_message_processor_continues_after_handler_errors(
+    logs_to_games_without_database,
+    capsys,
+):
+    processor = logs_to_games_without_database.ChatMessageProcessor(1700000000, io.StringIO(""))
+
+    def raise_error(*_args):
+        raise RuntimeError("chat handler failed")
+
+    processor._commands_to_client_handlers[CommandsToClient.AddGlobalChatMessage.value] = (
+        raise_error
+    )
+
+    processor._handle_command_to_client(
+        [4],
+        [[CommandsToClient.AddGlobalChatMessage.value, 4, "boom"]],
+    )
+
+    assert "RuntimeError: chat handler failed" in capsys.readouterr().err

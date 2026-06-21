@@ -4,7 +4,6 @@ import types
 
 import pytest
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -92,7 +91,8 @@ def test_initialize_database_resets_schema_creates_tables_and_seeds_rows(
             "root",
             "-proot",
             "-e",
-            "drop schema if exists `acquire`; create schema `acquire` default character set utf8mb4 collate utf8mb4_bin;",
+            "drop schema if exists `acquire`; create schema `acquire` "
+            "default character set utf8mb4 collate utf8mb4_bin;",
         ]
     ]
     assert orm.Base.metadata.create_all_calls == [orm.engine]
@@ -131,5 +131,6 @@ def test_initialize_database_uses_mysql_environment(
         "root",
         "-pcustom-root",
         "-e",
-        "drop schema if exists `custom_acquire`; create schema `custom_acquire` default character set utf8mb4 collate utf8mb4_bin;",
+        "drop schema if exists `custom_acquire`; create schema `custom_acquire` "
+        "default character set utf8mb4 collate utf8mb4_bin;",
     ]

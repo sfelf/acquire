@@ -1,8 +1,6 @@
-import pytest
-
 import enumsgen
+import pytest
 from enums import CommandsToClient, GameModes, Options
-
 
 pytestmark = pytest.mark.unit
 
@@ -22,13 +20,10 @@ def test_get_pubsub_enums_includes_server_commands_and_client_events(
     client_js_dir = tmp_path / "client" / "main" / "js"
     client_js_dir.mkdir(parents=True)
     (client_js_dir / "main.js").write_text(
-        "enums.PubSub.Ignored_Main\n"
-        "enums.PubSub.Client_Started\n"
+        "enums.PubSub.Ignored_Main\nenums.PubSub.Client_Started\n"
     )
     (client_js_dir / "alpha.js").write_text(
-        "enums.PubSub.Client_Started\n"
-        "enums.PubSub.Tile_Selected\n"
-        "enums.PubSub.Server_SetTurn\n"
+        "enums.PubSub.Client_Started\nenums.PubSub.Tile_Selected\nenums.PubSub.Server_SetTurn\n"
     )
     (client_js_dir / "beta.js").write_text("enums.PubSub.Chat_Message\n")
     monkeypatch.chdir(tmp_path)
@@ -66,9 +61,7 @@ def test_generate_enums_js_release_limits_output_to_referenced_classes(
 ):
     dist_js_dir = tmp_path / "dist" / "build" / "js"
     dist_js_dir.mkdir(parents=True)
-    (dist_js_dir / "bundle.js").write_text(
-        "enums.GameModes enums.Options enums.CommandsToClient"
-    )
+    (dist_js_dir / "bundle.js").write_text("enums.GameModes enums.Options enums.CommandsToClient")
     monkeypatch.chdir(tmp_path)
 
     enumsgen.generate_enums_js("release")

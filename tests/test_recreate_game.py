@@ -4,9 +4,9 @@ import sys
 import types
 
 import pytest
-import server
 from enums import GameActions, GameBoardTypes, GameModes, GameStates
 
+import server
 
 pytestmark = pytest.mark.unit
 
@@ -54,9 +54,7 @@ def make_saved_game_data(tile_racks=None):
         "turn_player_id": 1,
         "turns_without_played_tiles_count": 2,
         "history_messages": [[None, [1, "alice", 3, 4]]],
-        "game_board": [
-            [GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)
-        ],
+        "game_board": [[GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)],
         "score_sheet": {
             "player_data": [
                 [1, 0, 0, 0, 0, 0, 0, 58, 61, "alice", None, None],

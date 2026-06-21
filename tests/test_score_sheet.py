@@ -1,7 +1,7 @@
 import pytest
-import server
 from enums import CommandsToClient, GameBoardTypes, ScoreSheetIndexes, ScoreSheetRows
 
+import server
 
 pytestmark = pytest.mark.unit
 
@@ -44,9 +44,7 @@ def make_score_sheet(player_data=()):
 
 
 def test_adjust_player_data_updates_shares_available_and_emits_message():
-    game, score_sheet = make_score_sheet(
-        make_player_data({GameBoardTypes.Luxor.value: 2})[0:1]
-    )
+    game, score_sheet = make_score_sheet(make_player_data({GameBoardTypes.Luxor.value: 2})[0:1])
 
     score_sheet.adjust_player_data(0, ScoreSheetIndexes.Luxor.value, 3)
 
@@ -96,16 +94,21 @@ def test_set_chain_size_updates_price_tiers(chain_id, chain_size, expected_price
     assert score_sheet.price[chain_id] == expected_price
     assert game.pending_messages == [
         (
-            [[CommandsToClient.SetScoreSheetCell.value, ScoreSheetRows.ChainSize.value, chain_id, chain_size]],
+            [
+                [
+                    CommandsToClient.SetScoreSheetCell.value,
+                    ScoreSheetRows.ChainSize.value,
+                    chain_id,
+                    chain_size,
+                ]
+            ],
             {1, 2},
         )
     ]
 
 
 def test_get_bonuses_awards_both_bonuses_to_only_shareholder():
-    _game, score_sheet = make_score_sheet(
-        make_player_data({GameBoardTypes.Luxor.value: 3}, {}, {})
-    )
+    _game, score_sheet = make_score_sheet(make_player_data({GameBoardTypes.Luxor.value: 3}, {}, {}))
     score_sheet.price[GameBoardTypes.Luxor.value] = 4
 
     assert score_sheet.get_bonuses(GameBoardTypes.Luxor.value) == [
@@ -160,6 +163,16 @@ def test_update_net_worths_counts_cash_stock_value_and_active_chain_bonuses():
     assert score_sheet.player_data[1][ScoreSheetIndexes.Net.value] == 95
 
 
+def test_update_net_worths_counts_inactive_chain_stock_without_bonuses():
+    game, score_sheet = make_score_sheet(make_player_data({GameBoardTypes.Luxor.value: 4}))
+    game.game_board = FakeGameBoard()
+    score_sheet.price[GameBoardTypes.Luxor.value] = 5
+
+    score_sheet.update_net_worths()
+
+    assert score_sheet.player_data[0][ScoreSheetIndexes.Net.value] == 80
+
+
 def test_join_game_updates_shifted_player_ids_and_sends_prior_position_tiles():
     game, score_sheet = make_score_sheet()
     first_client = type("Client", (), {"username": "alice", "client_id": 10})()
@@ -193,9 +206,7 @@ def test_join_game_updates_shifted_player_ids_and_sends_prior_position_tiles():
 
 
 def test_join_game_leaves_disconnected_existing_player_without_client_update():
-    game, score_sheet = make_score_sheet(
-        [[0, 0, 0, 0, 0, 0, 0, 60, 60, "alice", (5, 5), None]]
-    )
+    game, score_sheet = make_score_sheet([[0, 0, 0, 0, 0, 0, 0, 60, 60, "alice", (5, 5), None]])
     score_sheet.creator_username = "alice"
     score_sheet.username_to_player_id = {"alice": 0}
     client = type("Client", (), {"username": "bob", "client_id": 20})()

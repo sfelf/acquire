@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import enums
 import heapq
 import json
 import math
@@ -8,6 +7,8 @@ import random
 import re
 import time
 import traceback
+
+import enums
 import ujson
 
 
@@ -47,15 +48,11 @@ class ServerProtocol(asyncio.Protocol):
                     value = ujson.decode(value.decode())
                     Client(self.server, *value)
                 elif key == b"disconnect":
-                    client = self.server.client_id_to_client.get(
-                        int(value.decode()), None
-                    )
+                    client = self.server.client_id_to_client.get(int(value.decode()), None)
                     if client:
                         client.disconnect()
                 else:
-                    client = self.server.client_id_to_client.get(
-                        int(key.decode()), None
-                    )
+                    client = self.server.client_id_to_client.get(int(key.decode()), None)
                     if client:
                         client.on_message(value)
             else:
@@ -170,7 +167,7 @@ class Server:
             for game in expired_games:
                 game_id = game.game_id
                 internal_game_id = game.internal_game_id
-                print("game #%d expired (internal #%d)" % (game_id, internal_game_id))
+                print(f"game #{game_id} expired (internal #{internal_game_id})")
                 self.next_game_id_manager.return_id(game_id)
                 self.next_internal_game_id_manager.return_id(internal_game_id)
                 del self.game_id_to_game[game_id]
@@ -233,16 +230,12 @@ class Client:
                 getattr(
                     self,
                     "_on_message_"
-                    + self._server.re_camelcase.sub(
-                        r"\1_\2", command_enum.name
-                    ).lower(),
+                    + self._server.re_camelcase.sub(r"\1_\2", command_enum.name).lower(),
                 )
             )
         self._server.username_to_client[self.username] = self
 
-        messages_client.append(
-            [enums.CommandsToClient.SetClientId.value, self.client_id]
-        )
+        messages_client.append([enums.CommandsToClient.SetClientId.value, self.client_id])
 
         # tell client about other clients' data
         for client in self._server.client_id_to_client.values():
@@ -271,9 +264,7 @@ class Client:
         )
 
         # tell client about all games
-        for game in sorted(
-            self._server.game_id_to_game.values(), key=lambda x: x.internal_game_id
-        ):
+        for game in sorted(self._server.game_id_to_game.values(), key=lambda x: x.internal_game_id):
             game_id = game.game_id
             messages_client.append(
                 [
@@ -291,9 +282,7 @@ class Client:
                             enums.CommandsToClient.SetGamePlayerJoin.value,
                             game_id,
                             player_id,
-                            player_datum[
-                                enums.ScoreSheetIndexes.Client.value
-                            ].client_id,
+                            player_datum[enums.ScoreSheetIndexes.Client.value].client_id,
                         ]
                     )
                 else:
@@ -323,9 +312,7 @@ class Client:
         print("time:", time.time())
         print(self.client_id, "disconnect")
 
-        self._server.transport_write(
-            b"disconnect " + str(self.client_id).encode() + b"\n"
-        )
+        self._server.transport_write(b"disconnect " + str(self.client_id).encode() + b"\n")
 
         del self._server.client_id_to_client[self.client_id]
         self._server.client_ids.discard(self.client_id)
@@ -358,7 +345,7 @@ class Client:
             message = ujson.decode(message)
             method = self.on_message_lookup[message[0]]
             arguments = message[1:]
-        except:
+        except BaseException:
             traceback.print_exc()
             self.disconnect()
             return
@@ -408,9 +395,7 @@ class Client:
 
     def _on_message_do_game_action(self, game_action_id, *data):
         if self.game_id:
-            self._server.game_id_to_game[self.game_id].do_game_action(
-                self, game_action_id, data
-            )
+            self._server.game_id_to_game[self.game_id].do_game_action(self, game_action_id, data)
 
     def _on_message_send_global_chat_message(self, chat_message):
         chat_message = " ".join(chat_message.split())
@@ -446,15 +431,10 @@ class GameBoard:
         self.game = game
 
         if board is None:
-            board = [
-                [enums.GameBoardTypes.Nothing.value for y in range(9)]
-                for x in range(12)
-            ]
+            board = [[enums.GameBoardTypes.Nothing.value for y in range(9)] for x in range(12)]
         self.x_to_y_to_board_type = board
 
-        self.board_type_to_coordinates = [
-            set() for t in range(enums.GameBoardTypes.Max.value)
-        ]
+        self.board_type_to_coordinates = [set() for t in range(enums.GameBoardTypes.Max.value)]
         for x in range(12):
             for y in range(9):
                 self.board_type_to_coordinates[board[x][y]].add((x, y))
@@ -532,16 +512,12 @@ class ScoreSheet:
         self.player_data.append(
             [0, 0, 0, 0, 0, 0, 0, 60, 60, client.username, position_tile, client]
         )
-        self.player_data.sort(
-            key=lambda t: t[enums.ScoreSheetIndexes.PositionTile.value]
-        )
+        self.player_data.sort(key=lambda t: t[enums.ScoreSheetIndexes.PositionTile.value])
 
         # update player_ids for all clients in game
-        player_id = 0
-        for player_datum in self.player_data:
+        for player_id, player_datum in enumerate(self.player_data):
             if player_datum[enums.ScoreSheetIndexes.Client.value]:
                 player_datum[enums.ScoreSheetIndexes.Client.value].player_id = player_id
-            player_id += 1
 
         for player_id, player_datum in enumerate(self.player_data):
             # update self.username_to_player_id
@@ -616,11 +592,7 @@ class ScoreSheet:
         return username in self.username_to_player_id
 
     def get_creator_player_id(self):
-        return (
-            self.username_to_player_id[self.creator_username]
-            if self.creator_username
-            else None
-        )
+        return self.username_to_player_id[self.creator_username] if self.creator_username else None
 
     def adjust_player_data(self, player_id, score_sheet_index, adjustment):
         self.player_data[player_id][score_sheet_index] += adjustment
@@ -680,9 +652,7 @@ class ScoreSheet:
             share_count = player_datum[game_board_type_id]
             if share_count:
                 share_count_to_player_ids[share_count].add(player_id)
-        player_id_sets = [
-            x[1] for x in sorted(share_count_to_player_ids.items(), reverse=True)
-        ]
+        player_id_sets = [x[1] for x in sorted(share_count_to_player_ids.items(), reverse=True)]
 
         bonus_data = []
 
@@ -690,7 +660,7 @@ class ScoreSheet:
             # if only one player holds stock in defunct chain, he receives both bonuses
             bonus_data.append([player_id_sets[0], bonus_first + bonus_second])
         elif len(player_id_sets[0]) > 1:
-            # in case of tie for largest shareholder, first and second bonuses are combined and divided equally between tying shareholders
+            # If largest shareholder ties, combine and divide first and second bonuses.
             bonus_data.append(
                 [
                     player_id_sets[0],
@@ -705,7 +675,7 @@ class ScoreSheet:
                 # pay second largest shareholder
                 bonus_data.append([player_id_sets[1], bonus_second])
             else:
-                # in case of tie for second largest shareholder, second bonus is divided equally between tying players
+                # If second-largest shareholder ties, divide second bonus equally.
                 bonus_data.append(
                     [
                         player_id_sets[1],
@@ -723,14 +693,7 @@ class ScoreSheet:
             if price:
                 for player_id, player_datum in enumerate(self.player_data):
                     net_worths[player_id] += player_datum[game_board_type_id] * price
-                if (
-                    len(
-                        self.game.game_board.board_type_to_coordinates[
-                            game_board_type_id
-                        ]
-                    )
-                    > 0
-                ):
+                if len(self.game.game_board.board_type_to_coordinates[game_board_type_id]) > 0:
                     for player_ids, bonus in self.get_bonuses(game_board_type_id):
                         for player_id in player_ids:
                             net_worths[player_id] += bonus
@@ -764,9 +727,7 @@ class TileRacks:
                     ]
 
     def determine_tile_game_board_types(self, player_ids=None):
-        chain_sizes = [
-            len(self.game.game_board.board_type_to_coordinates[t]) for t in range(7)
-        ]
+        chain_sizes = [len(self.game.game_board.board_type_to_coordinates[t]) for t in range(7)]
         can_start_new_chain = 0 in chain_sizes
         x_to_y_to_board_type = self.game.game_board.x_to_y_to_board_type
 
@@ -835,9 +796,7 @@ class TileRacks:
             if can_start_new_chain:
                 for tile_index in lonely_tile_indexes:
                     if rack[tile_index][0] in lonely_tile_border_tiles:
-                        new_types[
-                            tile_index
-                        ] = enums.GameBoardTypes.HaveNeighboringTileToo.value
+                        new_types[tile_index] = enums.GameBoardTypes.HaveNeighboringTileToo.value
 
             for tile_index, tile_data in enumerate(rack):
                 if tile_data:
@@ -897,10 +856,7 @@ class TileRacks:
         while replaced_a_dead_tile:
             replaced_a_dead_tile = False
             for tile_index, tile_data in enumerate(rack):
-                if (
-                    tile_data
-                    and tile_data[1] == enums.GameBoardTypes.CantPlayEver.value
-                ):
+                if tile_data and tile_data[1] == enums.GameBoardTypes.CantPlayEver.value:
                     # remove tile from player's tile rack
                     rack[tile_index] = None
                     client = self.game.score_sheet.player_data[player_id][
@@ -914,9 +870,7 @@ class TileRacks:
 
                     # mark cell on game board as can't play ever
                     tile = tile_data[0]
-                    self.game.game_board.set_cell(
-                        tile, enums.GameBoardTypes.CantPlayEver.value
-                    )
+                    self.game.game_board.set_cell(tile, enums.GameBoardTypes.CantPlayEver.value)
 
                     # tell everybody that a dead tile was replaced
                     self.game.add_history_message(
@@ -973,14 +927,10 @@ class ActionStartGame(Action):
         super().__init__(game, player_id, enums.GameActions.StartGame.value)
 
     def execute(self):
-        self.game.add_history_message(
-            enums.GameHistoryMessages.StartedGame.value, self.player_id
-        )
+        self.game.add_history_message(enums.GameHistoryMessages.StartedGame.value, self.player_id)
 
         if self.game.mode == enums.GameModes.Teams.value and self.game.num_players < 4:
-            self.game.set_state(
-                enums.GameStates.InProgress.value, enums.GameModes.Singles.value
-            )
+            self.game.set_state(enums.GameStates.InProgress.value, enums.GameModes.Singles.value)
         else:
             self.game.set_state(enums.GameStates.InProgress.value)
 
@@ -1001,9 +951,7 @@ class ActionPlayTile(Action):
             [[enums.CommandsToClient.SetTurn.value, self.player_id]],
             self.game.client_ids,
         )
-        self.game.add_history_message(
-            enums.GameHistoryMessages.TurnBegan.value, self.player_id
-        )
+        self.game.add_history_message(enums.GameHistoryMessages.TurnBegan.value, self.player_id)
 
         has_a_playable_tile = False
         for tile_data in self.game.tile_racks.racks[self.player_id]:
@@ -1062,9 +1010,7 @@ class ActionPlayTile(Action):
                 )
             ]
         elif game_board_type_id == enums.GameBoardTypes.WillMergeChains.value:
-            retval = [
-                ActionSelectMergerSurvivor(self.game, self.player_id, borders, tile)
-            ]
+            retval = [ActionSelectMergerSurvivor(self.game, self.player_id, borders, tile)]
         else:
             return
 
@@ -1088,9 +1034,7 @@ class ActionSelectNewChain(Action):
         if len(self.game_board_type_ids) == 1:
             return self._create_new_chain(self.game_board_type_ids[0])
         else:
-            self.game.game_board.set_cell(
-                self.tile, enums.GameBoardTypes.NothingYet.value
-            )
+            self.game.game_board.set_cell(self.tile, enums.GameBoardTypes.NothingYet.value)
             self.game.tile_racks.determine_tile_game_board_types()
 
     def execute(self, game_board_type_id):
@@ -1104,9 +1048,7 @@ class ActionSelectNewChain(Action):
             len(self.game.game_board.board_type_to_coordinates[game_board_type_id]),
         )
         if self.game.score_sheet.available[game_board_type_id]:
-            self.game.score_sheet.adjust_player_data(
-                self.player_id, game_board_type_id, 1
-            )
+            self.game.score_sheet.adjust_player_data(self.player_id, game_board_type_id, 1)
 
         self.game.add_history_message(
             enums.GameHistoryMessages.FormedChain.value,
@@ -1125,12 +1067,8 @@ class ActionSelectMergerSurvivor(Action):
 
         chain_size_to_type_ids = collections.defaultdict(set)
         for type_id in type_ids:
-            chain_size_to_type_ids[self.game.score_sheet.chain_size[type_id]].add(
-                type_id
-            )
-        self.type_id_sets = [
-            x[1] for x in sorted(chain_size_to_type_ids.items(), reverse=True)
-        ]
+            chain_size_to_type_ids[self.game.score_sheet.chain_size[type_id]].add(type_id)
+        self.type_id_sets = [x[1] for x in sorted(chain_size_to_type_ids.items(), reverse=True)]
 
     def prepare(self):
         self.game.add_history_message(
@@ -1143,9 +1081,7 @@ class ActionSelectMergerSurvivor(Action):
         if len(largest_type_ids) == 1:
             return self._prepare_next_actions(largest_type_ids.pop())
         else:
-            self.game.game_board.set_cell(
-                self.tile, enums.GameBoardTypes.NothingYet.value
-            )
+            self.game.game_board.set_cell(self.tile, enums.GameBoardTypes.NothingYet.value)
             self.game.tile_racks.determine_tile_game_board_types()
             self.additional_params.append(sorted(largest_type_ids))
 
@@ -1204,9 +1140,7 @@ class ActionSelectMergerSurvivor(Action):
 
 class ActionSelectChainToDisposeOfNext(Action):
     def __init__(self, game, player_id, defunct_type_ids, controlling_type_id):
-        super().__init__(
-            game, player_id, enums.GameActions.SelectChainToDisposeOfNext.value
-        )
+        super().__init__(game, player_id, enums.GameActions.SelectChainToDisposeOfNext.value)
         self.defunct_type_ids = defunct_type_ids
         self.controlling_type_id = controlling_type_id
 
@@ -1267,9 +1201,7 @@ class ActionDisposeOfShares(Action):
         self.additional_params.append(controlling_type_id)
 
     def prepare(self):
-        self.controlling_type_available = self.game.score_sheet.available[
-            self.controlling_type_id
-        ]
+        self.controlling_type_available = self.game.score_sheet.available[self.controlling_type_id]
 
     def execute(self, trade_amount, sell_amount):
         if (
@@ -1293,9 +1225,7 @@ class ActionDisposeOfShares(Action):
                     self.player_id, self.controlling_type_id, trade_amount // 2
                 )
             if sell_amount:
-                sale_price = (
-                    self.game.score_sheet.price[self.defunct_type_id] * sell_amount
-                )
+                sale_price = self.game.score_sheet.price[self.defunct_type_id] * sell_amount
                 self.game.score_sheet.adjust_player_data(
                     self.player_id, enums.ScoreSheetIndexes.Cash.value, sale_price
                 )
@@ -1320,10 +1250,7 @@ class ActionPurchaseShares(Action):
 
     def prepare(self):
         for type_id, chain_size in enumerate(self.game.score_sheet.chain_size):
-            if (
-                chain_size
-                and not self.game.game_board.board_type_to_coordinates[type_id]
-            ):
+            if chain_size and not self.game.game_board.board_type_to_coordinates[type_id]:
                 self.game.score_sheet.set_chain_size(type_id, 0)
 
         self.game.tile_racks.determine_tile_game_board_types()
@@ -1331,13 +1258,12 @@ class ActionPurchaseShares(Action):
         existing_chain_sizes = []
         shares_available = False
         can_purchase_shares = False
-        cash = self.game.score_sheet.player_data[self.player_id][
-            enums.ScoreSheetIndexes.Cash.value
-        ]
+        cash = self.game.score_sheet.player_data[self.player_id][enums.ScoreSheetIndexes.Cash.value]
         for chain_size, available, price in zip(
             self.game.score_sheet.chain_size,
             self.game.score_sheet.available,
             self.game.score_sheet.price,
+            strict=False,
         ):
             if chain_size:
                 existing_chain_sizes.append(chain_size)
@@ -1381,17 +1307,13 @@ class ActionPurchaseShares(Action):
                 return
         if (
             cost
-            > self.game.score_sheet.player_data[self.player_id][
-                enums.ScoreSheetIndexes.Cash.value
-            ]
+            > self.game.score_sheet.player_data[self.player_id][enums.ScoreSheetIndexes.Cash.value]
         ):
             return
 
         if cost:
             for game_board_type_id, count in game_board_type_id_to_count.items():
-                self.game.score_sheet.adjust_player_data(
-                    self.player_id, game_board_type_id, count
-                )
+                self.game.score_sheet.adjust_player_data(self.player_id, game_board_type_id, count)
             self.game.score_sheet.adjust_player_data(
                 self.player_id, enums.ScoreSheetIndexes.Cash.value, -cost
             )
@@ -1424,9 +1346,7 @@ class ActionPurchaseShares(Action):
                     enums.GameHistoryMessages.EndedGame.value, self.player_id
                 )
             elif all_tiles_played:
-                self.game.add_history_message(
-                    enums.GameHistoryMessages.AllTilesPlayed.value, None
-                )
+                self.game.add_history_message(enums.GameHistoryMessages.AllTilesPlayed.value, None)
             elif no_tiles_played_for_entire_round:
                 self.game.add_history_message(
                     enums.GameHistoryMessages.NoTilesPlayedForEntireRound.value, None
@@ -1440,9 +1360,7 @@ class ActionPurchaseShares(Action):
 
             all_tiles_played = self.game.tile_racks.are_racks_empty()
             if all_tiles_played:
-                self.game.add_history_message(
-                    enums.GameHistoryMessages.AllTilesPlayed.value, None
-                )
+                self.game.add_history_message(enums.GameHistoryMessages.AllTilesPlayed.value, None)
                 return [ActionGameOver(self.game, self.player_id)]
 
             next_player_id = (self.player_id + 1) % self.game.num_players
@@ -1456,9 +1374,7 @@ class ActionGameOver(Action):
     def __init__(self, game, player_id):
         super().__init__(game, player_id, enums.GameActions.GameOver.value)
         game.turn_player_id = None
-        game.add_pending_messages(
-            [[enums.CommandsToClient.SetTurn.value, None]], game.client_ids
-        )
+        game.add_pending_messages([[enums.CommandsToClient.SetTurn.value, None]], game.client_ids)
         game.set_state(enums.GameStates.Completed.value)
 
 
@@ -1516,9 +1432,7 @@ class Game:
             previous_creator_player_id = self.score_sheet.get_creator_player_id()
             self.score_sheet.join_game(client, position_tile)
             self._send_past_history_messages(client)
-            self.game_board.set_cell(
-                position_tile, enums.GameBoardTypes.NothingYet.value
-            )
+            self.game_board.set_cell(position_tile, enums.GameBoardTypes.NothingYet.value)
             self.add_history_message(
                 enums.GameHistoryMessages.DrewPositionTile.value,
                 client.username,
@@ -1658,13 +1572,8 @@ class Game:
         if player_id is None:
             client_ids = self.client_ids
         else:
-            client = self.score_sheet.player_data[player_id][
-                enums.ScoreSheetIndexes.Client.value
-            ]
-            if client:
-                client_ids = {client.client_id}
-            else:
-                client_ids = None
+            client = self.score_sheet.player_data[player_id][enums.ScoreSheetIndexes.Client.value]
+            client_ids = {client.client_id} if client else None
 
         if client_ids:
             message = [enums.CommandsToClient.AddGameHistoryMessage.value]
@@ -1700,19 +1609,14 @@ class Game:
 
         # score sheet
         score_sheet_data = [
-            [
-                x[: enums.ScoreSheetIndexes.Cash.value + 1]
-                for x in self.score_sheet.player_data
-            ],
+            [x[: enums.ScoreSheetIndexes.Cash.value + 1] for x in self.score_sheet.player_data],
             self.score_sheet.chain_size,
         ]
         messages.append([enums.CommandsToClient.SetScoreSheet.value, score_sheet_data])
 
         # player's tiles
         if client.player_id is not None and self.tile_racks:
-            for tile_index, tile_data in enumerate(
-                self.tile_racks.racks[client.player_id]
-            ):
+            for tile_index, tile_data in enumerate(self.tile_racks.racks[client.player_id]):
                 if tile_data:
                     x, y = tile_data[0]
                     messages.append(
@@ -1743,9 +1647,7 @@ def main():
 
     loop = asyncio.get_event_loop()
 
-    loop.run_until_complete(
-        loop.create_unix_server(lambda: server_protocol, "python.sock")
-    )
+    loop.run_until_complete(loop.create_unix_server(lambda: server_protocol, "python.sock"))
 
     def destroy_expired_games_loop():
         server.destroy_expired_games()
@@ -1757,7 +1659,7 @@ def main():
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    except:
+    except BaseException:
         traceback.print_exc()
 
 

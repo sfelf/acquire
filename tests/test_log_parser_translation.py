@@ -3,7 +3,6 @@ import io
 import pytest
 from enums import CommandsToClient, CommandsToServer, Errors
 
-
 pytestmark = pytest.mark.unit
 
 
