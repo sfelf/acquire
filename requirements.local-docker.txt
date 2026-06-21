@@ -1,9 +1,11 @@
 # Keep this Docker-only dependency set separate from requirements.txt.
 # The legacy runtime requirements still include an unreachable MySQL connector
 # zip URL and should not be upgraded globally until coverage is stronger.
+fastapi>=0.115,<1
 mysql-connector-python>=9.0,<10
 pytz==2016.10
 six>=1.17,<2
 SQLAlchemy==1.3.20
 trueskill==0.4.4
 ujson>=5.10,<6
+uvicorn>=0.32,<1

@@ -6,6 +6,7 @@ This repository is in a modernization and refactor effort. Tooling, documentatio
 
 - `server/server.js` is the legacy Node.js HTTP and SockJS gateway.
 - `server/server.py` contains the Python game server and socket protocol handling.
+- `server/http_server.py` contains the FastAPI app for Python-owned HTTP routes.
 - MySQL is the current database.
 - Client assets live under `client/` and are generated with the legacy shell scripts.
 - `requirements.txt` remains the source of legacy runtime dependencies for now.
@@ -20,6 +21,7 @@ This repository is in a modernization and refactor effort. Tooling, documentatio
 - Keep linting and type checking permissive until golden tests protect behavior.
 - Prefer small, reviewable changes with clear validation notes.
 - Prefer module-sized test coverage PRs when a module can be covered cleanly without changing runtime behavior.
+- Use FastAPI and Pydantic for new Python HTTP routes when they fit the endpoint contract, while preserving legacy response bodies and error codes during the migration.
 - Add Google-style docstrings for new non-test Python modules, classes, functions, and methods. Always include a useful summary line. Include `Args:` and `Returns:` sections when there are arguments or return values to document; omit those sections when they would only say `None`.
 - Prefer concise docstrings, but add a longer paragraph after the summary when the callable has non-obvious business or domain rules, mutates state, persists data, sends messages, publishes events, mutates arguments, relies on important preconditions, has ordering or lifecycle constraints, handles surprising edge cases, coordinates multiple systems, returns values that need interpretation, raises meaningful exceptions, uses exceptions as part of its contract, has security/authorization/concurrency/idempotency/retry/transaction concerns, is a public API or service boundary, represents an important abstraction/lifecycle/protocol/domain concept, or exists for a reason that is not clear from the local method name. Do not add longer descriptions that merely repeat the function name, restate type information, or explain implementation details callers do not need.
 - When reviewing docstrings, classify each reviewed docstring as `Summary only is sufficient`, `Longer description recommended`, or `Longer description required`, with a brief reason or the specific missing caller-relevant context.

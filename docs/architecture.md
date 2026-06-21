@@ -4,7 +4,8 @@ Acquire currently runs as a split Node.js and Python application.
 
 ## Runtime Components
 
-- The Node.js server in `server/server.js` owns HTTP endpoints, SockJS connections, client login handling, static gateway behavior, and user database checks.
+- The Node.js server in `server/server.js` owns the legacy browser gateway and SockJS connections while Python parity is being built.
+- The FastAPI app in `server/http_server.py` owns Python-migrated HTTP routes and static asset serving.
 - The Python server in `server/server.py` owns game state and the gameplay protocol.
 - The Node.js process communicates with the Python process through Unix sockets.
 - MySQL is the backing database.
@@ -33,10 +34,10 @@ validated realtime messages to `server/server.py` over `python.sock`.
 
 | Route or listener | Current owner | Current behavior | Python migration target | Coverage |
 | --- | --- | --- | --- | --- |
-| `GET /` and generated `client/main` assets | Node gateway | Serves the generated `client/main` tree when `SERVE_CLIENT_STATIC=1`, including `index.html`, `/css/main.css`, `/js/main.js`, supporting JavaScript modules, source maps, and `/static/*` media. | Serve the same generated client assets from the Python local runtime or an equivalent static asset process. | `tests/test_local_ui_e2e.py::test_legacy_gateway_serves_main_ui`; needs Phase 5 PR 2 coverage that the required JS/CSS/media assets load. |
-| `GET /stats/` and generated `client/stats` assets | Node gateway | Serves the generated `client/stats` tree when `SERVE_CLIENT_STATIC=1`, including `index.html`, `/stats/css/stats.css`, and `/stats/js/stats.js`. | Serve the stats assets from the Python local runtime or an equivalent static asset process. | `tests/test_local_ui_e2e.py::test_legacy_gateway_serves_stats_ui`; needs Phase 5 PR 2 coverage that the required stats JS/CSS assets load. |
-| `POST /server/report-error` | Node gateway | Accepts form-encoded `message` and `trace`, normalizes embedded newlines for logging, writes request headers to stdout, and returns an empty `200` response. | Add an equivalent Python HTTP endpoint before removing the Node gateway. | `tests/test_local_ui_e2e.py::test_legacy_gateway_accepts_report_error_posts` |
-| `POST /server/set-password` | Node gateway | Form-decodes `version`, `username`, and `password`, collapses repeated whitespace, trims leading/trailing whitespace, validates client version, username length/ASCII range, and a 64-character lowercase hex password hash, then inserts a user or sets a password for an existing passwordless user. Malformed, uppercase, or non-64-character password hashes return `Errors.GenericError`, not a password-specific validation error. The response has a JSON content type and a stringified error id or `null`. | Move password setup and user persistence into Python with MySQL-backed characterization tests. | Needs Phase 5 PR 3 coverage for success, whitespace normalization, existing password, invalid username, invalid password hash returning `Errors.GenericError`, version mismatch, and database error behavior. |
+| `GET /` and generated `client/main` assets | FastAPI app, with Node still serving the browser in the legacy profile | Serves the generated `client/main` tree, including `index.html`, `/css/main.css`, `/js/main.js`, supporting JavaScript modules, source maps, and `/static/*` media. | Use the FastAPI app as the Python local runtime static route when the gateway moves fully to Python. | `tests/test_python_http_server.py` covers the FastAPI route; e2e still covers the legacy gateway until the Python gateway becomes default. |
+| `GET /stats/` and generated `client/stats` assets | FastAPI app, with Node still serving the browser in the legacy profile | Serves the generated `client/stats` tree, including `index.html`, `/stats/css/stats.css`, and `/stats/js/stats.js`. | Use the FastAPI app as the Python local runtime stats route when the gateway moves fully to Python. | `tests/test_python_http_server.py` covers the FastAPI route; e2e still covers the legacy gateway until the Python gateway becomes default. |
+| `POST /server/report-error` | FastAPI app, with Node still serving the browser in the legacy profile | Accepts form-encoded `message` and `trace`, validates the request size, normalizes embedded newlines for logging, writes request headers to stdout, and returns an empty `200` response. | Keep this route in FastAPI and route browser traffic to it when the Python gateway becomes default. | `tests/test_python_http_server.py` covers FastAPI behavior; `tests/test_local_ui_e2e.py::test_legacy_gateway_accepts_report_error_posts` covers the legacy gateway. |
+| `POST /server/set-password` | FastAPI app, with Node still serving the browser in the legacy profile | Form-decodes `version`, `username`, and `password` with Pydantic payload models, then delegates legacy normalization and error-code decisions to Python auth. Malformed, uppercase, or non-64-character password hashes return `Errors.GenericError`, not a password-specific validation error. The response has a JSON content type and a stringified error id or `null`. | Keep password setup and user persistence in Python and route browser traffic to it when the Python gateway becomes default. | `tests/test_auth.py`, `tests/test_mysql_integration.py`, and `tests/test_python_http_server.py` cover success, whitespace normalization, existing password, invalid username, invalid password hash returning `Errors.GenericError`, version mismatch, database error behavior, and real ORM persistence. |
 | `JAVASCRIPT_PORT` or `javascript.sock` | Node gateway | Listens on `0.0.0.0:$JAVASCRIPT_PORT` when configured; otherwise listens on `javascript.sock`. Docker exposes this as the local browser UI during compatibility testing. | Replace with the Python gateway listener, then keep the Node listener only behind an explicit compatibility profile until removal. | Docker-backed e2e tests exercise the port-based listener. |
 
 ### SockJS Gateway Responsibilities
@@ -92,16 +93,18 @@ play, watching, leaving, disconnecting, and rejoining workflows.
    malformed login close behavior, build-injected version tokens,
    invalid set-password hash errors, database-error handling, and the SockJS
    `x-real-ip` behavior.
-2. Move `/server/report-error` and static asset serving into Python or an
+2. Move `/server/report-error` and static asset serving into FastAPI or an
    explicitly documented Python-adjacent local asset service, including
    generated JavaScript, CSS, source maps, and media files.
 3. Move password setup, login validation, user lookup, and duplicate-session
    policy into Python with MySQL-backed tests.
-4. Add a Python websocket or SockJS-compatible path that preserves the full
+4. Keep Python-owned HTTP routes in FastAPI with Pydantic request models while
+   preserving legacy response bodies and error codes.
+5. Add a Python websocket or SockJS-compatible path that preserves the full
    browser negotiation surface, current client framing, pre-mapping frame-drop
    behavior, and command payloads.
-5. Run e2e workflows against both the legacy Node gateway and the new Python
+6. Run e2e workflows against both the legacy Node gateway and the new Python
    gateway until parity is proven.
-6. Make the Python gateway the local-development and e2e default.
-7. Remove the Node gateway from the main runtime only after the Python path owns
+7. Make the Python gateway the local-development and e2e default.
+8. Remove the Node gateway from the main runtime only after the Python path owns
    HTTP, auth, websocket, and client command delivery.
