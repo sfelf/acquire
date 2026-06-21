@@ -394,3 +394,99 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
                 expected_message,
             )
             assert any(expected_message(message) for message in play_tile_messages)
+
+
+def test_legacy_gateway_supports_watch_leave_and_rejoin_workflow(e2e_base_url):
+    player_username = "e2e-player-%s" % uuid.uuid4().hex[:8]
+    watcher_username = "e2e-watch-%s" % uuid.uuid4().hex[:8]
+
+    with SockJSWebSocket(e2e_base_url) as player_client:
+        player_client.send_message(["VERSION", player_username, ""])
+        player_login_messages = player_client.read_messages(
+            CommandsToClient.SetClientId.value
+        )
+        player_client_id = next(
+            message[1]
+            for message in player_login_messages
+            if message[0] == CommandsToClient.SetClientId.value
+        )
+
+        player_client.send_message(
+            [CommandsToServer.CreateGame.value, GameModes.Singles.value, 2]
+        )
+        create_messages = player_client.read_messages(
+            CommandsToClient.SetGameAction.value
+        )
+        created_game = next(
+            message
+            for message in create_messages
+            if message[:1] == [CommandsToClient.SetGameState.value]
+            and message[2:] == [
+                GameStates.Starting.value,
+                GameModes.Singles.value,
+                2,
+            ]
+        )
+        game_id = created_game[1]
+        player_id = next(
+            message[2]
+            for message in create_messages
+            if message[:2] == [CommandsToClient.SetGamePlayerJoin.value, game_id]
+            and message[3] == player_client_id
+        )
+
+        with SockJSWebSocket(e2e_base_url) as watcher_client:
+            watcher_client.send_message(["VERSION", watcher_username, ""])
+            watcher_login_messages = watcher_client.read_messages(
+                CommandsToClient.SetClientId.value
+            )
+            watcher_client_id = next(
+                message[1]
+                for message in watcher_login_messages
+                if message[0] == CommandsToClient.SetClientId.value
+            )
+            assert any(
+                message[:3]
+                == [
+                    CommandsToClient.SetGameState.value,
+                    game_id,
+                    GameStates.Starting.value,
+                ]
+                for message in watcher_login_messages
+            )
+
+            watcher_client.send_message([CommandsToServer.WatchGame.value, game_id])
+            watch_messages = watcher_client.read_messages(
+                CommandsToClient.SetGameWatcherClientId.value
+            )
+            assert [
+                CommandsToClient.SetGameWatcherClientId.value,
+                game_id,
+                watcher_client_id,
+            ] in watch_messages
+
+            watcher_client.send_message([CommandsToServer.LeaveGame.value])
+            assert [
+                CommandsToClient.ReturnWatcherToLobby.value,
+                game_id,
+                watcher_client_id,
+            ] in watcher_client.read_messages(CommandsToClient.ReturnWatcherToLobby.value)
+
+        player_client.send_message([CommandsToServer.LeaveGame.value])
+        assert [
+            CommandsToClient.SetGamePlayerLeave.value,
+            game_id,
+            player_id,
+            player_client_id,
+        ] in player_client.read_messages(CommandsToClient.SetGamePlayerLeave.value)
+
+        player_client.send_message([CommandsToServer.RejoinGame.value, game_id])
+        rejoin_messages = player_client.read_messages(
+            CommandsToClient.SetGamePlayerRejoin.value
+        )
+        assert [
+            CommandsToClient.SetGamePlayerRejoin.value,
+            game_id,
+            player_id,
+            player_client_id,
+        ] in rejoin_messages
