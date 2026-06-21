@@ -1,15 +1,25 @@
 import email.message
 import io
 import urllib.parse
+from contextlib import contextmanager
 from http import HTTPStatus
 
+import enums
 import http_server
 import pytest
 
 pytestmark = pytest.mark.unit
 
 
-def make_handler(tmp_path, path="/", method="GET", body=b"", log_output=None):
+def make_handler(
+    tmp_path,
+    path="/",
+    method="GET",
+    body=b"",
+    log_output=None,
+    session_scope=None,
+    accepted_client_version="VERSION",
+):
     main_root = tmp_path / "main"
     stats_root = tmp_path / "stats"
     main_root.mkdir(exist_ok=True)
@@ -21,6 +31,9 @@ def make_handler(tmp_path, path="/", method="GET", body=b"", log_output=None):
     handler.main_static_root = main_root
     handler.stats_static_root = stats_root
     handler.log_output = log_output or io.StringIO()
+    if session_scope is not None:
+        handler.session_scope = session_scope
+    handler.accepted_client_version = accepted_client_version
     handler.path = path
     handler.command = method
     handler.rfile = io.BytesIO(body)
@@ -51,6 +64,11 @@ def make_handler(tmp_path, path="/", method="GET", body=b"", log_output=None):
     handler.end_headers = end_headers
     handler.send_error = send_error
     return handler
+
+
+@contextmanager
+def fake_session_scope(session):
+    yield session
 
 
 def test_python_http_server_serves_main_static_assets(tmp_path):
@@ -256,11 +274,99 @@ def test_python_http_server_rejects_invalid_report_error_content_length(
 
 
 def test_python_http_server_rejects_unknown_post_routes(tmp_path):
-    handler = make_handler(tmp_path, "/server/set-password", method="POST")
+    handler = make_handler(tmp_path, "/server/unknown", method="POST")
 
     handler.do_POST()
 
     assert handler.responses == [HTTPStatus.NOT_FOUND]
+
+
+def test_python_http_server_set_password_persists_valid_password(tmp_path):
+    session = object()
+    calls = []
+    body = urllib.parse.urlencode(
+        {
+            "version": " VERSION ",
+            "username": " alice ",
+            "password": "a" * 64,
+        }
+    ).encode()
+
+    def set_password(session_arg, **kwargs):
+        calls.append((session_arg, kwargs))
+        return None
+
+    handler = make_handler(
+        tmp_path,
+        "/server/set-password",
+        method="POST",
+        body=body,
+        session_scope=lambda: fake_session_scope(session),
+        accepted_client_version="VERSION",
+    )
+    original_set_password = http_server.auth.set_password
+    http_server.auth.set_password = set_password
+    try:
+        handler.do_POST()
+    finally:
+        http_server.auth.set_password = original_set_password
+
+    assert handler.responses == [HTTPStatus.OK]
+    assert ("Content-Type", "application/json") in handler.headers_sent
+    assert ("Content-Length", "4") in handler.headers_sent
+    assert handler.wfile.getvalue() == b"null"
+    assert calls == [
+        (
+            session,
+            {
+                "version": " VERSION ",
+                "username": " alice ",
+                "password": "a" * 64,
+                "server_version": "VERSION",
+            },
+        )
+    ]
+
+
+def test_python_http_server_set_password_returns_legacy_error_body(tmp_path):
+    body = urllib.parse.urlencode({"version": "old"}).encode()
+
+    def set_password(session_arg, **kwargs):
+        return enums.Errors.NotUsingLatestVersion
+
+    handler = make_handler(
+        tmp_path,
+        "/server/set-password",
+        method="POST",
+        body=body,
+        session_scope=lambda: fake_session_scope(object()),
+    )
+    original_set_password = http_server.auth.set_password
+    http_server.auth.set_password = set_password
+    try:
+        handler.do_POST()
+    finally:
+        http_server.auth.set_password = original_set_password
+
+    assert handler.responses == [HTTPStatus.OK]
+    assert ("Content-Type", "application/json") in handler.headers_sent
+    assert handler.wfile.getvalue() == b"0"
+
+
+def test_python_http_server_rejects_invalid_set_password_content_length(tmp_path):
+    handler = make_handler(
+        tmp_path,
+        "/server/set-password",
+        method="POST",
+        body=b"",
+        session_scope=lambda: fake_session_scope(object()),
+    )
+    handler.headers.replace_header("Content-Length", "not-a-number")
+
+    handler.do_POST()
+
+    assert handler.responses == [HTTPStatus.BAD_REQUEST]
+    assert handler.wfile.getvalue() == b""
 
 
 def test_make_handler_returns_configured_handler_class(tmp_path):
@@ -272,12 +378,15 @@ def test_make_handler_returns_configured_handler_class(tmp_path):
         main_static_root=main_root,
         stats_static_root=stats_root,
         log_output=log_output,
+        session_scope=lambda: fake_session_scope(object()),
+        accepted_client_version="TEST",
     )
 
     assert issubclass(handler_class, http_server.AcquireHTTPRequestHandler)
     assert handler_class.main_static_root == main_root
     assert handler_class.stats_static_root == stats_root
     assert handler_class.log_output == log_output
+    assert handler_class.accepted_client_version == "TEST"
 
 
 def test_parse_args_accepts_http_server_options(tmp_path):

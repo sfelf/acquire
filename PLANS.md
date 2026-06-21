@@ -86,14 +86,14 @@ change can be reviewed and validated independently.
    SockJS message path, map each behavior to the existing Python equivalent or a
    missing Python implementation, and add any missing characterization tests
    before changing runtime code.
-2. Move Node-owned HTTP endpoints to Python. In progress. Implement Python equivalents for
+2. Move Node-owned HTTP endpoints to Python. Complete. Implement Python equivalents for
    non-websocket HTTP routes currently served by `server/server.js`, keep the
    Node gateway running during the transition, and prove existing browser flows
    still work through integration and e2e coverage.
-3. Move auth and user checks fully into Python. Consolidate login, session, and
-   user lookup behavior in the Python backend, with MySQL-backed coverage for
-   successful credentials, failed credentials, missing users, existing users,
-   and session edge cases.
+3. Move auth and user checks fully into Python. In progress. Consolidate login,
+   session, and user lookup behavior in the Python backend, with MySQL-backed
+   coverage for successful credentials, failed credentials, missing users,
+   existing users, and session edge cases.
 4. Add a Python websocket or SockJS-compatible gateway path. Preserve the
    existing client protocol, keep the Node gateway available as the known-good
    comparison path, and add parity tests for representative workflows.

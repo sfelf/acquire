@@ -13,16 +13,23 @@ import mimetypes
 import posixpath
 import sys
 import urllib.parse
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
 from typing import TextIO
 
+import auth
+import orm
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MAIN_STATIC_ROOT = PROJECT_ROOT / "client" / "main"
 DEFAULT_STATS_STATIC_ROOT = PROJECT_ROOT / "client" / "stats"
 MAX_REPORT_ERROR_BODY_BYTES = 100 * 1024
+SERVER_VERSION = "VERSION"
+SessionScope = Callable[[], AbstractContextManager[auth.AuthSession]]
 
 
 class AcquireHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -38,6 +45,8 @@ class AcquireHTTPRequestHandler(BaseHTTPRequestHandler):
     main_static_root = DEFAULT_MAIN_STATIC_ROOT
     stats_static_root = DEFAULT_STATS_STATIC_ROOT
     log_output: TextIO = sys.stdout
+    session_scope = staticmethod(orm.session_scope)
+    accepted_client_version = SERVER_VERSION
 
     def do_GET(self) -> None:
         """Serve generated client assets."""
@@ -53,8 +62,11 @@ class AcquireHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         """Handle Python-owned POST routes."""
-        if self.path.split("?", 1)[0] == "/server/report-error":
+        request_path = self.path.split("?", 1)[0]
+        if request_path == "/server/report-error":
             self._handle_report_error()
+        elif request_path == "/server/set-password":
+            self._handle_set_password()
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -150,19 +162,8 @@ class AcquireHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_report_error(self) -> None:
         """Log a client error report and return the legacy empty response."""
-        content_length_header = self.headers.get("Content-Length", "0") or "0"
-        try:
-            content_length = int(content_length_header)
-        except ValueError:
-            self.send_error(HTTPStatus.BAD_REQUEST)
-            return
-
-        if content_length < 0:
-            self.send_error(HTTPStatus.BAD_REQUEST)
-            return
-
-        if content_length > MAX_REPORT_ERROR_BODY_BYTES:
-            self.send_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        content_length = self._validated_content_length()
+        if content_length is None:
             return
 
         body = self.rfile.read(content_length).decode("utf-8", errors="replace")
@@ -176,6 +177,54 @@ class AcquireHTTPRequestHandler(BaseHTTPRequestHandler):
 
         self.send_response(HTTPStatus.OK)
         self.end_headers()
+
+    def _handle_set_password(self) -> None:
+        """Set a user password through the Python auth implementation."""
+        content_length = self._validated_content_length()
+        if content_length is None:
+            return
+
+        body = self.rfile.read(content_length).decode("utf-8", errors="replace")
+        form_data = urllib.parse.parse_qs(body, keep_blank_values=True)
+
+        with self.session_scope() as session:
+            error = auth.set_password(
+                session,
+                version=self._first_form_value(form_data, "version"),
+                username=self._first_form_value(form_data, "username"),
+                password=self._first_form_value(form_data, "password"),
+                server_version=self.accepted_client_version,
+            )
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json")
+        response_body = auth.error_response_text(error).encode("utf-8")
+        self.send_header("Content-Length", str(len(response_body)))
+        self.end_headers()
+        self.wfile.write(response_body)
+
+    def _validated_content_length(self) -> int | None:
+        """Return a safe request body length or send an error response.
+
+        Returns:
+            Parsed request body length, or `None` when an error response was sent.
+        """
+        content_length_header = self.headers.get("Content-Length", "0") or "0"
+        try:
+            content_length = int(content_length_header)
+        except ValueError:
+            self.send_error(HTTPStatus.BAD_REQUEST)
+            return None
+
+        if content_length < 0:
+            self.send_error(HTTPStatus.BAD_REQUEST)
+            return None
+
+        if content_length > MAX_REPORT_ERROR_BODY_BYTES:
+            self.send_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+            return None
+
+        return content_length
 
     @staticmethod
     def _report_error_value(form_data: dict[str, list[str]], key: str) -> str:
@@ -193,12 +242,28 @@ class AcquireHTTPRequestHandler(BaseHTTPRequestHandler):
             return "<null>"
         return form_data[key][0].replace("\n", "\n\t")
 
+    @staticmethod
+    def _first_form_value(form_data: dict[str, list[str]], key: str) -> str | None:
+        """Return the first submitted form value.
+
+        Args:
+            form_data: Parsed form data keyed by field name.
+            key: Field name to read.
+
+        Returns:
+            First submitted value, or `None` when the field was not submitted.
+        """
+        values = form_data.get(key)
+        return values[0] if values else None
+
 
 def make_handler(
     *,
     main_static_root: Path = DEFAULT_MAIN_STATIC_ROOT,
     stats_static_root: Path = DEFAULT_STATS_STATIC_ROOT,
     log_output: TextIO = sys.stdout,
+    session_scope: SessionScope = orm.session_scope,
+    accepted_client_version: str = SERVER_VERSION,
 ) -> type[AcquireHTTPRequestHandler]:
     """Build a configured HTTP handler class.
 
@@ -206,6 +271,8 @@ def make_handler(
         main_static_root: Root directory for generated `client/main` assets.
         stats_static_root: Root directory for generated `client/stats` assets.
         log_output: Stream that receives report-error log lines.
+        session_scope: Context manager factory for database sessions.
+        accepted_client_version: Accepted client version token.
 
     Returns:
         Handler class ready to pass to `ThreadingHTTPServer`.
@@ -219,6 +286,8 @@ def make_handler(
             "main_static_root": main_static_root,
             "stats_static_root": stats_static_root,
             "log_output": log_output,
+            "session_scope": staticmethod(session_scope),
+            "accepted_client_version": accepted_client_version,
         },
     )
 
