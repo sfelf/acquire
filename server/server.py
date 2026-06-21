@@ -1,3 +1,8 @@
+"""Run the Python Acquire game server and socket protocol handlers.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import asyncio
 import collections
 import heapq
@@ -13,12 +18,29 @@ import ujson
 
 
 class ServerProtocol(asyncio.Protocol):
+    """Bridge the Unix socket protocol into server/client operations.
+
+    The legacy Node gateway writes newline-delimited commands to this protocol.
+    Parsed connection and client-message events mutate the in-memory `Server`
+    object and can trigger outbound messages back through the same transport.
+    """
+
     def __init__(self, server):
+        """Initialize the socket protocol bridge.
+
+        Args:
+            server: Server instance that owns clients and games.
+        """
         self.server = server
         self.transport = None
         self.unprocessed_data = []
 
     def connection_made(self, transport):
+        """Register the active gateway transport.
+
+        Args:
+            transport: Asyncio transport connected to the socket.
+        """
         self.transport = transport
         self.server.transport_write = transport.write
         print("time:", time.time())
@@ -26,11 +48,26 @@ class ServerProtocol(asyncio.Protocol):
         print()
 
     def connection_lost(self, exc):
+        """Log that the gateway transport disconnected.
+
+        Args:
+            exc: Connection-lost exception, if any.
+        """
         print("time:", time.time())
         print("connection_lost")
         print()
 
     def data_received(self, data):
+        """Parse and dispatch newline-delimited gateway messages.
+
+        Incoming data can split messages across socket reads, so partial bytes
+        are buffered until a newline arrives. Complete records either create a
+        client, disconnect a client, or pass an encoded command payload to an
+        existing client.
+
+        Args:
+            data: Raw bytes received from the Unix socket transport.
+        """
         start_index = 0
         len_data = len(data)
         while start_index < len_data:
@@ -61,13 +98,30 @@ class ServerProtocol(asyncio.Protocol):
 
 
 class ReuseIdManager:
+    """Allocate numeric ids that become reusable after a delay.
+
+    Returned ids are intentionally held for `return_wait` seconds so recently
+    disconnected client and game ids are not immediately reused while stale
+    gateway or browser messages may still be in flight.
+    """
+
     def __init__(self, return_wait):
+        """Initialize the delayed-reuse id pool.
+
+        Args:
+            return_wait: Seconds to wait before a returned id can be reused.
+        """
         self.return_wait = return_wait
         self._used = set()
         self._unused = []
         self._unused_wait = []
 
     def get_id(self):
+        """Return the lowest available id, releasing any expired returned ids.
+
+        Returns:
+            Allocated id.
+        """
         current_time = time.time()
         while len(self._unused_wait) and self._unused_wait[0][0] <= current_time:
             heapq.heappush(self._unused, heapq.heappop(self._unused_wait)[1])
@@ -80,30 +134,61 @@ class ReuseIdManager:
         return next_id
 
     def return_id(self, returned_id):
+        """Mark an id for delayed reuse.
+
+        Args:
+            returned_id: Id being returned to the manager.
+        """
         self._used.remove(returned_id)
         heapq.heappush(self._unused_wait, (time.time() + self.return_wait, returned_id))
 
 
 class IncrementIdManager:
+    """Allocate monotonically increasing numeric ids."""
+
     def __init__(self):
+        """Initialize the monotonic counter."""
         self._last_id = 0
 
     def get_id(self):
+        """Return the next monotonic id.
+
+        Returns:
+            Allocated id.
+        """
         self._last_id += 1
         return self._last_id
 
     def return_id(self, returned_id):
+        """Accept a returned id without reusing it.
+
+        Args:
+            returned_id: Id being returned to the manager.
+        """
         pass
 
 
 def dummy_transport_write(data):
+    """Ignore data before a real gateway transport is connected.
+
+    Args:
+        data: Raw or action-specific payload data.
+    """
     pass
 
 
 class Server:
+    """Coordinate clients, games, ids, and pending outbound messages.
+
+    This is the authoritative in-memory runtime for the Python game server.
+    Client actions mutate games through this object, and outbound command
+    batches are queued here before being serialized to the gateway socket.
+    """
+
     re_camelcase = re.compile(r"(.)([A-Z])")
 
     def __init__(self):
+        """Initialize empty server state and id managers."""
         self.next_client_id_manager = ReuseIdManager(60)
         self.client_id_to_client = {}
         self.client_ids = set()
@@ -116,6 +201,17 @@ class Server:
         self.transport_write = dummy_transport_write
 
     def add_pending_messages(self, messages, client_ids=None):
+        """Queue outbound command messages for one or more clients.
+
+        Messages are grouped by recipient set so a later flush can serialize a
+        compact set of gateway writes. The stored recipient sets are mutated
+        while merging overlaps, so callers should not rely on `client_ids`
+        object identity after this call.
+
+        Args:
+            messages: Command messages to append or send.
+            client_ids: Client ids that receive or are associated with the command.
+        """
         if client_ids is None:
             client_ids = self.client_ids
         client_ids = client_ids.copy()
@@ -137,6 +233,7 @@ class Server:
         self.client_ids_and_messages = new_list
 
     def flush_pending_messages(self):
+        """Serialize queued command batches to the gateway transport."""
         outgoing = []
         for client_ids, messages in self.client_ids_and_messages:
             client_ids_string = ",".join(str(x) for x in sorted(client_ids))
@@ -154,6 +251,12 @@ class Server:
         self.transport_write(b"".join(outgoing))
 
     def destroy_expired_games(self):
+        """Remove abandoned games whose expiration time has passed.
+
+        Destroying a game returns its ids to the delayed-reuse pools, removes it
+        from the server registry, and publishes destroy messages to connected
+        clients.
+        """
         current_time = time.time()
         expired_games = []
 
@@ -177,7 +280,22 @@ class Server:
 
 
 class Client:
+    """Represent a connected user in the Python game server."""
+
     def __init__(self, server, username, ip_address, socket_id, replace_existing_user):
+        """Register a newly connected client.
+
+        Construction has side effects: it allocates a client id, writes the
+        gateway connect response, optionally disconnects an existing username,
+        and sends initial state or username-conflict messages.
+
+        Args:
+            server: Server instance that owns clients and games.
+            username: Player username from the client or log.
+            ip_address: Client IP address reported by the gateway.
+            socket_id: Gateway socket id for this connection.
+            replace_existing_user: Whether to disconnect an existing client for the username.
+        """
         self._server = server
         self.username = username
         self.ip_address = ip_address
@@ -190,6 +308,7 @@ class Client:
         messages_client = []
 
         def output_connect_messages():
+            """Output connect messages."""
             print("time:", time.time())
             print(
                 self.client_id,
@@ -309,6 +428,12 @@ class Client:
         self._server.flush_pending_messages()
 
     def disconnect(self):
+        """Disconnect the client and publish any required leave/logout state.
+
+        The client is removed from server registries, its id is returned to the
+        delayed-reuse pool, and any joined game is notified before lobby state
+        is flushed to remaining clients.
+        """
         print("time:", time.time())
         print(self.client_id, "disconnect")
 
@@ -338,6 +463,14 @@ class Client:
             print()
 
     def on_message(self, payload):
+        """Decode and dispatch one client command payload.
+
+        Malformed payloads or argument mismatches are treated as protocol
+        failures and disconnect the client after logging the traceback.
+
+        Args:
+            payload: Raw client message payload.
+        """
         try:
             message = payload.decode()
             print("time:", time.time())
@@ -358,6 +491,12 @@ class Client:
             self.disconnect()
 
     def _on_message_create_game(self, mode, max_players):
+        """On message create game.
+
+        Args:
+            mode: Build mode or game mode, depending on context.
+            max_players: Maximum number of players for a game.
+        """
         if (
             not self.game_id
             and isinstance(mode, int)
@@ -378,26 +517,53 @@ class Client:
             self._server.game_id_to_game[game_id] = game
 
     def _on_message_join_game(self, game_id):
+        """On message join game.
+
+        Args:
+            game_id: Public game id.
+        """
         if not self.game_id and game_id in self._server.game_id_to_game:
             self._server.game_id_to_game[game_id].join_game(self)
 
     def _on_message_rejoin_game(self, game_id):
+        """On message rejoin game.
+
+        Args:
+            game_id: Public game id.
+        """
         if not self.game_id and game_id in self._server.game_id_to_game:
             self._server.game_id_to_game[game_id].rejoin_game(self)
 
     def _on_message_watch_game(self, game_id):
+        """On message watch game.
+
+        Args:
+            game_id: Public game id.
+        """
         if not self.game_id and game_id in self._server.game_id_to_game:
             self._server.game_id_to_game[game_id].watch_game(self)
 
     def _on_message_leave_game(self):
+        """On message leave game."""
         if self.game_id:
             self._server.game_id_to_game[self.game_id].leave_game(self)
 
     def _on_message_do_game_action(self, game_action_id, *data):
+        """On message do game action.
+
+        Args:
+            game_action_id: Game action enum value.
+            *data: Additional positional arguments.
+        """
         if self.game_id:
             self._server.game_id_to_game[self.game_id].do_game_action(self, game_action_id, data)
 
     def _on_message_send_global_chat_message(self, chat_message):
+        """On message send global chat message.
+
+        Args:
+            chat_message: Chat text supplied by a client.
+        """
         chat_message = " ".join(chat_message.split())
         if chat_message:
             self._server.add_pending_messages(
@@ -411,6 +577,11 @@ class Client:
             )
 
     def _on_message_send_game_chat_message(self, chat_message):
+        """On message send game chat message.
+
+        Args:
+            chat_message: Chat text supplied by a client.
+        """
         if self.game_id:
             chat_message = " ".join(chat_message.split())
             if chat_message:
@@ -427,7 +598,15 @@ class Client:
 
 
 class GameBoard:
+    """Track board cells and chain coordinate indexes."""
+
     def __init__(self, game, board=None):
+        """Initialize board cells and reverse indexes.
+
+        Args:
+            game: Game or game-like object being updated.
+            board: Optional initial board matrix.
+        """
         self.game = game
 
         if board is None:
@@ -440,6 +619,15 @@ class GameBoard:
                 self.board_type_to_coordinates[board[x][y]].add((x, y))
 
     def _set_cell(self, coordinates, board_type):
+        """Update one board cell and return its client command.
+
+        Args:
+            coordinates: Board coordinates as an `(x, y)` tuple.
+            board_type: Board cell type to write.
+
+        Returns:
+            Command that publishes the changed board cell.
+        """
         x, y = coordinates
         old_board_type = self.x_to_y_to_board_type[x][y]
         self.board_type_to_coordinates[old_board_type].remove(coordinates)
@@ -448,11 +636,27 @@ class GameBoard:
         return [enums.CommandsToClient.SetGameBoardCell.value, x, y, board_type]
 
     def set_cell(self, coordinates, board_type):
+        """Update one board cell and queue the change for game clients.
+
+        Args:
+            coordinates: Board coordinates as an `(x, y)` tuple.
+            board_type: Board cell type to write.
+        """
         self.game.add_pending_messages(
             [self._set_cell(coordinates, board_type)], self.game.client_ids
         )
 
     def fill_cells(self, coordinates, board_type):
+        """Flood-fill connected board cells and queue the changed cells.
+
+        The fill expands through neighboring cells until it reaches empty,
+        permanently unplayable, or already-targeted board types. It is used
+        when a hotel chain absorbs connected safe cells during tile play.
+
+        Args:
+            coordinates: Board coordinates as an `(x, y)` tuple.
+            board_type: Board cell type to write.
+        """
         pending = [coordinates]
         found = {coordinates}
         messages = []
@@ -493,7 +697,14 @@ class GameBoard:
 
 
 class ScoreSheet:
+    """Track player money, shares, prices, bonuses, and score updates."""
+
     def __init__(self, game):
+        """Initialize score-sheet state for a game.
+
+        Args:
+            game: Game or game-like object being updated.
+        """
         self.game = game
 
         self.player_data = []
@@ -505,6 +716,17 @@ class ScoreSheet:
         self.username_to_player_id = {}
 
     def join_game(self, client, position_tile):
+        """Add a player and publish score-sheet join state.
+
+        Position tiles determine player order, so adding a new player can shift
+        existing player ids. The method updates client player ids, emits legacy
+        replay log records, and sends the joining client any already-drawn
+        position tiles.
+
+        Args:
+            client: Client object affected by the operation.
+            position_tile: Position tile drawn by a joining player.
+        """
         messages_client = []
 
         if not self.player_data:
@@ -559,6 +781,11 @@ class ScoreSheet:
             self.game.add_pending_messages(messages_client, {client.client_id})
 
     def rejoin_game(self, client):
+        """Attach a reconnecting client to their existing player slot.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         player_id = self.username_to_player_id[client.username]
         client.player_id = player_id
         self.player_data[player_id][enums.ScoreSheetIndexes.Client.value] = client
@@ -574,6 +801,11 @@ class ScoreSheet:
         )
 
     def leave_game(self, client):
+        """Detach a client from their player slot without removing the player.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         player_id = client.player_id
         client.player_id = None
         self.player_data[player_id][enums.ScoreSheetIndexes.Client.value] = None
@@ -589,12 +821,32 @@ class ScoreSheet:
         )
 
     def is_username_in_game(self, username):
+        """Return whether is username in game.
+
+        Args:
+            username: Player username from the client or log.
+
+        Returns:
+            `True` when the username has a seat in this game.
+        """
         return username in self.username_to_player_id
 
     def get_creator_player_id(self):
+        """Get creator player id.
+
+        Returns:
+            Creator player id, or `None` if the game has no creator yet.
+        """
         return self.username_to_player_id[self.creator_username] if self.creator_username else None
 
     def adjust_player_data(self, player_id, score_sheet_index, adjustment):
+        """Adjust player data.
+
+        Args:
+            player_id: Player seat index within the game.
+            score_sheet_index: Score sheet column index to adjust.
+            adjustment: Amount to add to the current score sheet value.
+        """
         self.player_data[player_id][score_sheet_index] += adjustment
 
         if score_sheet_index <= enums.ScoreSheetIndexes.Imperial.value:
@@ -613,6 +865,12 @@ class ScoreSheet:
         )
 
     def set_chain_size(self, game_board_type_id, chain_size):
+        """Set chain size.
+
+        Args:
+            game_board_type_id: Chain or board type id.
+            chain_size: Current size of the hotel chain.
+        """
         self.chain_size[game_board_type_id] = chain_size
 
         old_price = self.price[game_board_type_id]
@@ -643,6 +901,14 @@ class ScoreSheet:
         )
 
     def get_bonuses(self, game_board_type_id):
+        """Get bonuses.
+
+        Args:
+            game_board_type_id: Chain or board type id.
+
+        Returns:
+            Bonus recipients and payout amounts for the chain.
+        """
         price = self.price[game_board_type_id]
         bonus_first = price * 10
         bonus_second = price * 5
@@ -686,6 +952,7 @@ class ScoreSheet:
         return bonus_data
 
     def update_net_worths(self):
+        """Update net worths."""
         net_worths = []
         for player_datum in self.player_data:
             net_worths.append(player_datum[enums.ScoreSheetIndexes.Cash.value])
@@ -703,7 +970,14 @@ class ScoreSheet:
 
 
 class TileRacks:
+    """Manage player tile racks and tile playability."""
+
     def __init__(self, game):
+        """Initialize racks and draw each player's first tile.
+
+        Args:
+            game: Game or game-like object being updated.
+        """
         self.game = game
         self.racks = []
         for player_id in range(self.game.num_players):
@@ -711,9 +985,20 @@ class TileRacks:
             self.draw_tile(player_id)
 
     def remove_tile(self, player_id, tile_index):
+        """Remove a tile from a player's rack.
+
+        Args:
+            player_id: Player seat index within the game.
+            tile_index: Index within a player tile rack.
+        """
         self.racks[player_id][tile_index] = None
 
     def draw_tile(self, player_id):
+        """Draw the next playable tile into a player's rack.
+
+        Args:
+            player_id: Player seat index within the game.
+        """
         rack = self.racks[player_id]
 
         for tile_index, tile_data in enumerate(rack):
@@ -727,6 +1012,11 @@ class TileRacks:
                     ]
 
     def determine_tile_game_board_types(self, player_ids=None):
+        """Determine tile game board types.
+
+        Args:
+            player_ids: Player ids affected by the operation.
+        """
         chain_sizes = [len(self.game.game_board.board_type_to_coordinates[t]) for t in range(7)]
         can_start_new_chain = 0 in chain_sizes
         x_to_y_to_board_type = self.game.game_board.x_to_y_to_board_type
@@ -851,6 +1141,11 @@ class TileRacks:
                 )
 
     def replace_dead_tiles(self, player_id):
+        """Replace dead tiles.
+
+        Args:
+            player_id: Player seat index within the game.
+        """
         rack = self.racks[player_id]
         replaced_a_dead_tile = True
         while replaced_a_dead_tile:
@@ -891,6 +1186,11 @@ class TileRacks:
                     break
 
     def are_racks_empty(self):
+        """Return whether are racks empty.
+
+        Returns:
+            `True` when all player racks are empty.
+        """
         for rack in self.racks:
             for tile_data in rack:
                 if tile_data:
@@ -899,16 +1199,36 @@ class TileRacks:
 
 
 class Action:
+    """Base class for a pending game action.
+
+    Actions form a stack on `Game.actions`. The top action determines which
+    player may act and which command id is accepted; executing an action may
+    return follow-up actions that replace or extend the stack.
+    """
+
     def __init__(self, game, player_id, game_action_id):
+        """Initialize action ownership and command identity.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+            game_action_id: Game action enum value.
+        """
         self.game = game
         self.player_id = player_id
         self.game_action_id = game_action_id
         self.additional_params = []
 
     def prepare(self):
+        """Prepare the action before it is offered to clients."""
         pass
 
     def send_message(self, client_ids):
+        """Queue the SetGameAction command for selected clients.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+        """
         self.game.add_pending_messages(
             [
                 [
@@ -923,10 +1243,27 @@ class Action:
 
 
 class ActionStartGame(Action):
+    """Start a pending game."""
+
     def __init__(self, game, player_id):
+        """Initialize a start-game action for the game creator.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+        """
         super().__init__(game, player_id, enums.GameActions.StartGame.value)
 
     def execute(self):
+        """Move a starting game into active play.
+
+        Team games with fewer than four players are downgraded to singles, tile
+        racks are initialized, and the first play/purchase action pair is
+        returned for the first player.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         self.game.add_history_message(enums.GameHistoryMessages.StartedGame.value, self.player_id)
 
         if self.game.mode == enums.GameModes.Teams.value and self.game.num_players < 4:
@@ -941,10 +1278,23 @@ class ActionStartGame(Action):
 
 
 class ActionPlayTile(Action):
+    """Play a tile and determine follow-up actions."""
+
     def __init__(self, game, player_id):
+        """Initialize a play-tile action for one player.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+        """
         super().__init__(game, player_id, enums.GameActions.PlayTile.value)
 
     def prepare(self):
+        """Prepare.
+
+        Returns:
+            Follow-up actions required before the action can execute, or `False` when ready.
+        """
         self.game.turn_player_id = self.player_id
 
         self.game.add_pending_messages(
@@ -973,6 +1323,14 @@ class ActionPlayTile(Action):
             return True
 
     def execute(self, tile_index):
+        """Execute.
+
+        Args:
+            tile_index: Index within a player tile rack.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         if not isinstance(tile_index, int):
             return
         rack = self.game.tile_racks.racks[self.player_id]
@@ -1024,13 +1382,28 @@ class ActionPlayTile(Action):
 
 
 class ActionSelectNewChain(Action):
+    """Resolve a newly formed chain selection."""
+
     def __init__(self, game, player_id, game_board_type_ids, tile):
+        """Initialize a chain-selection action for a played tile.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+            game_board_type_ids: Chain type ids to purchase from.
+            tile: Tile coordinates affected by the action.
+        """
         super().__init__(game, player_id, enums.GameActions.SelectNewChain.value)
         self.game_board_type_ids = game_board_type_ids
         self.additional_params.append(game_board_type_ids)
         self.tile = tile
 
     def prepare(self):
+        """Prepare.
+
+        Returns:
+            Follow-up actions required before the action can execute, or `False` when ready.
+        """
         if len(self.game_board_type_ids) == 1:
             return self._create_new_chain(self.game_board_type_ids[0])
         else:
@@ -1038,10 +1411,26 @@ class ActionSelectNewChain(Action):
             self.game.tile_racks.determine_tile_game_board_types()
 
     def execute(self, game_board_type_id):
+        """Execute.
+
+        Args:
+            game_board_type_id: Chain or board type id.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         if game_board_type_id in self.game_board_type_ids:
             return self._create_new_chain(game_board_type_id)
 
     def _create_new_chain(self, game_board_type_id):
+        """Create new chain.
+
+        Args:
+            game_board_type_id: Chain or board type id.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         self.game.game_board.fill_cells(self.tile, game_board_type_id)
         self.game.score_sheet.set_chain_size(
             game_board_type_id,
@@ -1060,7 +1449,17 @@ class ActionSelectNewChain(Action):
 
 
 class ActionSelectMergerSurvivor(Action):
+    """Resolve which merging chain survives."""
+
     def __init__(self, game, player_id, type_ids, tile):
+        """Initialize a merger-survivor selection action.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+            type_ids: Chain type ids involved in a merge.
+            tile: Tile coordinates affected by the action.
+        """
         super().__init__(game, player_id, enums.GameActions.SelectMergerSurvivor.value)
         self.type_ids = type_ids
         self.tile = tile
@@ -1071,6 +1470,11 @@ class ActionSelectMergerSurvivor(Action):
         self.type_id_sets = [x[1] for x in sorted(chain_size_to_type_ids.items(), reverse=True)]
 
     def prepare(self):
+        """Prepare.
+
+        Returns:
+            Follow-up actions required before the action can execute, or `False` when ready.
+        """
         self.game.add_history_message(
             enums.GameHistoryMessages.MergedChains.value,
             self.player_id,
@@ -1086,6 +1490,14 @@ class ActionSelectMergerSurvivor(Action):
             self.additional_params.append(sorted(largest_type_ids))
 
     def execute(self, type_id):
+        """Execute.
+
+        Args:
+            type_id: Chain type id being evaluated.
+
+        Returns:
+            Messages that describe the newly formed chain.
+        """
         if type_id in self.type_id_sets[0]:
             self.game.add_history_message(
                 enums.GameHistoryMessages.SelectedMergerSurvivor.value,
@@ -1096,6 +1508,14 @@ class ActionSelectMergerSurvivor(Action):
             return self._prepare_next_actions(type_id)
 
     def _prepare_next_actions(self, controlling_type_id):
+        """Prepare next actions.
+
+        Args:
+            controlling_type_id: Surviving chain type id.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         self.type_id_sets[0].discard(controlling_type_id)
 
         self.game.game_board.fill_cells(self.tile, controlling_type_id)
@@ -1139,18 +1559,41 @@ class ActionSelectMergerSurvivor(Action):
 
 
 class ActionSelectChainToDisposeOfNext(Action):
+    """Select the next defunct chain for share disposal."""
+
     def __init__(self, game, player_id, defunct_type_ids, controlling_type_id):
+        """Initialize a defunct-chain ordering action.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+            defunct_type_ids: Defunct chain type ids to resolve.
+            controlling_type_id: Surviving chain type id.
+        """
         super().__init__(game, player_id, enums.GameActions.SelectChainToDisposeOfNext.value)
         self.defunct_type_ids = defunct_type_ids
         self.controlling_type_id = controlling_type_id
 
     def prepare(self):
+        """Prepare.
+
+        Returns:
+            Follow-up actions required before the action can execute, or `False` when ready.
+        """
         if len(self.defunct_type_ids) == 1:
             return self._prepare_next_actions(self.defunct_type_ids.pop())
         else:
             self.additional_params.append(sorted(self.defunct_type_ids))
 
     def execute(self, type_id):
+        """Execute.
+
+        Args:
+            type_id: Chain type id being evaluated.
+
+        Returns:
+            Follow-up action objects needed to continue merge resolution.
+        """
         if type_id in self.defunct_type_ids:
             self.game.add_history_message(
                 enums.GameHistoryMessages.SelectedChainToDisposeOfNext.value,
@@ -1161,6 +1604,14 @@ class ActionSelectChainToDisposeOfNext(Action):
             return self._prepare_next_actions(type_id)
 
     def _prepare_next_actions(self, next_type_id):
+        """Prepare next actions.
+
+        Args:
+            next_type_id: Next defunct chain type id to resolve.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         self.defunct_type_ids.discard(next_type_id)
 
         actions = []
@@ -1189,7 +1640,17 @@ class ActionSelectChainToDisposeOfNext(Action):
 
 
 class ActionDisposeOfShares(Action):
+    """Resolve sell, trade, and keep decisions for defunct-chain shares."""
+
     def __init__(self, game, player_id, defunct_type_id, controlling_type_id):
+        """Initialize a share-disposal action for one defunct chain.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+            defunct_type_id: Defunct chain type id being resolved.
+            controlling_type_id: Surviving chain type id.
+        """
         super().__init__(game, player_id, enums.GameActions.DisposeOfShares.value)
         self.defunct_type_id = defunct_type_id
         self.controlling_type_id = controlling_type_id
@@ -1201,9 +1662,19 @@ class ActionDisposeOfShares(Action):
         self.additional_params.append(controlling_type_id)
 
     def prepare(self):
+        """Prepare."""
         self.controlling_type_available = self.game.score_sheet.available[self.controlling_type_id]
 
     def execute(self, trade_amount, sell_amount):
+        """Execute.
+
+        Args:
+            trade_amount: Number of defunct shares to trade.
+            sell_amount: Number of defunct shares to sell.
+
+        Returns:
+            Follow-up action objects needed to continue merge resolution.
+        """
         if (
             not isinstance(trade_amount, int)
             or trade_amount < 0
@@ -1242,13 +1713,26 @@ class ActionDisposeOfShares(Action):
 
 
 class ActionPurchaseShares(Action):
+    """Purchase shares at the end of a turn."""
+
     def __init__(self, game, player_id):
+        """Initialize an end-of-turn share-purchase action.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+        """
         super().__init__(game, player_id, enums.GameActions.PurchaseShares.value)
         self.can_not_afford_any_shares = False
         self.can_end_game = False
         self.end_game = False
 
     def prepare(self):
+        """Prepare.
+
+        Returns:
+            Follow-up actions required before the action can execute, or `False` when ready.
+        """
         for type_id, chain_size in enumerate(self.game.score_sheet.chain_size):
             if chain_size and not self.game.game_board.board_type_to_coordinates[type_id]:
                 self.game.score_sheet.set_chain_size(type_id, 0)
@@ -1285,6 +1769,15 @@ class ActionPurchaseShares(Action):
             return self._complete_action()
 
     def execute(self, game_board_type_ids, end_game):
+        """Execute.
+
+        Args:
+            game_board_type_ids: Chain type ids to purchase from.
+            end_game: Whether the purchase action should end the game.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         if end_game != 0 and end_game != 1:
             return
         if not isinstance(game_board_type_ids, list) or len(game_board_type_ids) > 3:
@@ -1335,6 +1828,11 @@ class ActionPurchaseShares(Action):
         return self._complete_action()
 
     def _complete_action(self):
+        """Complete action.
+
+        Returns:
+            Follow-up actions required after execution, or `None`/`False` when complete.
+        """
         all_tiles_played = self.game.tile_racks.are_racks_empty()
         no_tiles_played_for_entire_round = (
             self.game.turns_without_played_tiles_count == self.game.num_players
@@ -1371,7 +1869,15 @@ class ActionPurchaseShares(Action):
 
 
 class ActionGameOver(Action):
+    """Finish a game and record final scoring."""
+
     def __init__(self, game, player_id):
+        """Initialize and immediately complete the game-over transition.
+
+        Args:
+            game: Game or game-like object being updated.
+            player_id: Player seat index within the game.
+        """
         super().__init__(game, player_id, enums.GameActions.GameOver.value)
         game.turn_player_id = None
         game.add_pending_messages([[enums.CommandsToClient.SetTurn.value, None]], game.client_ids)
@@ -1379,6 +1885,14 @@ class ActionGameOver(Action):
 
 
 class Game:
+    """Represent one active Python server game.
+
+    A game owns board state, score state, tile racks, connected players,
+    watchers, pending actions, history messages, and replay logging. Most
+    public methods mutate this authoritative state and queue client commands
+    through the callback provided by `Server`.
+    """
+
     def __init__(
         self,
         game_id,
@@ -1389,6 +1903,21 @@ class Game:
         logging_enabled=True,
         tile_bag=None,
     ):
+        """Initialize a new server game and publish its starting state.
+
+        Construction creates the board, score sheet, tile bag, initial
+        start-game action, and SetGameState message. Optional `tile_bag` input
+        is used by replay and tests to make tile order deterministic.
+
+        Args:
+            game_id: Public game id.
+            internal_game_id: Internal game number within a log file.
+            mode: Build mode or game mode, depending on context.
+            max_players: Maximum number of players for a game.
+            add_pending_messages: Callback used to queue outbound messages.
+            logging_enabled: Whether server actions should emit log records.
+            tile_bag: Optional prearranged tile bag for deterministic replay.
+        """
         self.game_id = game_id
         self.internal_game_id = internal_game_id
         self.state = enums.GameStates.Starting.value
@@ -1421,6 +1950,16 @@ class Game:
         self.set_state(self.state, self.mode, self.max_players)
 
     def join_game(self, client):
+        """Join a client to a starting game.
+
+        Joining is only valid while the game is starting and the username is not
+        already seated. The method draws a position tile, may change creator
+        order, queues board/history/action messages, and clears expiration so
+        the game remains alive.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         if (
             self.state == enums.GameStates.Starting.value
             and not self.score_sheet.is_username_in_game(client.username)
@@ -1451,6 +1990,15 @@ class Game:
             self.expiration_time = None
 
     def rejoin_game(self, client):
+        """Reconnect a seated player to an existing game.
+
+        The username must already belong to the score sheet. Rejoining restores
+        client ids, sends the current game snapshot and history, and clears any
+        pending expiration.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         if self.score_sheet.is_username_in_game(client.username):
             client.game_id = self.game_id
             self.client_ids.add(client.client_id)
@@ -1460,6 +2008,14 @@ class Game:
             self.expiration_time = None
 
     def watch_game(self, client):
+        """Attach a non-player client as a watcher.
+
+        Watchers receive the current game snapshot and future broadcasts but do
+        not occupy score-sheet player slots or submit game actions.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         if not self.score_sheet.is_username_in_game(client.username):
             client.game_id = self.game_id
             self.client_ids.add(client.client_id)
@@ -1478,6 +2034,14 @@ class Game:
             self.expiration_time = None
 
     def leave_game(self, client):
+        """Remove a client from the game or watcher set.
+
+        Player seats remain in the score sheet for possible rejoin. If no
+        clients remain connected, the game is marked for delayed expiration.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         if client.client_id in self.client_ids:
             client.game_id = None
             self.client_ids.discard(client.client_id)
@@ -1498,6 +2062,17 @@ class Game:
                 self.expiration_time = time.time() + 300
 
     def do_game_action(self, client, game_action_id, data):
+        """Execute the current action when the client is authorized.
+
+        Only the player who owns the top action and submits its expected command
+        id can advance the game. Returned follow-up actions are prepared until a
+        client-visible action is ready, then published to all game clients.
+
+        Args:
+            client: Client object affected by the operation.
+            game_action_id: Game action enum value.
+            data: Raw or action-specific payload data.
+        """
         action = self.actions[-1]
         if (
             client.player_id is not None
@@ -1515,6 +2090,17 @@ class Game:
             action.send_message(self.client_ids)
 
     def set_state(self, state, mode=None, max_players=None):
+        """Set game state and publish the corresponding client/log records.
+
+        State changes can also update mode, maximum players, begin/end times,
+        final score, and replay log overrides. Completed games recalculate net
+        worth before their final score is published.
+
+        Args:
+            state: Game state enum value to publish.
+            mode: Build mode or game mode, depending on context.
+            max_players: Maximum number of players for a game.
+        """
         log = collections.OrderedDict()
         log["_"] = "game"
         log["game-id"] = self.internal_game_id
@@ -1565,6 +2151,16 @@ class Game:
             print(json.dumps(log, separators=(",", ":")))
 
     def add_history_message(self, *data, player_id=None):
+        """Store and publish a game-history message.
+
+        Public history is broadcast to all game clients. Player-specific
+        history is sent only to that player's active client when one exists,
+        while still being retained in the in-memory history list.
+
+        Args:
+            *data: Additional positional arguments.
+            player_id: Player seat index within the game.
+        """
         data = list(data)
 
         self.history_messages.append([player_id, data])
@@ -1583,6 +2179,11 @@ class Game:
             self.add_pending_messages([message], client_ids)
 
     def _send_past_history_messages(self, client):
+        """Send past history messages.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         player_id = client.player_id
         messages = []
         for target_player_id, message in self.history_messages:
@@ -1600,6 +2201,11 @@ class Game:
 
     def _send_initialization_messages(self, client):
         # game board
+        """Send initialization messages.
+
+        Args:
+            client: Client object affected by the operation.
+        """
         messages = [
             [
                 enums.CommandsToClient.SetGameBoard.value,
@@ -1639,6 +2245,7 @@ class Game:
 
 
 def main():
+    """Run the module command-line entry point."""
     server = Server()
     server_protocol = ServerProtocol(server)
 
@@ -1650,6 +2257,7 @@ def main():
     loop.run_until_complete(loop.create_unix_server(lambda: server_protocol, "python.sock"))
 
     def destroy_expired_games_loop():
+        """Destroy expired games loop."""
         server.destroy_expired_games()
         loop.call_later(15, destroy_expired_games_loop)
 

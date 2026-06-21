@@ -1,3 +1,8 @@
+"""Import legacy game logs into MySQL and generate published stats files.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import base64
 import collections
 import glob
@@ -17,6 +22,8 @@ import util
 
 
 class Logs2DB:
+    """Import parsed log records into ORM objects and rating records."""
+
     rating_type_to_draw_probability = {
         "Singles2": 0.00271,
         "Singles3": 0.00421,
@@ -25,6 +32,12 @@ class Logs2DB:
     }
 
     def __init__(self, session, lookup):
+        """Initialize log import state for one database session.
+
+        Args:
+            session: SQLAlchemy session used for queries and new rows.
+            lookup: Lookup helper used to resolve or create ORM rows.
+        """
         self.session = session
         self.lookup = lookup
         self.trueskill_environment_lookup = {}
@@ -37,6 +50,15 @@ class Logs2DB:
         }
 
     def process_logs(self, file, log_time=None):
+        """Process logs.
+
+        Args:
+            file: Open text file or file-like object to read.
+            log_time: Timestamp identifying the source log file.
+
+        Returns:
+            Updated byte offset and set of users whose completed games changed.
+        """
         len_last_line = 0
         self.completed_game_users = set()
         for line in file:
@@ -53,6 +75,11 @@ class Logs2DB:
         return file.tell() - len_last_line, self.completed_game_users
 
     def process_game(self, params):
+        """Process game.
+
+        Args:
+            params: Decoded log entry parameters.
+        """
         game = self.lookup.get_game(params["log-time"], params["game-id"])
 
         begin_time = params.get("begin")
@@ -75,11 +102,21 @@ class Logs2DB:
             self.process_game_result(params)
 
     def process_game_player(self, params):
+        """Process game player.
+
+        Args:
+            params: Decoded log entry parameters.
+        """
         game = self.lookup.get_game(params["log-time"], params["game-id"])
         game_player = self.lookup.get_game_player(game, params["player-id"])
         game_player.user = self.lookup.get_user(params["username"])
 
     def process_game_result(self, params):
+        """Process game result.
+
+        Args:
+            params: Decoded log entry parameters.
+        """
         game = self.lookup.get_game(params["log-time"], params["game-id"])
 
         game_players = []
@@ -94,6 +131,12 @@ class Logs2DB:
         self.update_records(game, game_players)
 
     def calculate_new_ratings(self, game, game_players):
+        """Calculate new ratings.
+
+        Args:
+            game: Game or game-like object being updated.
+            game_players: Game player rows participating in the completed game.
+        """
         game_mode_name = game.game_mode.name
         num_players = len(game_players)
         if game_mode_name == "Teams":
@@ -156,6 +199,14 @@ class Logs2DB:
             self.lookup.add_rating(rating)
 
     def get_trueskill_environment(self, rating_type):
+        """Get trueskill environment.
+
+        Args:
+            rating_type: Rating type ORM object or name, depending on the caller.
+
+        Returns:
+            Cached TrueSkill environment configured for the rating type.
+        """
         trueskill_environment = self.trueskill_environment_lookup.get(rating_type.name)
         if trueskill_environment:
             return trueskill_environment
@@ -169,6 +220,12 @@ class Logs2DB:
         return trueskill_environment
 
     def update_records(self, game, game_players):
+        """Update records.
+
+        Args:
+            game: Game or game-like object being updated.
+            game_players: Game player rows participating in the completed game.
+        """
         record_index = None
         game_mode_name = game.game_mode.name
         if game_mode_name == "Singles":
@@ -225,6 +282,11 @@ class Logs2DB:
 
 
 def get_empty_records():
+    """Get empty records.
+
+    Returns:
+        Initial encoded record structure for a user with no stats.
+    """
     return [
         [0, 0],  # Singles2
         [0, 0, 0],  # Singles3
@@ -234,6 +296,8 @@ def get_empty_records():
 
 
 class StatsGen:
+    """Generate JSON stats files from persisted game and rating data."""
+
     users_with_completed_games_sql = sqlalchemy.sql.text(
         """
         select distinct user.user_id,
@@ -311,10 +375,21 @@ class StatsGen:
     )
 
     def __init__(self, session, output_dir):
+        """Initialize stats generation state for one database session.
+
+        Args:
+            session: SQLAlchemy session used for queries and new rows.
+            output_dir: Directory where generated artifacts should be written.
+        """
         self.session = session
         self.output_dir = output_dir
 
     def get_users_with_completed_games(self):
+        """Get users with completed games.
+
+        Returns:
+            Rows containing user id, username, and decoded records.
+        """
         users_with_completed_games = []
         for row in self.session.execute(StatsGen.users_with_completed_games_sql):
             decoded = ujson.decode(row.encoded) if row.encoded else get_empty_records()
@@ -322,6 +397,7 @@ class StatsGen:
         return users_with_completed_games
 
     def output_ratings(self):
+        """Output ratings."""
         rating_type_to_ratings = collections.defaultdict(list)
         for row in self.session.execute(StatsGen.ratings_sql):
             rating_type_to_ratings[row.rating_type.decode()].append(
@@ -331,6 +407,13 @@ class StatsGen:
         self.write_file("ratings", rating_type_to_ratings)
 
     def output_user(self, user_id, username, records):
+        """Output user.
+
+        Args:
+            user_id: Persisted user id whose stats file should be written.
+            username: Player username from the client or log.
+            records: Encoded per-user stats records.
+        """
         ratings = {}
         for row in self.session.execute(StatsGen.user_ratings_sql, {"user_id": user_id}):
             ratings[row.name.decode()] = [row.time, row.mu, row.sigma]
@@ -357,6 +440,12 @@ class StatsGen:
         )
 
     def write_file(self, filename_prefix, contents):
+        """Write file.
+
+        Args:
+            filename_prefix: Output filename prefix without extension.
+            contents: Text content to write.
+        """
         with open(os.path.join(self.output_dir, filename_prefix + ".json"), "w") as f:
             f.write(ujson.dumps(contents))
 
@@ -370,6 +459,11 @@ record_key_to_record_index = {
 
 
 def process_logs(write_stats_files):
+    """Process logs.
+
+    Args:
+        write_stats_files: Whether to generate public stats files after import.
+    """
     with orm.session_scope() as session:
         lookup = orm.Lookup(session)
         logs2db = Logs2DB(session, lookup)
@@ -435,6 +529,7 @@ def process_logs(write_stats_files):
 
 
 def output_all_stats_files():
+    """Output all stats files."""
     with orm.session_scope() as session:
         statsgen = StatsGen(session, "/tmp/tim/acquire/stats")
         statsgen.output_ratings()
@@ -445,6 +540,7 @@ def output_all_stats_files():
 
 
 def main():
+    """Run the module command-line entry point."""
     while True:
         try:
             process_logs(True)

@@ -1,3 +1,8 @@
+"""Parse legacy server logs into replayable game logs and reporting artifacts.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import collections
 import contextlib
 import enum
@@ -23,6 +28,8 @@ import server
 
 
 class Enums:
+    """Manage historical enum translations for old log timestamps."""
+
     lookups = {
         "CommandsToClient": list(enums.CommandsToClient.__members__.keys())
         + ["SetGamePlayerUsername", "SetGamePlayerClientId"],
@@ -69,6 +76,7 @@ class Enums:
 
     @staticmethod
     def initialize():
+        """Build historical enum translation tables."""
         for timestamp, changes in Enums._lookups_changes.items():
             translation = {}
             for enum_name, entries in changes.items():
@@ -83,6 +91,18 @@ class Enums:
 
     @staticmethod
     def get_translations(timestamp):
+        """Return enum translations needed for a historical log timestamp.
+
+        Older logs sometimes store enum indexes from earlier deployments. The
+        returned mapping lets replay code translate those indexes into the
+        current enum values before applying client commands.
+
+        Args:
+            timestamp: Log timestamp used to choose historical enum translations.
+
+        Returns:
+            Mapping from enum group names to old-index-to-current-index maps.
+        """
         translations_for_timestamp = {}
         for trans_timestamp, trans_changes in sorted(Enums._translations.items(), reverse=True):
             if timestamp <= trans_timestamp:
@@ -95,13 +115,29 @@ Enums.initialize()
 
 
 class CommandsToClientTranslator:
+    """Translate command identifiers from legacy logs to current enum values."""
+
     def __init__(self, translations):
+        """Initialize command translation state for one log timestamp.
+
+        Args:
+            translations: Mapping from legacy enum values to current enum values.
+        """
         self._commands_to_client = translations.get("CommandsToClient")
         self._errors = translations.get("Errors")
 
         self._fatal_error = enums.CommandsToClient.FatalError.value
 
     def translate(self, commands):
+        """Translate a decoded command batch in place.
+
+        Historical logs are replayed against the current enum definitions. This
+        mutates command ids, and fatal-error payloads when needed, before the
+        rest of the replay code interprets the commands.
+
+        Args:
+            commands: Decoded command batch to translate or process.
+        """
         if self._commands_to_client:
             for command in commands:
                 command[0] = self._commands_to_client[command[0]]
@@ -113,6 +149,8 @@ class CommandsToClientTranslator:
 
 
 class LineTypes(enum.Enum):
+    """Classify supported legacy log line types."""
+
     time = 0
     connect = 1
     disconnect = 2
@@ -126,7 +164,18 @@ class LineTypes(enum.Enum):
 
 
 class LogParser:
+    """Parse raw legacy server log lines into structured events."""
+
     def __init__(self, log_timestamp, file):
+        """Initialize parser state for a legacy server log.
+
+        The parser accepts several historical line formats and ignores known
+        traceback fragments so replay can continue across noisy production logs.
+
+        Args:
+            log_timestamp: Timestamp identifying the source log file.
+            file: Open text file or file-like object to read.
+        """
         self._file = file
 
         regexes_to_ignore = [
@@ -213,6 +262,15 @@ class LogParser:
         }
 
     def go(self):
+        """Yield parsed log events in source order.
+
+        Each yielded item includes the matched line type, line number, original
+        line text, and handler-specific parsed data. A synthetic blank line is
+        yielded at EOF so downstream processors can flush the final batch.
+
+        Yields:
+            Tuples of line type, line number, original line text, and parsed data.
+        """
         handled_line_type = None
         line_number = 0
         stop_processing_file = False
@@ -255,9 +313,30 @@ class LogParser:
             yield LineTypes.blank_line, line_number + 1, "", ()
 
     def _handle_time(self, match):
+        """Parse a timestamp log line.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            One-item tuple containing the parsed timestamp.
+        """
         return (float(match.group("time")),)
 
     def _handle_command_to_client(self, match):
+        """Parse and normalize a gateway-to-client command batch.
+
+        The command batch is decoded from JSON, translated from any historical
+        enum values, and reordered when legacy SetGamePlayer commands appear
+        after board-cell updates that need player/game context first.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            Tuple of recipient client ids and decoded command batch, or `None`
+            when the command JSON cannot be decoded.
+        """
         try:
             client_ids = [int(x) for x in match.group("client_ids").split(",")]
             commands = ujson.decode(match.group("commands"))
@@ -293,6 +372,15 @@ class LogParser:
         return client_ids, commands
 
     def _handle_command_to_server(self, match):
+        """Parse a client-to-server command batch.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            Tuple of client id and decoded command, or `None` when the command
+            JSON cannot be decoded.
+        """
         try:
             client_id = int(match.group("client_id"))
             command = ujson.decode(match.group("command"))
@@ -302,6 +390,15 @@ class LogParser:
         return client_id, command
 
     def _handle_log(self, match):
+        """Parse a structured replay log entry.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            One-item tuple containing the decoded log entry, or `None` when the
+            JSON cannot be decoded.
+        """
         try:
             entry = ujson.decode(match.group("entry"))
         except ValueError:
@@ -310,15 +407,51 @@ class LogParser:
         return (entry,)
 
     def _handle_connect(self, match):
+        """Parse a client connect line.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            Tuple of client id and username.
+        """
         return int(match.group("client_id")), match.group("username")
 
     def _handle_disconnect(self, match):
+        """Parse a client disconnect line.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            One-item tuple containing the disconnected client id.
+        """
         return (int(match.group("client_id")),)
 
     def _handle_game_expired(self, match):
+        """Parse a game-expiration line.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            One-item tuple containing the expired public game id.
+        """
         return (int(match.group("game_id")),)
 
     def _handle_connection_made(self, match):
+        """Handle a gateway connection marker.
+
+        Only the second and later connection markers are replay-relevant. The
+        first marks startup noise and tells the parser to stop processing the
+        current file.
+
+        Args:
+            match: Regular expression match for the parsed log line.
+
+        Returns:
+            `"stop"` for the first marker, otherwise an empty tuple.
+        """
         self._connection_made_count += 1
         if self._connection_made_count == 1:
             return ()
@@ -327,6 +460,8 @@ class LogParser:
 
 
 class LogProcessor:
+    """Replay parsed log events into reconstructed game state."""
+
     _game_board_type__nothing = enums.GameBoardTypes.Nothing.value
 
     _line_type_processing_priorities = {
@@ -343,6 +478,19 @@ class LogProcessor:
     }
 
     def __init__(self, log_timestamp, file, verbose=False, verbose_output_path=""):
+        """Initialize replay state for one server log.
+
+        The processor coordinates parsed log events, reconstructed game objects,
+        client identities, and optional verbose comparison output. It preserves
+        historical ordering quirks so replay behavior can be compared with the
+        legacy server implementation.
+
+        Args:
+            log_timestamp: Timestamp identifying the source log file.
+            file: Open text file or file-like object to read.
+            verbose: Whether to print replay comparison details.
+            verbose_output_path: Directory for verbose replay artifacts.
+        """
         self._log_timestamp = log_timestamp
         self._verbose = verbose
         self._verbose_output_path = verbose_output_path
@@ -439,6 +587,16 @@ class LogProcessor:
         self._timestamp = None
 
     def go(self):
+        """Replay parsed line groups and yield reconstructed games.
+
+        Log lines are grouped by blank-line batches, sorted into legacy replay
+        priority order, and applied to reconstructed game state. Expired games
+        are yielded as soon as their expiration batch is processed; any
+        remaining active games are yielded after the log ends.
+
+        Yields:
+            Reconstructed `Game` objects.
+        """
         line_group = []
 
         for line_type, line_number, line, parse_line_data in self._log_parser.go():
@@ -469,13 +627,29 @@ class LogProcessor:
             yield game
 
     def _handle_time(self, time):
+        """Handle the time event.
+
+        Args:
+            time: Parsed event timestamp.
+        """
         self._timestamp = time
 
     def _handle_connect(self, client_id, username):
+        """Handle the connect event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            username: Player username from the client or log.
+        """
         self._client_id_to_username[client_id] = username
         self._username_to_client_id[username] = client_id
 
     def _handle_disconnect(self, client_id):
+        """Handle the disconnect event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+        """
         del self._client_id_to_username[client_id]
         self._username_to_client_id = {
             username: client_id for client_id, username in self._client_id_to_username.items()
@@ -487,6 +661,12 @@ class LogProcessor:
             print(self._username_to_client_id)
 
     def _handle_command_to_client(self, client_ids, commands):
+        """Handle the command to client event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            commands: Decoded command batch to translate or process.
+        """
         if self._verbose:
             print(
                 "~~~",
@@ -503,6 +683,12 @@ class LogProcessor:
                 traceback.print_exc()
 
     def _handle_command_to_client__set_game_board_cell(self, client_ids, command):
+        """Handle the command to client set game board cell event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id, x, y, game_board_type_id = (
             client_ids[0],
             command[1],
@@ -527,6 +713,12 @@ class LogProcessor:
         game.board[x][y] = game_board_type_id
 
     def _handle_command_to_client__set_score_sheet_cell(self, client_ids, command):
+        """Handle the command to client set score sheet cell event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id, row, index, value = client_ids[0], command[1], command[2], command[3]
 
         game = self._game_id_to_game[self._client_id_to_game_id[client_id]]
@@ -537,6 +729,12 @@ class LogProcessor:
             game.score_sheet_chain_size[index] = value
 
     def _handle_command_to_client__set_score_sheet(self, client_ids, command):
+        """Handle the command to client set score sheet event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id, score_sheet_data = client_ids[0], command[1]
 
         game = self._game_id_to_game[self._client_id_to_game_id[client_id]]
@@ -545,21 +743,57 @@ class LogProcessor:
         game.score_sheet_chain_size = score_sheet_data[1]
 
     def _handle_command_to_client__set_game_player_join(self, client_ids, command):
+        """Handle the command to client set game player join event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[3])
 
     def _handle_command_to_client__set_game_player_rejoin(self, client_ids, command):
+        """Handle the command to client set game player rejoin event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[3])
 
     def _handle_command_to_client__set_game_player_leave(self, client_ids, command):
+        """Handle the command to client set game player leave event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._remove_client_id_from_game(command[3])
 
     def _handle_command_to_client__set_game_watcher_client_id(self, client_ids, command):
+        """Handle the command to client set game watcher client id event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[2])
 
     def _handle_command_to_client__return_watcher_to_lobby(self, client_ids, command):
+        """Handle the command to client return watcher to lobby event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._remove_client_id_from_game(command[2])
 
     def _handle_command_to_client__add_game_history_message(self, client_ids, command):
+        """Handle the command to client add game history message event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         printed_message = False
         for client_id in client_ids:
             game = self._game_id_to_game[self._client_id_to_game_id[client_id]]
@@ -575,6 +809,12 @@ class LogProcessor:
                     printed_message = True
 
     def _handle_command_to_client__add_game_history_messages(self, client_ids, command):
+        """Handle the command to client add game history messages event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         for client_id in client_ids:
             game = self._game_id_to_game[self._client_id_to_game_id[client_id]]
             username = self._client_id_to_username[client_id]
@@ -588,6 +828,12 @@ class LogProcessor:
                         print("  ~~~", enums.GameHistoryMessages(message[0]).name, message)
 
     def _handle_command_to_client__set_tile(self, client_ids, command):
+        """Handle the command to client set tile event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id, tile_index, x, y = client_ids[0], command[1], command[2], command[3]
 
         game = self._game_id_to_game[self._client_id_to_game_id[client_id]]
@@ -605,6 +851,12 @@ class LogProcessor:
         game.tile_racks[player_id][tile_index] = tile
 
     def _handle_command_to_client__remove_tile(self, client_ids, command):
+        """Handle the command to client remove tile event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id, tile_index = client_ids[0], command[1]
 
         game = self._game_id_to_game[self._client_id_to_game_id[client_id]]
@@ -614,19 +866,42 @@ class LogProcessor:
         game.tile_racks[player_id][tile_index] = None
 
     def _handle_command_to_client__set_game_player_client_id(self, client_ids, command):
+        """Handle the command to client set game player client id event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         if command[3] is None:
             self._remove_player_id_from_game(command[1], command[2])
         else:
             self._add_client_id_to_game(command[1], command[3])
 
     def _add_client_id_to_game(self, game_id, client_id):
+        """Add client id to game.
+
+        Args:
+            game_id: Public game id.
+            client_id: Legacy client id from the log or socket protocol.
+        """
         self._client_id_to_game_id[client_id] = game_id
 
     def _remove_client_id_from_game(self, client_id):
+        """Remove client id from game.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+        """
         if client_id in self._client_id_to_game_id:
             del self._client_id_to_game_id[client_id]
 
     def _remove_player_id_from_game(self, game_id, player_id):
+        """Remove player id from game.
+
+        Args:
+            game_id: Public game id.
+            player_id: Player seat index within the game.
+        """
         game = self._game_id_to_game.get(game_id)
 
         if game:
@@ -636,6 +911,12 @@ class LogProcessor:
                 del self._client_id_to_game_id[client_id]
 
     def _handle_command_to_server(self, client_id, command):
+        """Handle the command to server event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            command: Decoded command payload.
+        """
         try:
             if self._verbose:
                 print("~~~", self._client_id_to_username.get(client_id))
@@ -650,6 +931,12 @@ class LogProcessor:
             traceback.print_exc()
 
     def _handle_command_to_server__do_game_action(self, client_id, command):
+        """Handle the command to server do game action event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            command: Decoded command payload.
+        """
         game_id = self._client_id_to_game_id.get(client_id)
 
         if game_id:
@@ -660,6 +947,11 @@ class LogProcessor:
                 game.actions.append([player_id, command[1:], self._timestamp])
 
     def _handle_game_expired(self, game_id):
+        """Handle the game expired event.
+
+        Args:
+            game_id: Public game id.
+        """
         game = self._game_id_to_game[game_id]
 
         game.expired = True
@@ -668,6 +960,11 @@ class LogProcessor:
         del self._game_id_to_game[game_id]
 
     def _handle_log(self, entry):
+        """Handle the log event.
+
+        Args:
+            entry: Decoded structured log entry.
+        """
         game_id = entry["external-game-id"] if "external-game-id" in entry else entry["game-id"]
         internal_game_id = entry["game-id"]
 
@@ -712,6 +1009,7 @@ class LogProcessor:
                 game.score = entry["scores"]
 
     def _handle_blank_line(self):
+        """Handle the blank line event."""
         if self._verbose:
             for game in self._game_id_to_game.values():
                 game.make_server_game()
@@ -743,6 +1041,8 @@ class LogProcessor:
 
 
 class Game:
+    """Hold reconstructed game state while replaying logs."""
+
     _game_board_type__nothing = enums.GameBoardTypes.Nothing.value
     _game_history_messages__drew_position_tile = enums.GameHistoryMessages.DrewPositionTile.value
     _score_sheet_indexes__client = enums.ScoreSheetIndexes.Client.value
@@ -767,6 +1067,18 @@ class Game:
     }
 
     def __init__(self, log_timestamp, game_id, internal_game_id, verbose):
+        """Initialize reconstructed state for one replayed game.
+
+        Replay games are assembled from historical command batches rather than
+        created through the normal server lifecycle. The object keeps enough
+        derived state to compare the replayed log against a live server game.
+
+        Args:
+            log_timestamp: Timestamp identifying the source log file.
+            game_id: Public game id.
+            internal_game_id: Internal game number within a log file.
+            verbose: Whether to print replay comparison details.
+        """
         self.log_timestamp = log_timestamp
         self.game_id = game_id
         self.internal_game_id = internal_game_id
@@ -799,6 +1111,14 @@ class Game:
         self.sync_log = None
 
     def translate_add_game_history_message(self, message):
+        """Translate add game history message.
+
+        Args:
+            message: Game-history message payload.
+
+        Returns:
+            Rendered description of the next pending action.
+        """
         if message[0] == Game._game_history_messages__drew_position_tile and isinstance(
             message[1], int
         ):
@@ -807,6 +1127,7 @@ class Game:
         return message
 
     def make_server_game(self):
+        """Make server game."""
         tile_bag = self._get_initial_tile_bag()
 
         self.server_game = server.Game(
@@ -841,6 +1162,7 @@ class Game:
                 )
 
     def compare_with_server_game(self):
+        """Compare with server game."""
         num_players = len(self.player_id_to_username)
 
         self.is_server_game_synchronized = True
@@ -909,6 +1231,13 @@ class Game:
                 self.sync_log.append(str(server_game_history_under_consideration))
 
     def _sync_compare(self, name, first, second):
+        """Sync compare.
+
+        Args:
+            name: Field name being compared.
+            first: First value to compare.
+            second: Second value to compare.
+        """
         str_first = str(first)
         str_second = str(second)
 
@@ -930,6 +1259,11 @@ class Game:
                 self.sync_log.append(str_second)
 
     def _get_initial_tile_bag(self):
+        """Get initial tile bag.
+
+        Returns:
+            Rendered history-message suffix.
+        """
         if self.tile_bag:
             return list(self.tile_bag)
 
@@ -1029,6 +1363,11 @@ class Game:
         return tile_bag
 
     def make_server_game_file(self, filename):
+        """Make server game file.
+
+        Args:
+            filename: Path to read from or write to.
+        """
         game_data = {}
 
         game_data["game_id"] = self.server_game.game_id
@@ -1085,11 +1424,25 @@ class Game:
 
     @staticmethod
     def _add_pending_messages(messages, client_ids=None):
+        """Add pending messages.
+
+        Args:
+            messages: Command messages to append or send.
+            client_ids: Client ids that receive or are associated with the command.
+        """
         pass
 
 
 class Client:
+    """Represent a replay client used when rebuilding server game state."""
+
     def __init__(self, player_id, username):
+        """Initialize a lightweight replay client identity.
+
+        Args:
+            player_id: Player seat index within the game.
+            username: Player username from the client or log.
+        """
         self.client_id = player_id + 1
         self.username = username
         self.game_id = None
@@ -1097,7 +1450,19 @@ class Client:
 
 
 class IndividualGameLogMaker:
+    """Split full server logs into per-game replay logs."""
+
     def __init__(self, log_timestamp, file):
+        """Initialize state for extracting per-game log batches.
+
+        The maker consumes a full historical server log and tracks client to
+        game membership so each completed game can be written as an isolated
+        replay fixture.
+
+        Args:
+            log_timestamp: Timestamp identifying the source log file.
+            file: Open text file or file-like object to read.
+        """
         self._log_timestamp = log_timestamp
 
         self._client_id_to_username = {}
@@ -1197,6 +1562,15 @@ class IndividualGameLogMaker:
         self._completed_game_logs = []
 
     def go(self):
+        """Yield completed per-game logs extracted from the full log.
+
+        Completed logs are yielded as soon as their destroy/expiration marker is
+        observed. When the source log ends, any still-open game logs are closed
+        and yielded so partial logs can still be inspected.
+
+        Yields:
+            Completed `IndividualGameLog` instances.
+        """
         for line_type, line_number, line, parse_line_data in self._log_parser.go():
             self._batch.append(line)
 
@@ -1218,6 +1592,12 @@ class IndividualGameLogMaker:
             yield game_log
 
     def _handle_connect(self, client_id, username):
+        """Handle the connect event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            username: Player username from the client or log.
+        """
         if self._client_id_to_username.get(client_id) != username:
             self._batch_add_client_id = client_id
 
@@ -1225,9 +1605,19 @@ class IndividualGameLogMaker:
         self._username_to_client_id[username] = client_id
 
     def _handle_disconnect(self, client_id):
+        """Handle the disconnect event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+        """
         self._delayed_calls.append([self._handle_disconnect__delayed, [client_id]])
 
     def _handle_disconnect__delayed(self, client_id):
+        """Handle the disconnect delayed event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+        """
         if self._client_id_to_username.get(client_id):
             self._batch_remove_client_id = client_id
 
@@ -1242,6 +1632,12 @@ class IndividualGameLogMaker:
             print(self._username_to_client_id)
 
     def _handle_command_to_client(self, client_ids, commands):
+        """Handle the command to client event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            commands: Decoded command batch to translate or process.
+        """
         for command in commands:
             try:
                 handler = self._commands_to_client_handlers.get(command[0])
@@ -1251,50 +1647,127 @@ class IndividualGameLogMaker:
                 traceback.print_exc()
 
     def _handle_command_to_client__set_game_board_cell(self, client_ids, command):
+        """Handle the command to client set game board cell event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._batch_game_id = self._client_id_to_game_id[client_ids[0]]
 
     def _handle_command_to_client__set_score_sheet_cell(self, client_ids, command):
+        """Handle the command to client set score sheet cell event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._batch_game_id = self._client_id_to_game_id[client_ids[0]]
 
     def _handle_command_to_client__set_score_sheet(self, client_ids, command):
+        """Handle the command to client set score sheet event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._batch_game_id = self._client_id_to_game_id[client_ids[0]]
 
     def _handle_command_to_client__set_game_player_join(self, client_ids, command):
+        """Handle the command to client set game player join event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[3])
 
     def _handle_command_to_client__set_game_player_rejoin(self, client_ids, command):
+        """Handle the command to client set game player rejoin event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[3])
 
     def _handle_command_to_client__set_game_player_leave(self, client_ids, command):
+        """Handle the command to client set game player leave event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._remove_client_id_from_game(command[3])
 
     def _handle_command_to_client__set_game_watcher_client_id(self, client_ids, command):
+        """Handle the command to client set game watcher client id event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[2])
 
     def _handle_command_to_client__return_watcher_to_lobby(self, client_ids, command):
+        """Handle the command to client return watcher to lobby event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._remove_client_id_from_game(command[2])
 
     def _handle_command_to_client__set_tile(self, client_ids, command):
+        """Handle the command to client set tile event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._batch_game_id = self._client_id_to_game_id[client_ids[0]]
 
     def _handle_command_to_client__set_game_player_client_id(self, client_ids, command):
+        """Handle the command to client set game player client id event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         if command[3] is None:
             self._remove_player_id_from_game(command[1], command[2])
         else:
             self._add_client_id_to_game(command[1], command[3])
 
     def _add_client_id_to_game(self, game_id, client_id):
+        """Add client id to game.
+
+        Args:
+            game_id: Public game id.
+            client_id: Legacy client id from the log or socket protocol.
+        """
         self._client_id_to_game_id[client_id] = game_id
 
         self._batch_game_id = game_id
 
     def _remove_client_id_from_game(self, client_id):
+        """Remove client id from game.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+        """
         if client_id in self._client_id_to_game_id:
             self._batch_game_id = self._client_id_to_game_id[client_id]
 
             del self._client_id_to_game_id[client_id]
 
     def _remove_player_id_from_game(self, game_id, player_id):
+        """Remove player id from game.
+
+        Args:
+            game_id: Public game id.
+            player_id: Player seat index within the game.
+        """
         client_id = self._username_to_client_id[
             self._game_id_to_game_log[game_id].player_id_to_username[player_id]
         ]
@@ -1305,6 +1778,12 @@ class IndividualGameLogMaker:
             del self._client_id_to_game_id[client_id]
 
     def _handle_command_to_server(self, client_id, command):
+        """Handle the command to server event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            command: Decoded command payload.
+        """
         try:
             handler = self._commands_to_server_handlers.get(command[0])
             if handler:
@@ -1313,6 +1792,12 @@ class IndividualGameLogMaker:
             traceback.print_exc()
 
     def _handle_command_to_server__do_game_action(self, client_id, command):
+        """Handle the command to server do game action event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            command: Decoded command payload.
+        """
         game_id = self._client_id_to_game_id.get(client_id)
 
         if game_id:
@@ -1323,9 +1808,19 @@ class IndividualGameLogMaker:
                 self._batch_game_id = game_id
 
     def _handle_game_expired(self, game_id):
+        """Handle the game expired event.
+
+        Args:
+            game_id: Public game id.
+        """
         self._batch_destroy_game_ids.append(game_id)
 
     def _handle_log(self, entry):
+        """Handle the log event.
+
+        Args:
+            entry: Decoded structured log entry.
+        """
         game_id = entry["external-game-id"] if "external-game-id" in entry else entry["game-id"]
         internal_game_id = entry["game-id"]
 
@@ -1348,6 +1843,7 @@ class IndividualGameLogMaker:
             game_log.username_to_player_id[username] = player_id
 
     def _handle_blank_line(self):
+        """Handle the blank line event."""
         if self._delayed_calls:
             for func, args in self._delayed_calls:
                 func(*args)
@@ -1358,6 +1854,12 @@ class IndividualGameLogMaker:
         self._batch = []
 
     def _batch_completed(self, batch_line_number, batch):
+        """Batch completed.
+
+        Args:
+            batch_line_number: Line number for the completed log batch.
+            batch: Raw log lines in the completed batch.
+        """
         if self._batch_add_client_id:
             for game_log in self._game_id_to_game_log.values():
                 game_log.line_number_to_batch[batch_line_number] = batch
@@ -1390,7 +1892,15 @@ class IndividualGameLogMaker:
 
 
 class IndividualGameLog:
+    """Store batches that belong to one reconstructed game log."""
+
     def __init__(self, log_timestamp, internal_game_id):
+        """Initialize storage for one extracted game log.
+
+        Args:
+            log_timestamp: Timestamp identifying the source log file.
+            internal_game_id: Internal game number within a log file.
+        """
         self.log_timestamp = log_timestamp
         self.internal_game_id = internal_game_id
 
@@ -1400,6 +1910,11 @@ class IndividualGameLog:
         self.line_number_to_batch = {}
 
     def make_game_log_file(self, filename):
+        """Make game log file.
+
+        Args:
+            filename: Path to read from or write to.
+        """
         with open(filename, "w") as f:
             for line_number, batch in sorted(self.line_number_to_batch.items()):
                 f.write("--- batch line number: " + str(line_number) + "\n")
@@ -1408,6 +1923,11 @@ class IndividualGameLog:
 
 
 def test_individual_game_log(output_dir):
+    """Test individual game log.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     log_timestamp = 1432798259
 
     for selected_log_timestamp, filename in util.get_log_file_filenames(
@@ -1443,6 +1963,12 @@ def test_individual_game_log(output_dir):
 
 
 def _test_individual_game_log__output_game_file(output_dir, game):
+    """Test individual game log output game file.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+        game: Game or game-like object being updated.
+    """
     with open(
         os.path.join(output_dir, f"{game.log_timestamp}_{game.internal_game_id:05d}.json"),
         "w",
@@ -1457,6 +1983,11 @@ def _test_individual_game_log__output_game_file(output_dir, game):
 
 
 def output_sync_logs_for_all_unsynchronized_games(output_dir):
+    """Output sync logs for all unsynchronized games.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     for log_timestamp, filename in util.get_log_file_filenames("py", begin=1408905413):
         print(filename)
 
@@ -1464,6 +1995,11 @@ def output_sync_logs_for_all_unsynchronized_games(output_dir):
 
 
 def report_on_sync_logs(output_dir):
+    """Report on sync logs.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     regex = re.compile(r"^(\d+)_0*(\d+)_0*(\d+)_sync_log.txt$")
 
     sync_logs_with_fully_unknown_tile_racks = []
@@ -1505,6 +2041,12 @@ def report_on_sync_logs(output_dir):
 
 
 def make_individual_game_logs_for_each_sync_log(input_dir, output_dir):
+    """Make individual game logs for each sync log.
+
+    Args:
+        input_dir: Directory containing generated or replay input files.
+        output_dir: Directory where generated artifacts should be written.
+    """
     regex = re.compile(r"^(\d+)_0*(\d+)_0*(\d+)_sync_log.txt$")
 
     log_timestamp_to_internal_game_ids = collections.defaultdict(set)
@@ -1536,6 +2078,12 @@ def make_individual_game_logs_for_each_sync_log(input_dir, output_dir):
 
 
 def run_all_game_logs_with_tile_bag_tweaks(input_dir, output_dir):
+    """Run all game logs with tile bag tweaks.
+
+    Args:
+        input_dir: Directory containing generated or replay input files.
+        output_dir: Directory where generated artifacts should be written.
+    """
     for log_timestamp, internal_game_id in sorted(Game.tile_bag_tweaks.keys()):
         filename = os.path.join(input_dir, f"{log_timestamp}_{internal_game_id:05d}.txt")
 
@@ -1543,6 +2091,12 @@ def run_all_game_logs_with_tile_bag_tweaks(input_dir, output_dir):
 
 
 def verbosely_compare_individual_game_logs_with_tile_bag_tweaks(input_dir, output_dir):
+    """Verbosely compare individual game logs with tile bag tweaks.
+
+    Args:
+        input_dir: Directory containing generated or replay input files.
+        output_dir: Directory where generated artifacts should be written.
+    """
     for log_timestamp, internal_game_id in sorted(Game.tile_bag_tweaks.keys()):
         filename = os.path.join(
             output_dir,
@@ -1559,6 +2113,14 @@ def verbosely_compare_individual_game_logs_with_tile_bag_tweaks(input_dir, outpu
 
 
 def verbosely_compare_individual_game_log(log_timestamp, internal_game_id, input_dir, output_dir):
+    """Verbosely compare individual game log.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+        internal_game_id: Internal game number within a log file.
+        input_dir: Directory containing generated or replay input files.
+        output_dir: Directory where generated artifacts should be written.
+    """
     filename = os.path.join(input_dir, f"{log_timestamp}_{internal_game_id:05d}.txt")
 
     with util.open_possibly_gzipped_file(filename) as file:
@@ -1582,6 +2144,13 @@ def verbosely_compare_individual_game_log(log_timestamp, internal_game_id, input
 
 
 def _generate_sync_logs(log_timestamp, filename, output_dir):
+    """Generate sync logs.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+        filename: Path to read from or write to.
+        output_dir: Directory where generated artifacts should be written.
+    """
     with util.open_possibly_gzipped_file(filename) as file:
         log_processor = LogProcessor(log_timestamp, file)
 
@@ -1610,6 +2179,11 @@ def _generate_sync_logs(log_timestamp, filename, output_dir):
 
 
 def output_server_game_files_for_all_in_progress_games(output_dir):
+    """Output server game files for all in progress games.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     log_file_filenames = util.get_log_file_filenames("py", begin=1408905413)
     last_log_timestamp = log_file_filenames[-1][0]
 
@@ -1640,6 +2214,11 @@ def output_server_game_files_for_all_in_progress_games(output_dir):
 
 
 def output_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir):
+    """Output first merge bonuses and final scores of all completed games.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     received_bonus_id = enums.GameHistoryMessages.ReceivedBonus.value
 
     mode_to_game_data = collections.defaultdict(list)
@@ -1679,6 +2258,11 @@ def output_first_merge_bonuses_and_final_scores_of_all_completed_games(output_di
 
 
 def print_table(table):
+    """Print table.
+
+    Args:
+        table: Rows to print as a fixed-width table.
+    """
     column_lengths = [max(map(len, column)) for column in zip(*table, strict=False)]
     for row in table:
         print(
@@ -1690,6 +2274,14 @@ def print_table(table):
 
 
 def get_player_id_to_ranking(score):
+    """Get player id to ranking.
+
+    Args:
+        score: Score list used to rank players.
+
+    Returns:
+        Mapping from player id to final ranking, with ties sharing a rank.
+    """
     player_id_to_ranking = {}
     last_amount = None
     last_ranking = None
@@ -1703,6 +2295,11 @@ def get_player_id_to_ranking(score):
 
 
 def report_on_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir):
+    """Report on first merge bonuses and final scores of all completed games.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     with open(
         os.path.join(
             output_dir,
@@ -1778,6 +2375,11 @@ def report_on_first_merge_bonuses_and_final_scores_of_all_completed_games(output
 
 
 def report_on_player_ranking_distribution(output_dir):
+    """Report on player ranking distribution.
+
+    Args:
+        output_dir: Directory where generated artifacts should be written.
+    """
     with open(
         os.path.join(
             output_dir,
@@ -1807,6 +2409,13 @@ def report_on_player_ranking_distribution(output_dir):
 
 
 def make_individual_game_log(log_timestamp, internal_game_id, output_dir):
+    """Make individual game log.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+        internal_game_id: Internal game number within a log file.
+        output_dir: Directory where generated artifacts should be written.
+    """
     for selected_log_timestamp, filename in util.get_log_file_filenames(
         "py", begin=log_timestamp, end=log_timestamp
     ):
@@ -1825,6 +2434,13 @@ def make_individual_game_log(log_timestamp, internal_game_id, output_dir):
 
 
 def output_server_game_file_for_game(log_timestamp, internal_game_id, output_dir):
+    """Output server game file for game.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+        internal_game_id: Internal game number within a log file.
+        output_dir: Directory where generated artifacts should be written.
+    """
     for selected_log_timestamp, filename in util.get_log_file_filenames(
         "py", begin=log_timestamp, end=log_timestamp
     ):
@@ -1866,6 +2482,12 @@ game_board_string_spacer = "            "
 
 
 def make_acquire2_game_test_files(log_timestamp, output_dir):
+    """Make acquire2 game test files.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+        output_dir: Directory where generated artifacts should be written.
+    """
     for _, filename in util.get_log_file_filenames("py", begin=log_timestamp, end=log_timestamp):
         with util.open_possibly_gzipped_file(filename) as file:
             os.makedirs(os.path.join(output_dir, str(log_timestamp)), exist_ok=True)
@@ -2017,6 +2639,17 @@ def make_acquire2_game_test_files(log_timestamp, output_dir):
 
 
 def to_parameter_strings(server_game, player_id, game_action, parameters):
+    """Convert data to parameter strings.
+
+    Args:
+        server_game: Recreated server game used for formatting or comparison.
+        player_id: Player seat index within the game.
+        game_action: Game action enum for the current move.
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Acquire2-compatible parameter strings for the action.
+    """
     strings = []
 
     if game_action == enums.GameActions.PlayTile:
@@ -2040,14 +2673,38 @@ def to_parameter_strings(server_game, player_id, game_action, parameters):
 
 
 def to_tile_string(coordinates):
+    """Convert data to tile string.
+
+    Args:
+        coordinates: Board coordinates as an `(x, y)` tuple.
+
+    Returns:
+        Human-readable tile coordinate string.
+    """
     return str(coordinates[0] + 1) + string.ascii_uppercase[coordinates[1]]
 
 
 def to_tile_int(coordinates):
+    """Convert data to tile int.
+
+    Args:
+        coordinates: Board coordinates as an `(x, y)` tuple.
+
+    Returns:
+        Acquire2 tile integer for the coordinates.
+    """
     return coordinates[0] * 9 + coordinates[1]
 
 
 def get_game_board_lines(game_board):
+    """Get game board lines.
+
+    Args:
+        game_board: Board matrix to format.
+
+    Returns:
+        Rendered game-board text lines.
+    """
     lines = []
 
     for y in range(9):
@@ -2062,6 +2719,16 @@ def get_game_board_lines(game_board):
 
 
 def get_score_board_lines(score_board, turn_player_id, move_player_id):
+    """Get score board lines.
+
+    Args:
+        score_board: Score sheet data to format.
+        turn_player_id: Player id whose turn is active.
+        move_player_id: Player id associated with the rendered move.
+
+    Returns:
+        Rendered score-board text lines.
+    """
     lines = []
 
     lines.append(format_score_board_line(["P", "L", "T", "A", "F", "W", "C", "I", "Cash", "Net"]))
@@ -2092,6 +2759,14 @@ def get_score_board_lines(score_board, turn_player_id, move_player_id):
 
 
 def format_score_board_line(entries):
+    """Format score board line.
+
+    Args:
+        entries: Scoreboard entries to format into fixed-width columns.
+
+    Returns:
+        One fixed-width score-board line.
+    """
     line_parts = []
 
     for index, entry in enumerate(entries):
@@ -2104,6 +2779,15 @@ def format_score_board_line(entries):
 
 
 def get_game_board_lines_next_to_score_board_lines(game_board_lines, score_board_lines):
+    """Get game board lines next to score board lines.
+
+    Args:
+        game_board_lines: Rendered game-board lines.
+        score_board_lines: Rendered score-board lines.
+
+    Returns:
+        Combined board and score-board text lines.
+    """
     lines = []
 
     for i in range(max(len(game_board_lines), len(score_board_lines))):
@@ -2120,6 +2804,14 @@ def get_game_board_lines_next_to_score_board_lines(game_board_lines, score_board
 
 
 def get_tile_rack_string(tiles):
+    """Get tile rack string.
+
+    Args:
+        tiles: Tile rack entries to render.
+
+    Returns:
+        Rendered tile rack string.
+    """
     return " ".join(
         to_tile_string(tile[0]) + "(" + game_board_type_to_character[tile[1]] + ")"
         if tile
@@ -2129,6 +2821,14 @@ def get_tile_rack_string(tiles):
 
 
 def get_next_action_string(action):
+    """Get next action string.
+
+    Args:
+        action: Prepared action object to describe.
+
+    Returns:
+        Rendered description of the next pending action.
+    """
     parts = [str(action.player_id), enums.GameActions(action.game_action_id).name]
 
     action_type = type(action)
@@ -2145,10 +2845,26 @@ def get_next_action_string(action):
 
 
 def ghmsh(parameters):
+    """Ghmsh.
+
+    Args:
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Rendered history-message suffix.
+    """
     return enums.GameHistoryMessages(parameters[0]).name
 
 
 def ghmsh_player_id(parameters):
+    """Ghmsh player id.
+
+    Args:
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Rendered history-message suffix with player name.
+    """
     return " ".join(
         [
             str(parameters[1]),
@@ -2158,6 +2874,14 @@ def ghmsh_player_id(parameters):
 
 
 def ghmsh_player_id_tile(parameters):
+    """Ghmsh player id tile.
+
+    Args:
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Rendered history-message suffix with player name and tile.
+    """
     return " ".join(
         [
             str(parameters[1]),
@@ -2168,6 +2892,14 @@ def ghmsh_player_id_tile(parameters):
 
 
 def ghmsh_player_id_type(parameters):
+    """Ghmsh player id type.
+
+    Args:
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Rendered history-message suffix with player name and chain type.
+    """
     return " ".join(
         [
             str(parameters[1]),
@@ -2179,6 +2911,14 @@ def ghmsh_player_id_type(parameters):
 
 
 def ghmsh_merged_chains(parameters):
+    """Ghmsh merged chains.
+
+    Args:
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Rendered history-message suffix for a merger.
+    """
     return " ".join(
         [
             str(parameters[1]),
@@ -2189,6 +2929,14 @@ def ghmsh_merged_chains(parameters):
 
 
 def ghmsh_purchased_shares(parameters):
+    """Ghmsh purchased shares.
+
+    Args:
+        parameters: Action-specific parameter values.
+
+    Returns:
+        Rendered history-message suffix for share purchases.
+    """
     return " ".join(
         [
             str(parameters[1]),
@@ -2224,6 +2972,15 @@ game_history_message_string_handlers = {
 
 
 def get_game_history_message_string(username_to_player_id, game_history_message):
+    """Get game history message string.
+
+    Args:
+        username_to_player_id: Mapping from usernames to player ids for the game.
+        game_history_message: Game-history message payload to render.
+
+    Returns:
+        Human-readable game-history message.
+    """
     if isinstance(game_history_message[1], str):
         game_history_message = list(game_history_message)
         game_history_message[1] = username_to_player_id[game_history_message[1]]
@@ -2232,7 +2989,15 @@ def get_game_history_message_string(username_to_player_id, game_history_message)
 
 
 class ChatMessageProcessor:
+    """Extract printable chat messages from legacy logs."""
+
     def __init__(self, log_timestamp, file):
+        """Initialize state for extracting chat messages from one log.
+
+        Args:
+            log_timestamp: Timestamp identifying the source log file.
+            file: Open text file or file-like object to read.
+        """
         self._client_id_to_username = {}
         self._client_id_to_game_id = {}
 
@@ -2268,18 +3033,36 @@ class ChatMessageProcessor:
         self._time = None
 
     def go(self):
+        """Go."""
         for line_type, _, _, parse_line_data in self._log_parser.go():
             handler = self._line_type_to_handler.get(line_type)
             if handler:
                 handler(*parse_line_data)
 
     def _handle_time(self, time):
+        """Handle the time event.
+
+        Args:
+            time: Parsed event timestamp.
+        """
         self._time = time
 
     def _handle_connect(self, client_id, username):
+        """Handle the connect event.
+
+        Args:
+            client_id: Legacy client id from the log or socket protocol.
+            username: Player username from the client or log.
+        """
         self._client_id_to_username[client_id] = username
 
     def _handle_command_to_client(self, client_ids, commands):
+        """Handle the command to client event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            commands: Decoded command batch to translate or process.
+        """
         for command in commands:
             try:
                 handler = self._commands_to_client_handlers.get(command[0])
@@ -2289,28 +3072,70 @@ class ChatMessageProcessor:
                 traceback.print_exc()
 
     def _handle_command_to_client__set_game_player_join(self, client_ids, command):
+        """Handle the command to client set game player join event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[3])
 
     def _handle_command_to_client__set_game_player_rejoin(self, client_ids, command):
+        """Handle the command to client set game player rejoin event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[3])
 
     def _handle_command_to_client__set_game_watcher_client_id(self, client_ids, command):
+        """Handle the command to client set game watcher client id event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         self._add_client_id_to_game(command[1], command[2])
 
     def _handle_command_to_client__set_game_player_client_id(self, client_ids, command):
+        """Handle the command to client set game player client id event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         if command[3] is not None:
             self._add_client_id_to_game(command[1], command[3])
 
     def _add_client_id_to_game(self, game_id, client_id):
+        """Add client id to game.
+
+        Args:
+            game_id: Public game id.
+            client_id: Legacy client id from the log or socket protocol.
+        """
         self._client_id_to_game_id[client_id] = game_id
 
     def _handle_command_to_client__add_global_chat_message(self, client_ids, command):
+        """Handle the command to client add global chat message event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id = command[1]
         username = self._client_id_to_username[client_id]
         chat_message = command[2]
         print(self._time, "GLOBAL", username, "->", chat_message)
 
     def _handle_command_to_client__add_game_chat_message(self, client_ids, command):
+        """Handle the command to client add game chat message event.
+
+        Args:
+            client_ids: Client ids that receive or are associated with the command.
+            command: Decoded command payload.
+        """
         client_id = command[1]
         username = self._client_id_to_username[client_id]
         game_id = self._client_id_to_game_id[client_id]
@@ -2319,6 +3144,11 @@ class ChatMessageProcessor:
 
 
 def output_chat_messages(log_timestamp):
+    """Output chat messages.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+    """
     for selected_log_timestamp, filename in util.get_log_file_filenames(
         "py", begin=log_timestamp, end=log_timestamp
     ):
@@ -2328,6 +3158,11 @@ def output_chat_messages(log_timestamp):
 
 
 def compare_log_usernames_with_database_usernames(log_timestamp):
+    """Compare log usernames with database usernames.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+    """
     query_for_game_players = sqlalchemy.sql.text(
         """
         select game_player.player_index as player_id, user.name as username
@@ -2371,6 +3206,7 @@ def compare_log_usernames_with_database_usernames(log_timestamp):
 
 
 def output_log_file_filenames_in_reverse_size_order():
+    """Output log file filenames in reverse size order."""
     log_file_data = []
     for log_timestamp, filename in util.get_log_file_filenames("py", begin=1408905413):
         file_size = os.stat(filename).st_size
@@ -2386,6 +3222,7 @@ def output_log_file_filenames_in_reverse_size_order():
 
 
 def output_username_to_user_id():
+    """Output username to user id."""
     re_log_timestamp = re.compile(r"^    # log_timestamp: (?P<timestamp>\d+)$")
 
     print("username_to_user_id = {")
@@ -2456,6 +3293,14 @@ def output_username_to_user_id():
 
 
 def is_ascii(string):
+    """Return whether is ascii.
+
+    Args:
+        string: String to inspect.
+
+    Returns:
+        `True` when the string contains only ASCII characters.
+    """
     return all(32 <= ord(c) <= 126 for c in string)
 
 
@@ -2468,6 +3313,15 @@ log_timestamp_and_username_to_correct_username = {
 
 
 def get_actual_username(log_timestamp, username):
+    """Get actual username.
+
+    Args:
+        log_timestamp: Timestamp identifying the source log file.
+        username: Player username from the client or log.
+
+    Returns:
+        Canonical historical username for the log timestamp.
+    """
     username = log_timestamp_and_username_to_correct_username.get(
         (log_timestamp, username), username
     )
@@ -2477,6 +3331,7 @@ def get_actual_username(log_timestamp, username):
 
 
 def punycode_non_ascii_usernames_in_the_database():
+    """Punycode non ascii usernames in the database."""
     query_for_user_names = sqlalchemy.sql.text(
         """
         select user_id, name
@@ -2499,6 +3354,7 @@ def punycode_non_ascii_usernames_in_the_database():
 
 
 def main():
+    """Run the module command-line entry point."""
     output_dir = "/tmp/tim/acquire/gameTestFiles"
     output_dir + "/logs"
 
