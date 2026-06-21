@@ -82,11 +82,11 @@ Status: planned.
 Phase 5 will be completed as a sequence of focused PRs so each runtime boundary
 change can be reviewed and validated independently.
 
-1. Runtime boundary inventory. In progress. Document every Node-owned HTTP endpoint and
+1. Runtime boundary inventory. Complete. Document every Node-owned HTTP endpoint and
    SockJS message path, map each behavior to the existing Python equivalent or a
    missing Python implementation, and add any missing characterization tests
    before changing runtime code.
-2. Move Node-owned HTTP endpoints to Python. Implement Python equivalents for
+2. Move Node-owned HTTP endpoints to Python. In progress. Implement Python equivalents for
    non-websocket HTTP routes currently served by `server/server.js`, keep the
    Node gateway running during the transition, and prove existing browser flows
    still work through integration and e2e coverage.
