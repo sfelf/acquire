@@ -16,6 +16,7 @@ import re
 import string
 import sys
 import traceback
+from collections.abc import Sequence
 
 import enums
 import orm
@@ -30,13 +31,13 @@ import server
 class Enums:
     """Manage historical enum translations for old log timestamps."""
 
-    lookups = {
+    lookups: dict[str, list[str]] = {
         "CommandsToClient": list(enums.CommandsToClient.__members__.keys())
         + ["SetGamePlayerUsername", "SetGamePlayerClientId"],
         "Errors": list(enums.Errors.__members__.keys()),
     }
 
-    _lookups_changes = {
+    _lookups_changes: dict[int, dict[str, list[str]]] = {
         1417176502: {
             "CommandsToClient": [
                 "FatalError",
@@ -72,10 +73,10 @@ class Enums:
         },
     }
 
-    _translations = {}
+    _translations: dict[int, dict[str, dict[int, int]]] = {}
 
     @staticmethod
-    def initialize():
+    def initialize() -> None:
         """Build historical enum translation tables."""
         for timestamp, changes in Enums._lookups_changes.items():
             translation = {}
@@ -90,7 +91,7 @@ class Enums:
             Enums._translations[timestamp] = translation
 
     @staticmethod
-    def get_translations(timestamp):
+    def get_translations(timestamp: int) -> dict[str, dict[int, int]]:
         """Return enum translations needed for a historical log timestamp.
 
         Older logs sometimes store enum indexes from earlier deployments. The
@@ -1922,7 +1923,7 @@ class IndividualGameLog:
                 f.write("\n")
 
 
-def test_individual_game_log(output_dir):
+def test_individual_game_log(output_dir: str) -> None:
     """Test individual game log.
 
     Args:
@@ -1962,7 +1963,7 @@ def test_individual_game_log(output_dir):
                 _test_individual_game_log__output_game_file(os.path.join(output_dir, "2"), game)
 
 
-def _test_individual_game_log__output_game_file(output_dir, game):
+def _test_individual_game_log__output_game_file(output_dir: str, game: "Game") -> None:
     """Test individual game log output game file.
 
     Args:
@@ -1982,7 +1983,7 @@ def _test_individual_game_log__output_game_file(output_dir, game):
             f.write("\n")
 
 
-def output_sync_logs_for_all_unsynchronized_games(output_dir):
+def output_sync_logs_for_all_unsynchronized_games(output_dir: str) -> None:
     """Output sync logs for all unsynchronized games.
 
     Args:
@@ -1994,7 +1995,7 @@ def output_sync_logs_for_all_unsynchronized_games(output_dir):
         _generate_sync_logs(log_timestamp, filename, output_dir)
 
 
-def report_on_sync_logs(output_dir):
+def report_on_sync_logs(output_dir: str) -> None:
     """Report on sync logs.
 
     Args:
@@ -2040,7 +2041,7 @@ def report_on_sync_logs(output_dir):
         print(log_timestamp, internal_game_id, num_tiles_on_board)
 
 
-def make_individual_game_logs_for_each_sync_log(input_dir, output_dir):
+def make_individual_game_logs_for_each_sync_log(input_dir: str, output_dir: str) -> None:
     """Make individual game logs for each sync log.
 
     Args:
@@ -2077,7 +2078,7 @@ def make_individual_game_logs_for_each_sync_log(input_dir, output_dir):
                         )
 
 
-def run_all_game_logs_with_tile_bag_tweaks(input_dir, output_dir):
+def run_all_game_logs_with_tile_bag_tweaks(input_dir: str, output_dir: str) -> None:
     """Run all game logs with tile bag tweaks.
 
     Args:
@@ -2090,7 +2091,9 @@ def run_all_game_logs_with_tile_bag_tweaks(input_dir, output_dir):
         _generate_sync_logs(log_timestamp, filename, output_dir)
 
 
-def verbosely_compare_individual_game_logs_with_tile_bag_tweaks(input_dir, output_dir):
+def verbosely_compare_individual_game_logs_with_tile_bag_tweaks(
+    input_dir: str, output_dir: str
+) -> None:
     """Verbosely compare individual game logs with tile bag tweaks.
 
     Args:
@@ -2112,7 +2115,9 @@ def verbosely_compare_individual_game_logs_with_tile_bag_tweaks(input_dir, outpu
             sys.stdout = old_stdout
 
 
-def verbosely_compare_individual_game_log(log_timestamp, internal_game_id, input_dir, output_dir):
+def verbosely_compare_individual_game_log(
+    log_timestamp: int, internal_game_id: int, input_dir: str, output_dir: str
+) -> None:
     """Verbosely compare individual game log.
 
     Args:
@@ -2143,7 +2148,7 @@ def verbosely_compare_individual_game_log(log_timestamp, internal_game_id, input
             print(*messages)
 
 
-def _generate_sync_logs(log_timestamp, filename, output_dir):
+def _generate_sync_logs(log_timestamp: int, filename: str, output_dir: str) -> None:
     """Generate sync logs.
 
     Args:
@@ -2178,7 +2183,7 @@ def _generate_sync_logs(log_timestamp, filename, output_dir):
             print(*messages)
 
 
-def output_server_game_files_for_all_in_progress_games(output_dir):
+def output_server_game_files_for_all_in_progress_games(output_dir: str) -> None:
     """Output server game files for all in progress games.
 
     Args:
@@ -2213,7 +2218,7 @@ def output_server_game_files_for_all_in_progress_games(output_dir):
                     print(filename)
 
 
-def output_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir):
+def output_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir: str) -> None:
     """Output first merge bonuses and final scores of all completed games.
 
     Args:
@@ -2257,7 +2262,7 @@ def output_first_merge_bonuses_and_final_scores_of_all_completed_games(output_di
         pickle.dump(dict(mode_to_game_data), f)
 
 
-def print_table(table):
+def print_table(table: Sequence[Sequence[str]]) -> None:
     """Print table.
 
     Args:
@@ -2273,7 +2278,7 @@ def print_table(table):
         )
 
 
-def get_player_id_to_ranking(score):
+def get_player_id_to_ranking(score: Sequence[int]) -> dict[int, int]:
     """Get player id to ranking.
 
     Args:
@@ -2294,7 +2299,9 @@ def get_player_id_to_ranking(score):
     return player_id_to_ranking
 
 
-def report_on_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir):
+def report_on_first_merge_bonuses_and_final_scores_of_all_completed_games(
+    output_dir: str,
+) -> None:
     """Report on first merge bonuses and final scores of all completed games.
 
     Args:
@@ -2374,7 +2381,7 @@ def report_on_first_merge_bonuses_and_final_scores_of_all_completed_games(output
         print()
 
 
-def report_on_player_ranking_distribution(output_dir):
+def report_on_player_ranking_distribution(output_dir: str) -> None:
     """Report on player ranking distribution.
 
     Args:
@@ -2408,7 +2415,7 @@ def report_on_player_ranking_distribution(output_dir):
         print()
 
 
-def make_individual_game_log(log_timestamp, internal_game_id, output_dir):
+def make_individual_game_log(log_timestamp: int, internal_game_id: int, output_dir: str) -> None:
     """Make individual game log.
 
     Args:
@@ -2433,7 +2440,9 @@ def make_individual_game_log(log_timestamp, internal_game_id, output_dir):
                     return
 
 
-def output_server_game_file_for_game(log_timestamp, internal_game_id, output_dir):
+def output_server_game_file_for_game(
+    log_timestamp: int, internal_game_id: int, output_dir: str
+) -> None:
     """Output server game file for game.
 
     Args:
@@ -2459,7 +2468,7 @@ def output_server_game_file_for_game(log_timestamp, internal_game_id, output_dir
                     break
 
 
-game_board_type_to_character = {
+game_board_type_to_character: dict[int, str] = {
     enums.GameBoardTypes.Luxor.value: "L",
     enums.GameBoardTypes.Tower.value: "T",
     enums.GameBoardTypes.American.value: "A",
@@ -2477,11 +2486,11 @@ game_board_type_to_character = {
     enums.GameBoardTypes.WillMergeChains.value: "m",
     enums.GameBoardTypes.CantPlayNow.value: "c",
 }
-score_board_column_widths = [1, 2, 2, 2, 2, 2, 2, 2, 4, 4]
-game_board_string_spacer = "            "
+score_board_column_widths: list[int] = [1, 2, 2, 2, 2, 2, 2, 2, 4, 4]
+game_board_string_spacer: str = "            "
 
 
-def make_acquire2_game_test_files(log_timestamp, output_dir):
+def make_acquire2_game_test_files(log_timestamp: int, output_dir: str) -> None:
     """Make acquire2 game test files.
 
     Args:
@@ -2672,7 +2681,7 @@ def to_parameter_strings(server_game, player_id, game_action, parameters):
     return strings
 
 
-def to_tile_string(coordinates):
+def to_tile_string(coordinates: tuple[int, int]) -> str:
     """Convert data to tile string.
 
     Args:
@@ -2684,7 +2693,7 @@ def to_tile_string(coordinates):
     return str(coordinates[0] + 1) + string.ascii_uppercase[coordinates[1]]
 
 
-def to_tile_int(coordinates):
+def to_tile_int(coordinates: tuple[int, int]) -> int:
     """Convert data to tile int.
 
     Args:
@@ -2696,7 +2705,7 @@ def to_tile_int(coordinates):
     return coordinates[0] * 9 + coordinates[1]
 
 
-def get_game_board_lines(game_board):
+def get_game_board_lines(game_board: server.GameBoard) -> list[str]:
     """Get game board lines.
 
     Args:
@@ -2718,7 +2727,9 @@ def get_game_board_lines(game_board):
     return lines
 
 
-def get_score_board_lines(score_board, turn_player_id, move_player_id):
+def get_score_board_lines(
+    score_board: server.ScoreSheet, turn_player_id: int | None, move_player_id: int | None
+) -> list[str]:
     """Get score board lines.
 
     Args:
@@ -2758,7 +2769,7 @@ def get_score_board_lines(score_board, turn_player_id, move_player_id):
     return lines
 
 
-def format_score_board_line(entries):
+def format_score_board_line(entries: Sequence[str]) -> str:
     """Format score board line.
 
     Args:
@@ -2778,7 +2789,9 @@ def format_score_board_line(entries):
     return " ".join(line_parts)
 
 
-def get_game_board_lines_next_to_score_board_lines(game_board_lines, score_board_lines):
+def get_game_board_lines_next_to_score_board_lines(
+    game_board_lines: Sequence[str], score_board_lines: Sequence[str]
+) -> list[str]:
     """Get game board lines next to score board lines.
 
     Args:
@@ -2803,7 +2816,7 @@ def get_game_board_lines_next_to_score_board_lines(game_board_lines, score_board
     return lines
 
 
-def get_tile_rack_string(tiles):
+def get_tile_rack_string(tiles: Sequence[tuple[tuple[int, int], int] | None]) -> str:
     """Get tile rack string.
 
     Args:
@@ -2820,7 +2833,7 @@ def get_tile_rack_string(tiles):
     )
 
 
-def get_next_action_string(action):
+def get_next_action_string(action: server.Action) -> str:
     """Get next action string.
 
     Args:
@@ -3143,7 +3156,7 @@ class ChatMessageProcessor:
         print(self._time, "GAME#" + str(game_id), username, "->", chat_message)
 
 
-def output_chat_messages(log_timestamp):
+def output_chat_messages(log_timestamp: int) -> None:
     """Output chat messages.
 
     Args:
@@ -3157,7 +3170,7 @@ def output_chat_messages(log_timestamp):
             chat_message_processor.go()
 
 
-def compare_log_usernames_with_database_usernames(log_timestamp):
+def compare_log_usernames_with_database_usernames(log_timestamp: int) -> None:
     """Compare log usernames with database usernames.
 
     Args:
@@ -3205,7 +3218,7 @@ def compare_log_usernames_with_database_usernames(log_timestamp):
                             )
 
 
-def output_log_file_filenames_in_reverse_size_order():
+def output_log_file_filenames_in_reverse_size_order() -> None:
     """Output log file filenames in reverse size order."""
     log_file_data = []
     for log_timestamp, filename in util.get_log_file_filenames("py", begin=1408905413):
@@ -3221,7 +3234,7 @@ def output_log_file_filenames_in_reverse_size_order():
         print(filename[1])
 
 
-def output_username_to_user_id():
+def output_username_to_user_id() -> None:
     """Output username to user id."""
     re_log_timestamp = re.compile(r"^    # log_timestamp: (?P<timestamp>\d+)$")
 
@@ -3292,7 +3305,7 @@ def output_username_to_user_id():
     print("}")
 
 
-def is_ascii(string):
+def is_ascii(string: str) -> bool:
     """Return whether is ascii.
 
     Args:
@@ -3304,7 +3317,7 @@ def is_ascii(string):
     return all(32 <= ord(c) <= 126 for c in string)
 
 
-log_timestamp_and_username_to_correct_username = {
+log_timestamp_and_username_to_correct_username: dict[tuple[int, str], str] = {
     # requested name changes
     (1418805302, "Temp"): "Mr Brain",
     (1511554298, "ranger"): "Ranger",
@@ -3312,7 +3325,7 @@ log_timestamp_and_username_to_correct_username = {
 }
 
 
-def get_actual_username(log_timestamp, username):
+def get_actual_username(log_timestamp: int, username: str) -> str:
     """Get actual username.
 
     Args:
@@ -3330,7 +3343,7 @@ def get_actual_username(log_timestamp, username):
     return username
 
 
-def punycode_non_ascii_usernames_in_the_database():
+def punycode_non_ascii_usernames_in_the_database() -> None:
     """Punycode non ascii usernames in the database."""
     query_for_user_names = sqlalchemy.sql.text(
         """
@@ -3353,7 +3366,7 @@ def punycode_non_ascii_usernames_in_the_database():
                 )
 
 
-def main():
+def main() -> None:
     """Run the module command-line entry point."""
     output_dir = "/tmp/tim/acquire/gameTestFiles"
     output_dir + "/logs"

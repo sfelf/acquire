@@ -8,21 +8,25 @@ import glob
 import inspect
 import re
 import sys
+from collections.abc import Sequence
 
 import enums
 
+EnumLookup = collections.OrderedDict[str, int]
+EnumLookups = dict[str, EnumLookup]
 
-def get_server_enums():
+
+def get_server_enums() -> EnumLookups:
     """Return enum values declared by the Python server.
 
     Returns:
         Ordered mappings from enum class name to member name/value pairs.
     """
-    lookups = {}
+    lookups: EnumLookups = {}
 
     for class_name in [obj[0] for obj in inspect.getmembers(enums) if inspect.isclass(obj[1])]:
         class_obj = getattr(enums, class_name)
-        lookup = collections.OrderedDict()
+        lookup: EnumLookup = collections.OrderedDict()
         for name, member in class_obj.__members__.items():
             lookup[name] = member.value
         lookups[class_name] = lookup
@@ -30,7 +34,7 @@ def get_server_enums():
     return lookups
 
 
-def get_pubsub_enums():
+def get_pubsub_enums() -> EnumLookup:
     """Return client PubSub enum values inferred from JavaScript sources.
 
     Server command names are reserved under the `Server_` prefix. Client-side
@@ -41,7 +45,7 @@ def get_pubsub_enums():
     Returns:
         Ordered PubSub member name/value pairs.
     """
-    lookup = collections.OrderedDict()
+    lookup: EnumLookup = collections.OrderedDict()
 
     for name, member in enums.CommandsToClient.__members__.items():
         lookup["Server_" + name] = member.value
@@ -66,7 +70,7 @@ def get_pubsub_enums():
     return lookup
 
 
-def get_all_enums():
+def get_all_enums() -> EnumLookups:
     """Return every enum mapping needed by client generation.
 
     Returns:
@@ -77,7 +81,7 @@ def get_all_enums():
     return lookups
 
 
-def generate_enums_js(mode):
+def generate_enums_js(mode: str) -> None:
     """Print a CommonJS enum module for the requested build mode.
 
     Development mode emits all Python and PubSub enums. Release mode scans the
@@ -123,7 +127,7 @@ def generate_enums_js(mode):
     print("};")
 
 
-def replace_enums(pathnames):
+def replace_enums(pathnames: Sequence[str]) -> None:
     """Inline Python enum references in generated JavaScript files.
 
     This mutates files in place and is intended for release output, not source

@@ -7,14 +7,18 @@ import gzip
 import os
 import os.path
 import re
+from collections.abc import Iterable
+from typing import TextIO
 
 import settings
 
-_log_type_to_log_file_filenames = {}
-re_timestamp_in_path = re.compile(r"([^/]*?)(\.gz)?$")
+_log_type_to_log_file_filenames: dict[str, list[tuple[int, str]]] = {}
+re_timestamp_in_path: re.Pattern[str] = re.compile(r"([^/]*?)(\.gz)?$")
 
 
-def get_log_file_filenames(log_type, begin=None, end=None):
+def get_log_file_filenames(
+    log_type: str, begin: int | None = None, end: int | None = None
+) -> list[tuple[int, str]]:
     """Return timestamped log filenames for a legacy log type.
 
     The configured path prefixes are combined with `log_type`, and filenames
@@ -49,19 +53,24 @@ def get_log_file_filenames(log_type, begin=None, end=None):
 
         _log_type_to_log_file_filenames[log_type] = timestamps_and_filenames
 
+    filtered_timestamps_and_filenames: Iterable[tuple[int, str]] = timestamps_and_filenames
     if begin:
-        timestamps_and_filenames = filter(lambda x: x[0] >= begin, timestamps_and_filenames)
+        filtered_timestamps_and_filenames = filter(
+            lambda x: x[0] >= begin, filtered_timestamps_and_filenames
+        )
 
     if end:
-        timestamps_and_filenames = filter(lambda x: x[0] <= end, timestamps_and_filenames)
+        filtered_timestamps_and_filenames = filter(
+            lambda x: x[0] <= end, filtered_timestamps_and_filenames
+        )
 
-    return sorted(timestamps_and_filenames)
+    return sorted(filtered_timestamps_and_filenames)
 
 
-re_gzip_filename = re.compile(r".*\.gz$")
+re_gzip_filename: re.Pattern[str] = re.compile(r".*\.gz$")
 
 
-def open_possibly_gzipped_file(filename):
+def open_possibly_gzipped_file(filename: str) -> TextIO:
     """Open a plain-text or gzip-compressed log file for reading.
 
     The caller owns the returned file object and should close it, usually by

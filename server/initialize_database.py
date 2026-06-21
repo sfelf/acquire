@@ -9,7 +9,7 @@ import subprocess
 import orm
 
 
-def main():
+def main() -> None:
     """Run the module command-line entry point."""
     mysql_database = os.environ.get("MYSQL_DATABASE", "acquire")
     mysql_root_password = os.environ.get("MYSQL_ROOT_PASSWORD", "root")
