@@ -2,9 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-
 from enums import GameStates, ScoreSheetIndexes
-
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 LOG_TIMESTAMP = 1780589302
@@ -49,17 +47,11 @@ def summarize_replayed_final_state(game):
         "state": game.state,
         "score": game.score,
         "board_rows": board_rows(game),
-        "score_sheet_players": game.score_sheet_players[
-            : len(game.player_id_to_username)
-        ],
+        "score_sheet_players": game.score_sheet_players[: len(game.player_id_to_username)],
         "score_sheet_chain_size": game.score_sheet_chain_size,
-        "initial_tile_racks": game.initial_tile_racks[
-            : len(game.player_id_to_username)
-        ],
+        "initial_tile_racks": game.initial_tile_racks[: len(game.player_id_to_username)],
         "final_tile_racks": game.tile_racks[: len(game.player_id_to_username)],
-        "additional_tile_rack_tiles": compact_sequence(
-            game.additional_tile_rack_tiles_order
-        ),
+        "additional_tile_rack_tiles": compact_sequence(game.additional_tile_rack_tiles_order),
         "actions": summarize_actions(game.actions),
         "history_by_user": {
             username: summarize_history(history)
@@ -115,9 +107,7 @@ def test_redacted_real_server_log_matches_final_state_golden(
 
     with log_path.open() as log_file:
         games = logs_to_games_without_database.LogProcessor(LOG_TIMESTAMP, log_file).go()
-        actual = json.loads(
-            json.dumps([summarize_replayed_final_state(game) for game in games])
-        )
+        actual = json.loads(json.dumps([summarize_replayed_final_state(game) for game in games]))
 
     with expected_path.open() as expected_file:
         expected = json.load(expected_file)
@@ -147,9 +137,7 @@ def test_sample_server_log_matches_final_state_golden(logs_to_games_without_data
 
     with log_path.open() as log_file:
         games = logs_to_games_without_database.LogProcessor(1700000000, log_file).go()
-        actual = json.loads(
-            json.dumps([summarize_replayed_final_state(game) for game in games])
-        )
+        actual = json.loads(json.dumps([summarize_replayed_final_state(game) for game in games]))
 
     with expected_path.open() as expected_file:
         expected = json.load(expected_file)

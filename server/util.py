@@ -2,6 +2,7 @@ import gzip
 import os
 import os.path
 import re
+
 import settings
 
 _log_type_to_log_file_filenames = {}
@@ -20,22 +21,19 @@ def get_log_file_filenames(log_type, begin=None, end=None):
             for filename in os.listdir(path):
                 filenames.append(os.path.join(path, filename))
 
-        timestamps_and_filenames = [
-            (int(re_timestamp_in_path.search(filename).group(1)), filename)
-            for filename in filenames
-        ]
+        timestamps_and_filenames = []
+        for filename in filenames:
+            match = re_timestamp_in_path.search(filename)
+            assert match is not None
+            timestamps_and_filenames.append((int(match.group(1)), filename))
 
         _log_type_to_log_file_filenames[log_type] = timestamps_and_filenames
 
     if begin:
-        timestamps_and_filenames = filter(
-            lambda x: x[0] >= begin, timestamps_and_filenames
-        )
+        timestamps_and_filenames = filter(lambda x: x[0] >= begin, timestamps_and_filenames)
 
     if end:
-        timestamps_and_filenames = filter(
-            lambda x: x[0] <= end, timestamps_and_filenames
-        )
+        timestamps_and_filenames = filter(lambda x: x[0] <= end, timestamps_and_filenames)
 
     return sorted(timestamps_and_filenames)
 
@@ -44,8 +42,5 @@ re_gzip_filename = re.compile(r".*\.gz$")
 
 
 def open_possibly_gzipped_file(filename):
-    if re_gzip_filename.match(filename):
-        f = gzip.open(filename, "rt")
-    else:
-        f = open(filename)
+    f = gzip.open(filename, "rt") if re_gzip_filename.match(filename) else open(filename)  # noqa: SIM115
     return f

@@ -2,9 +2,17 @@ import json
 import types
 
 import pytest
-import server
-from enums import CommandsToClient, GameActions, GameBoardTypes, GameHistoryMessages, GameModes, GameStates, ScoreSheetIndexes
+from enums import (
+    CommandsToClient,
+    GameActions,
+    GameBoardTypes,
+    GameHistoryMessages,
+    GameModes,
+    GameStates,
+    ScoreSheetIndexes,
+)
 
+import server
 
 pytestmark = pytest.mark.unit
 
@@ -82,8 +90,19 @@ def test_join_game_adds_player_position_tile_history_and_start_action():
 
     messages = flatten_pending(pending)
     assert [CommandsToClient.SetGamePlayerJoin.value, "game-1", 0, 10] in messages
-    assert [CommandsToClient.SetGameBoardCell.value, 3, 3, GameBoardTypes.NothingYet.value] in messages
-    assert [CommandsToClient.AddGameHistoryMessage.value, GameHistoryMessages.DrewPositionTile.value, 0, 3, 3] in messages
+    assert [
+        CommandsToClient.SetGameBoardCell.value,
+        3,
+        3,
+        GameBoardTypes.NothingYet.value,
+    ] in messages
+    assert [
+        CommandsToClient.AddGameHistoryMessage.value,
+        GameHistoryMessages.DrewPositionTile.value,
+        0,
+        3,
+        3,
+    ] in messages
     assert [CommandsToClient.SetGameAction.value, GameActions.StartGame.value, 0] in messages
 
 
@@ -297,7 +316,15 @@ def test_add_history_message_sends_private_string_message_to_connected_player():
     ]
     assert pending == [
         (
-            [[CommandsToClient.AddGameHistoryMessage.value, GameHistoryMessages.DrewPositionTile.value, 0, 1, 2]],
+            [
+                [
+                    CommandsToClient.AddGameHistoryMessage.value,
+                    GameHistoryMessages.DrewPositionTile.value,
+                    0,
+                    1,
+                    2,
+                ]
+            ],
             {10},
         )
     ]
@@ -312,9 +339,7 @@ def test_add_history_message_records_private_message_for_disconnected_player():
 
     game.add_history_message(GameHistoryMessages.DrewTile.value, 0, 1, 2, player_id=0)
 
-    assert game.history_messages == [
-        [0, [GameHistoryMessages.DrewTile.value, 0, 1, 2]]
-    ]
+    assert game.history_messages == [[0, [GameHistoryMessages.DrewTile.value, 0, 1, 2]]]
     assert pending == []
 
 
@@ -346,7 +371,9 @@ def test_do_game_action_ignores_wrong_player_or_action_id():
     game.actions = [action]
 
     game.do_game_action(RecordingClient(10, "alice", player_id=1), GameActions.PlayTile.value, [0])
-    game.do_game_action(RecordingClient(10, "alice", player_id=0), GameActions.PurchaseShares.value, [0])
+    game.do_game_action(
+        RecordingClient(10, "alice", player_id=0), GameActions.PurchaseShares.value, [0]
+    )
 
     assert action.execute_calls == []
     assert action.send_calls == []

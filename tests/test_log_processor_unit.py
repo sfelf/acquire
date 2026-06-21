@@ -5,7 +5,6 @@ import types
 import pytest
 from enums import CommandsToClient, CommandsToServer, GameBoardTypes, GameHistoryMessages
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -210,26 +209,37 @@ def test_log_processor_records_history_for_players_only(logs_to_games_without_da
     }
 
 
+def test_log_processor_prints_verbose_history_batches(logs_to_games_without_database, capsys):
+    processor = logs_to_games_without_database.LogProcessor(1700000000, io.StringIO(""), True)
+    game = make_game(logs_to_games_without_database)
+    attach_game(processor, game)
+
+    processor._handle_command_to_client__add_game_history_messages(
+        [20],
+        [
+            CommandsToClient.AddGameHistoryMessages.value,
+            [
+                [GameHistoryMessages.TurnBegan.value, 1],
+                [GameHistoryMessages.PlayedTile.value, 1, 3, 4],
+            ],
+        ],
+    )
+
+    output = capsys.readouterr().out
+    assert "TurnBegan" in output
+    assert "PlayedTile" in output
+
+
 def test_log_processor_tracks_tile_racks(logs_to_games_without_database):
     processor = make_processor(logs_to_games_without_database)
     game = make_game(logs_to_games_without_database)
     attach_game(processor, game)
 
-    processor._handle_command_to_client__set_tile(
-        [10], [CommandsToClient.SetTile.value, 0, 1, 2]
-    )
-    processor._handle_command_to_client__set_tile(
-        [10], [CommandsToClient.SetTile.value, 1, 3, 4]
-    )
-    processor._handle_command_to_client__set_tile(
-        [10], [CommandsToClient.SetTile.value, 0, 1, 2]
-    )
-    processor._handle_command_to_client__set_tile(
-        [10], [CommandsToClient.SetTile.value, 1, 5, 6]
-    )
-    processor._handle_command_to_client__remove_tile(
-        [10], [CommandsToClient.RemoveTile.value, 1]
-    )
+    processor._handle_command_to_client__set_tile([10], [CommandsToClient.SetTile.value, 0, 1, 2])
+    processor._handle_command_to_client__set_tile([10], [CommandsToClient.SetTile.value, 1, 3, 4])
+    processor._handle_command_to_client__set_tile([10], [CommandsToClient.SetTile.value, 0, 1, 2])
+    processor._handle_command_to_client__set_tile([10], [CommandsToClient.SetTile.value, 1, 5, 6])
+    processor._handle_command_to_client__remove_tile([10], [CommandsToClient.RemoveTile.value, 1])
 
     assert game.initial_tile_racks[0][:2] == [(1, 2), (3, 4)]
     assert game.tile_racks[0][:2] == [(1, 2), None]
@@ -486,9 +496,7 @@ def test_game_make_server_game_file_serializes_snapshot(
         [0, 0, 0, 0, 0, 0, 0, 60, 60, "bob", None, None],
     ]
     assert data["tile_racks"] == [[(0, 0)], [(1, 1)]]
-    assert data["actions"] == [
-        {"player_id": 0, "game_action_id": 1, "__name__": "SimpleNamespace"}
-    ]
+    assert data["actions"] == [{"player_id": 0, "game_action_id": 1, "__name__": "SimpleNamespace"}]
     assert data["log_time"] == 1700000000
     assert data["begin"] == 100
     assert data["end"] == 200

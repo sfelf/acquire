@@ -1,7 +1,7 @@
 import pytest
-import server
 from enums import CommandsToClient, GameBoardTypes, GameHistoryMessages
 
+import server
 
 pytestmark = pytest.mark.unit
 
@@ -35,10 +35,7 @@ class RecordingGame:
 
 
 def make_empty_board():
-    return [
-        [GameBoardTypes.Nothing.value for _y in range(9)]
-        for _x in range(12)
-    ]
+    return [[GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)]
 
 
 def make_tile_racks(game, rack):

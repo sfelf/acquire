@@ -1,12 +1,14 @@
 import inspect
-import orm
 import os
 import pickle
 import re
-import server
+
+import orm
 import sqlalchemy.sql
 
-server_dict = {x: y for x, y in inspect.getmembers(server)}
+import server
+
+server_dict = dict(inspect.getmembers(server))
 
 
 def recreate_game(server_, filename):
@@ -23,9 +25,7 @@ def recreate_game(server_, filename):
     game.num_players = game_data["num_players"]
     game.tile_bag = game_data["tile_bag"]
     game.turn_player_id = game_data["turn_player_id"]
-    game.turns_without_played_tiles_count = game_data[
-        "turns_without_played_tiles_count"
-    ]
+    game.turns_without_played_tiles_count = game_data["turns_without_played_tiles_count"]
     game.history_messages = game_data["history_messages"]
 
     game.add_pending_messages = server_.add_pending_messages
@@ -103,8 +103,8 @@ def recreate_some_games(server_):
         in_progress_game_files.values(), key=lambda x: (-x[0], x[1])
     )
 
-    for num_tiles_played_and_filenames in num_tiles_played_and_filenames[:5]:
-        num_tiles_played, filename = num_tiles_played_and_filenames
+    for num_tiles_played_and_filename in num_tiles_played_and_filenames[:5]:
+        num_tiles_played, filename = num_tiles_played_and_filename
         filename = input_dir + filename
         print(filename)
         recreate_game(server_, filename)

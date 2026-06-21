@@ -1,8 +1,8 @@
 import time
 
 import pytest
-import server
 
+import server
 
 pytestmark = pytest.mark.unit
 

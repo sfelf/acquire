@@ -11,7 +11,6 @@ import uuid
 
 import pytest
 import ujson
-
 from enums import (
     CommandsToClient,
     CommandsToServer,
@@ -21,7 +20,6 @@ from enums import (
     GameStates,
 )
 
-
 pytestmark = pytest.mark.e2e
 
 
@@ -30,7 +28,7 @@ class SockJSWebSocket:
         parsed_url = urllib.parse.urlparse(base_url)
         self.host = parsed_url.hostname or "127.0.0.1"
         self.port = parsed_url.port or 80
-        self.path = "/sockjs/000/%s/websocket" % uuid.uuid4().hex
+        self.path = f"/sockjs/000/{uuid.uuid4().hex}/websocket"
         self.socket = None
         self.timeout = timeout
         self.read_buffer = b""
@@ -41,7 +39,7 @@ class SockJSWebSocket:
             try:
                 self._connect()
                 return self
-            except (AssertionError, EOFError, OSError, socket.timeout):
+            except (TimeoutError, AssertionError, EOFError, OSError):
                 if self.socket:
                     self.socket.close()
                     self.socket = None
@@ -54,23 +52,21 @@ class SockJSWebSocket:
         self.socket = socket.create_connection((self.host, self.port), timeout=5)
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         request = (
-            "GET %s HTTP/1.1\r\n"
-            "Host: %s:%s\r\n"
+            f"GET {self.path} HTTP/1.1\r\n"
+            f"Host: {self.host}:{self.port}\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Key: %s\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
             "Sec-WebSocket-Version: 13\r\n"
             "\r\n"
-        ) % (self.path, self.host, self.port, key)
+        )
         self.socket.sendall(request.encode("ascii"))
         response = self._read_http_response()
         accept = base64.b64encode(
-            hashlib.sha1(
-                (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
-            ).digest()
+            hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
         ).decode("ascii")
         assert "101 Switching Protocols" in response
-        assert "sec-websocket-accept: %s" % accept.lower() in response.lower()
+        assert f"sec-websocket-accept: {accept.lower()}" in response.lower()
         assert self.read_frame() == "o"
 
     def __exit__(self, exc_type, exc, traceback):
@@ -95,7 +91,7 @@ class SockJSWebSocket:
         while len(data) < size:
             try:
                 chunk = self.socket.recv(size - len(data))
-            except socket.timeout:
+            except TimeoutError:
                 if deadline is not None and time.monotonic() < deadline:
                     continue
                 self.read_buffer = data + self.read_buffer
@@ -110,13 +106,9 @@ class SockJSWebSocket:
         opcode = header[0] & 0x0F
         payload_length = header[1] & 0x7F
         if payload_length == 126:
-            payload_length = struct.unpack(
-                "!H", self._read_exactly(2, deadline=deadline)
-            )[0]
+            payload_length = struct.unpack("!H", self._read_exactly(2, deadline=deadline))[0]
         elif payload_length == 127:
-            payload_length = struct.unpack(
-                "!Q", self._read_exactly(8, deadline=deadline)
-            )[0]
+            payload_length = struct.unpack("!Q", self._read_exactly(8, deadline=deadline))[0]
         payload = self._read_exactly(payload_length, deadline=deadline)
         if opcode == 8:
             raise EOFError("websocket closed")
@@ -133,9 +125,7 @@ class SockJSWebSocket:
             header = struct.pack("!BBH", first_byte, 0x80 | 126, len(payload))
         else:
             header = struct.pack("!BBQ", first_byte, 0x80 | 127, len(payload))
-        masked_payload = bytes(
-            byte ^ mask[index % 4] for index, byte in enumerate(payload)
-        )
+        masked_payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
         self.socket.sendall(header + mask + masked_payload)
 
     def send_message(self, message):
@@ -154,7 +144,7 @@ class SockJSWebSocket:
         while time.monotonic() < deadline:
             try:
                 frame = self.read_frame(deadline=deadline)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             if frame == "h":
                 continue
@@ -219,8 +209,8 @@ def test_legacy_gateway_accepts_report_error_posts(e2e_base_url):
 
 
 def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
-    username_1 = "e2e-%s" % uuid.uuid4().hex[:8]
-    username_2 = "e2e-%s" % uuid.uuid4().hex[:8]
+    username_1 = f"e2e-{uuid.uuid4().hex[:8]}"
+    username_2 = f"e2e-{uuid.uuid4().hex[:8]}"
 
     with SockJSWebSocket(e2e_base_url) as client_1:
         client_1.send_message(["VERSION", username_1, ""])
@@ -237,24 +227,21 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
             None,
         ] in login_messages
 
-        client_1.send_message(
-            [CommandsToServer.SendGlobalChatMessage.value, " hello from e2e "]
-        )
+        client_1.send_message([CommandsToServer.SendGlobalChatMessage.value, " hello from e2e "])
         assert [
             CommandsToClient.AddGlobalChatMessage.value,
             client_1_id,
             "hello from e2e",
         ] in client_1.read_messages(CommandsToClient.AddGlobalChatMessage.value)
 
-        client_1.send_message(
-            [CommandsToServer.CreateGame.value, GameModes.Singles.value, 2]
-        )
+        client_1.send_message([CommandsToServer.CreateGame.value, GameModes.Singles.value, 2])
         create_messages = client_1.read_messages(CommandsToClient.SetGameAction.value)
         created_game = next(
             message
             for message in create_messages
             if message[:1] == [CommandsToClient.SetGameState.value]
-            and message[2:] == [
+            and message[2:]
+            == [
                 GameStates.Starting.value,
                 GameModes.Singles.value,
                 2,
@@ -264,8 +251,7 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
         player_id_to_client = {
             message[2]: message[3]
             for message in create_messages
-            if message[0] == CommandsToClient.SetGamePlayerJoin.value
-            and message[1] == game_id
+            if message[0] == CommandsToClient.SetGamePlayerJoin.value and message[1] == game_id
         }
         assert any(
             message[:3]
@@ -279,9 +265,7 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
 
         with SockJSWebSocket(e2e_base_url) as client_2:
             client_2.send_message(["VERSION", username_2, ""])
-            second_login_messages = client_2.read_messages(
-                CommandsToClient.SetClientId.value
-            )
+            second_login_messages = client_2.read_messages(CommandsToClient.SetClientId.value)
             client_2_id = next(
                 message[1]
                 for message in second_login_messages
@@ -289,9 +273,7 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
             )
 
             client_2.send_message([CommandsToServer.JoinGame.value, game_id])
-            join_messages = client_2.read_messages(
-                CommandsToClient.SetGamePlayerJoin.value
-            )
+            join_messages = client_2.read_messages(CommandsToClient.SetGamePlayerJoin.value)
             assert any(
                 message[0] == CommandsToClient.SetGamePlayerJoin.value
                 and message[1] == game_id
@@ -366,30 +348,28 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
             )
             played_tile = playable_tiles[0]
             if played_tile[4] == GameBoardTypes.WillFormNewChain.value:
-                expected_message = lambda message: (
-                    message[:2]
-                    == [
+
+                def expected_message(message):
+                    return message[:2] == [
                         CommandsToClient.SetGameAction.value,
                         GameActions.SelectNewChain.value,
                     ]
-                )
             elif played_tile[4] == GameBoardTypes.WillMergeChains.value:
-                expected_message = lambda message: (
-                    message[:2]
-                    == [
+
+                def expected_message(message):
+                    return message[:2] == [
                         CommandsToClient.SetGameAction.value,
                         GameActions.SelectMergerSurvivor.value,
                     ]
-                )
             else:
-                expected_message = lambda message: (
-                    message[:3]
-                    == [
+
+                def expected_message(message):
+                    return message[:3] == [
                         CommandsToClient.SetGameBoardCell.value,
                         played_tile[2],
                         played_tile[3],
                     ]
-                )
+
             play_tile_messages = play_client.read_until(
                 expected_message,
             )
@@ -397,31 +377,26 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
 
 
 def test_legacy_gateway_supports_watch_leave_and_rejoin_workflow(e2e_base_url):
-    player_username = "e2e-player-%s" % uuid.uuid4().hex[:8]
-    watcher_username = "e2e-watch-%s" % uuid.uuid4().hex[:8]
+    player_username = f"e2e-player-{uuid.uuid4().hex[:8]}"
+    watcher_username = f"e2e-watch-{uuid.uuid4().hex[:8]}"
 
     with SockJSWebSocket(e2e_base_url) as player_client:
         player_client.send_message(["VERSION", player_username, ""])
-        player_login_messages = player_client.read_messages(
-            CommandsToClient.SetClientId.value
-        )
+        player_login_messages = player_client.read_messages(CommandsToClient.SetClientId.value)
         player_client_id = next(
             message[1]
             for message in player_login_messages
             if message[0] == CommandsToClient.SetClientId.value
         )
 
-        player_client.send_message(
-            [CommandsToServer.CreateGame.value, GameModes.Singles.value, 2]
-        )
-        create_messages = player_client.read_messages(
-            CommandsToClient.SetGameAction.value
-        )
+        player_client.send_message([CommandsToServer.CreateGame.value, GameModes.Singles.value, 2])
+        create_messages = player_client.read_messages(CommandsToClient.SetGameAction.value)
         created_game = next(
             message
             for message in create_messages
             if message[:1] == [CommandsToClient.SetGameState.value]
-            and message[2:] == [
+            and message[2:]
+            == [
                 GameStates.Starting.value,
                 GameModes.Singles.value,
                 2,
@@ -481,9 +456,7 @@ def test_legacy_gateway_supports_watch_leave_and_rejoin_workflow(e2e_base_url):
         ] in player_client.read_messages(CommandsToClient.SetGamePlayerLeave.value)
 
         player_client.send_message([CommandsToServer.RejoinGame.value, game_id])
-        rejoin_messages = player_client.read_messages(
-            CommandsToClient.SetGamePlayerRejoin.value
-        )
+        rejoin_messages = player_client.read_messages(CommandsToClient.SetGamePlayerRejoin.value)
         assert [
             CommandsToClient.SetGamePlayerRejoin.value,
             game_id,

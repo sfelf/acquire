@@ -1,10 +1,8 @@
-import contextlib
 import importlib
 import sys
 import types
 
 import pytest
-
 
 pytestmark = pytest.mark.unit
 
@@ -40,9 +38,7 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy.ForeignKey = lambda *args, **kwargs: ("foreign-key", args, kwargs)
     fake_sqlalchemy.String = lambda *args, **kwargs: ("string", args, kwargs)
     fake_sqlalchemy.Text = lambda *args, **kwargs: ("text", args, kwargs)
-    fake_sqlalchemy.UniqueConstraint = (
-        lambda *args, **kwargs: ("unique", args, kwargs)
-    )
+    fake_sqlalchemy.UniqueConstraint = lambda *args, **kwargs: ("unique", args, kwargs)
 
     fake_mysql = types.ModuleType("sqlalchemy.dialects.mysql")
     fake_mysql.FLOAT = lambda *args, **kwargs: ("float", args, kwargs)
@@ -172,9 +168,8 @@ def test_session_scope_rolls_back_and_closes_on_error(orm_module, monkeypatch):
     session = TransactionSession()
     monkeypatch.setattr(orm_module, "Session", lambda autoflush: session)
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with orm_module.session_scope():
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), orm_module.session_scope():
+        raise RuntimeError("boom")
 
     assert session.committed is False
     assert session.rolled_back is True
@@ -195,7 +190,8 @@ def test_session_scope_rolls_back_and_closes_on_error(orm_module, monkeypatch):
                 "game_state_id": 3,
                 "game_mode_id": 4,
             },
-            "Game(game_id=1, log_time=100, number=2, begin_time=10, end_time=20, game_state_id=3, game_mode_id=4)",
+            "Game(game_id=1, log_time=100, number=2, begin_time=10, end_time=20, "
+            "game_state_id=3, game_mode_id=4)",
         ),
         (
             "GameMode",
@@ -438,10 +434,13 @@ def test_lookup_get_rating_skips_query_for_unpersisted_user(orm_module):
     session = LookupSession()
     lookup = orm_module.Lookup(session)
 
-    assert lookup.get_rating(
-        orm_module.User(user_id=None, name="alice"),
-        orm_module.RatingType(name="Singles2"),
-    ) is None
+    assert (
+        lookup.get_rating(
+            orm_module.User(user_id=None, name="alice"),
+            orm_module.RatingType(name="Singles2"),
+        )
+        is None
+    )
     assert session.queries == []
 
 

@@ -3,7 +3,6 @@ import io
 import pytest
 from enums import CommandsToClient, CommandsToServer
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -176,13 +175,35 @@ def test_individual_game_log_maker_command_handlers_continue_after_errors(
     assert "RuntimeError: batch handler failed" in captured.err
 
 
+def test_individual_game_log_maker_expires_remaining_games_at_end(
+    logs_to_games_without_database,
+    monkeypatch,
+):
+    logs_to_games = logs_to_games_without_database
+
+    class FakeLogParser:
+        def __init__(self, log_timestamp, file):
+            pass
+
+        def go(self):
+            yield (
+                logs_to_games.LineTypes.log,
+                1,
+                '{"_":"game"}',
+                ({"_": "game", "game-id": 77, "external-game-id": 7},),
+            )
+
+    monkeypatch.setattr(logs_to_games, "LogParser", FakeLogParser)
+
+    game_logs = list(logs_to_games.IndividualGameLogMaker(1700000000, io.StringIO("")).go())
+
+    assert [game_log.internal_game_id for game_log in game_logs] == [77]
+
+
 def test_username_helpers_normalize_known_and_non_ascii_names(
     logs_to_games_without_database,
 ):
     assert logs_to_games_without_database.is_ascii("Alice_123")
     assert not logs_to_games_without_database.is_ascii("José")
-    assert (
-        logs_to_games_without_database.get_actual_username(1418805302, "Temp")
-        == "Mr Brain"
-    )
+    assert logs_to_games_without_database.get_actual_username(1418805302, "Temp") == "Mr Brain"
     assert logs_to_games_without_database.get_actual_username(1700000000, "José") == "Jos-dma"

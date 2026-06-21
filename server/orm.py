@@ -1,14 +1,15 @@
 import collections
 import os
 from contextlib import contextmanager
+
 from sqlalchemy import (
-    create_engine,
     Column,
-    Index,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
+    create_engine,
 )
 from sqlalchemy.dialects.mysql import FLOAT, INTEGER, SMALLINT, TINYINT
 from sqlalchemy.engine.url import URL
@@ -83,8 +84,8 @@ class Game(Base):
             repr(self.game_mode_id),
         )
         return (
-            "Game(game_id=%s, log_time=%s, number=%s, begin_time=%s, end_time=%s, game_state_id=%s, game_mode_id=%s)"
-            % params
+            "Game(game_id={}, log_time={}, number={}, begin_time={}, end_time={}, "
+            "game_state_id={}, game_mode_id={})".format(*params)
         )
 
 
@@ -96,7 +97,7 @@ class GameMode(Base):
 
     def __repr__(self):
         params = (repr(self.game_mode_id), repr(self.name))
-        return "GameMode(game_mode_id=%s, name=%s)" % params
+        return "GameMode(game_mode_id={}, name={})".format(*params)
 
 
 class GamePlayer(Base):
@@ -120,8 +121,8 @@ class GamePlayer(Base):
             repr(self.score),
         )
         return (
-            "GamePlayer(game_player_id=%s, game_id=%s, player_index=%s, user_id=%s, score=%s)"
-            % params
+            "GamePlayer(game_player_id={}, game_id={}, player_index={}, user_id={}, "
+            "score={})".format(*params)
         )
 
 
@@ -133,7 +134,7 @@ class GameState(Base):
 
     def __repr__(self):
         params = (repr(self.game_state_id), repr(self.name))
-        return "GameState(game_state_id=%s, name=%s)" % params
+        return "GameState(game_state_id={}, name={})".format(*params)
 
 
 class KeyValue(Base):
@@ -145,7 +146,7 @@ class KeyValue(Base):
 
     def __repr__(self):
         params = (repr(self.key_value_id), repr(self.key), repr(self.value))
-        return "KeyValue(key_value_id=%s, key=%s, value=%s)" % params
+        return "KeyValue(key_value_id={}, key={}, value={})".format(*params)
 
 
 class Rating(Base):
@@ -173,8 +174,9 @@ class Rating(Base):
             repr(self.sigma),
         )
         return (
-            "Rating(rating_id=%s, user_id=%s, rating_type_id=%s, time=%s, mu=%s, sigma=%s)"
-            % params
+            "Rating(rating_id={}, user_id={}, rating_type_id={}, time={}, mu={}, sigma={})".format(
+                *params
+            )
         )
 
 
@@ -186,7 +188,7 @@ class RatingType(Base):
 
     def __repr__(self):
         params = (repr(self.rating_type_id), repr(self.name))
-        return "RatingType(rating_type_id=%s, name=%s)" % params
+        return "RatingType(rating_type_id={}, name={})".format(*params)
 
 
 class Record(Base):
@@ -206,7 +208,7 @@ class Record(Base):
             repr(self.user_id),
             repr(self.encoded),
         )
-        return "Record(user_id=%s, encoded=%s)" % params
+        return "Record(user_id={}, encoded={})".format(*params)
 
 
 class User(Base):
@@ -218,7 +220,7 @@ class User(Base):
 
     def __repr__(self):
         params = (repr(self.user_id), repr(self.name), repr(self.password))
-        return "User(user_id=%s, name=%s, password=%s)" % params
+        return "User(user_id={}, name={}, password={})".format(*params)
 
 
 class Lookup:
@@ -226,9 +228,7 @@ class Lookup:
         self.session = session
         self.game_lookup = collections.defaultdict(dict)
         self.game_mode_lookup = {}
-        self.game_player_lookup = collections.defaultdict(
-            lambda: collections.defaultdict(dict)
-        )
+        self.game_player_lookup = collections.defaultdict(lambda: collections.defaultdict(dict))
         self.game_state_lookup = {}
         self.key_value_lookup = {}
         self.rating_lookup = collections.defaultdict(dict)
@@ -241,11 +241,7 @@ class Lookup:
         if game:
             return game
 
-        game = (
-            self.session.query(Game)
-            .filter_by(log_time=log_time, number=number)
-            .scalar()
-        )
+        game = self.session.query(Game).filter_by(log_time=log_time, number=number).scalar()
         if not game:
             game = Game(log_time=log_time, number=number)
             self.session.add(game)
@@ -264,9 +260,7 @@ class Lookup:
         return game_mode
 
     def get_game_player(self, game, player_index):
-        game_player = self.game_player_lookup[game.log_time][game.number].get(
-            player_index, None
-        )
+        game_player = self.game_player_lookup[game.log_time][game.number].get(player_index, None)
         if game_player:
             return game_player
 

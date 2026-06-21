@@ -1,6 +1,5 @@
-import ujson
 import pytest
-import server
+import ujson
 from enums import (
     CommandsToClient,
     CommandsToServer,
@@ -9,6 +8,7 @@ from enums import (
     GameStates,
 )
 
+import server
 
 pytestmark = pytest.mark.unit
 
@@ -110,7 +110,7 @@ def test_destroy_expired_games_removes_games_returns_ids_and_broadcasts(monkeypa
     assert game_server.game_id_to_game == {active_game_id: active_game}
     assert game_server.next_game_id_manager._used == {active_game_id}
     assert writes == [
-        b'10,20 [[23,1]]\n',
+        b"10,20 [[23,1]]\n",
     ]
 
 
@@ -214,11 +214,7 @@ def test_duplicate_username_without_replace_gets_fatal_error_and_disconnects():
     assert duplicate.client_id not in game_server.client_id_to_client
     assert writes[-3:] == [
         b'connect ["socket-2",2]\n',
-        (
-            b"2 [[0,"
-            + str(Errors.UsernameAlreadyInUse.value).encode()
-            + b"]]\n"
-        ),
+        (b"2 [[0," + str(Errors.UsernameAlreadyInUse.value).encode() + b"]]\n"),
         b"disconnect 2\n",
     ]
 

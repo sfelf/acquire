@@ -1,5 +1,4 @@
 import pytest
-import server
 from enums import (
     CommandsToClient,
     GameActions,
@@ -10,6 +9,7 @@ from enums import (
     ScoreSheetIndexes,
 )
 
+import server
 
 pytestmark = pytest.mark.unit
 
@@ -72,10 +72,7 @@ class RecordingTileRacks:
 
 
 def make_empty_board():
-    return [
-        [GameBoardTypes.Nothing.value for _y in range(9)]
-        for _x in range(12)
-    ]
+    return [[GameBoardTypes.Nothing.value for _y in range(9)] for _x in range(12)]
 
 
 def test_action_send_message_includes_action_and_player_ids():
@@ -109,12 +106,8 @@ def test_play_tile_prepare_sets_turn_and_resets_no_tile_counter_when_playable():
     assert result is None
     assert game.turn_player_id == 0
     assert game.turns_without_played_tiles_count == 0
-    assert game.pending_messages == [
-        ([[CommandsToClient.SetTurn.value, 0]], {10, 11})
-    ]
-    assert game.history_messages == [
-        ((GameHistoryMessages.TurnBegan.value, 0), {})
-    ]
+    assert game.pending_messages == [([[CommandsToClient.SetTurn.value, 0]], {10, 11})]
+    assert game.history_messages == [((GameHistoryMessages.TurnBegan.value, 0), {})]
 
 
 def test_play_tile_prepare_skips_turn_when_player_has_no_playable_tiles():
@@ -153,9 +146,7 @@ def test_play_tile_execute_places_lonely_tile_and_removes_it_from_rack():
     assert result is True
     assert game.game_board.x_to_y_to_board_type[1][1] == GameBoardTypes.NothingYet.value
     assert game.tile_racks.removed_tiles == [(0, 0)]
-    assert game.history_messages == [
-        ((GameHistoryMessages.PlayedTile.value, 0, 1, 1), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.PlayedTile.value, 0, 1, 1), {})]
 
 
 def test_play_tile_execute_extends_existing_chain_and_updates_chain_size():
@@ -170,9 +161,7 @@ def test_play_tile_execute_extends_existing_chain_and_updates_chain_size():
     assert game.game_board.x_to_y_to_board_type[1][1] == GameBoardTypes.Luxor.value
     assert game.score_sheet.chain_size[GameBoardTypes.Luxor.value] == 2
     assert game.tile_racks.removed_tiles == [(0, 0)]
-    assert game.history_messages == [
-        ((GameHistoryMessages.PlayedTile.value, 0, 1, 1), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.PlayedTile.value, 0, 1, 1), {})]
 
 
 def test_play_tile_execute_returns_new_chain_selection_action():
@@ -192,9 +181,7 @@ def test_play_tile_execute_returns_new_chain_selection_action():
     assert next_action.game_board_type_ids == [1, 2, 3, 4, 5, 6]
     assert next_action.tile == (1, 1)
     assert game.tile_racks.removed_tiles == [(0, 0)]
-    assert game.history_messages == [
-        ((GameHistoryMessages.PlayedTile.value, 0, 1, 1), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.PlayedTile.value, 0, 1, 1), {})]
 
 
 @pytest.mark.parametrize("tile_index", ["0", -1, 6])
@@ -318,9 +305,7 @@ def test_select_merger_survivor_prepare_prompts_when_largest_chains_are_tied():
     result = action.prepare()
 
     assert result is None
-    assert action.additional_params == [
-        [GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value]
-    ]
+    assert action.additional_params == [[GameBoardTypes.Luxor.value, GameBoardTypes.Tower.value]]
     assert game.game_board.x_to_y_to_board_type[1][1] == GameBoardTypes.NothingYet.value
     assert game.tile_racks.determine_calls == [None]
     assert game.history_messages == [
@@ -448,9 +433,7 @@ def test_select_chain_to_dispose_prepare_prompts_when_multiple_defunct_chains_re
     result = action.prepare()
 
     assert result is None
-    assert action.additional_params == [
-        [GameBoardTypes.Tower.value, GameBoardTypes.American.value]
-    ]
+    assert action.additional_params == [[GameBoardTypes.Tower.value, GameBoardTypes.American.value]]
 
 
 def test_select_chain_to_dispose_prepare_auto_selects_single_defunct_chain():
@@ -644,9 +627,7 @@ def test_purchase_shares_prepare_completes_turn_when_player_cannot_afford_availa
     assert game.tile_racks.determine_calls == [None, [0]]
     assert game.tile_racks.draw_calls == [0]
     assert game.tile_racks.replace_dead_tiles_calls == [0]
-    assert game.history_messages == [
-        ((GameHistoryMessages.CouldNotAffordAnyShares.value, 0), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.CouldNotAffordAnyShares.value, 0), {})]
 
 
 def test_purchase_shares_execute_buys_shares_and_advances_to_next_player():
@@ -780,9 +761,7 @@ def test_purchase_shares_execute_ignores_end_game_flag_when_not_allowed():
         server.ActionPurchaseShares,
     ]
     assert game.state_changes == []
-    assert game.history_messages == [
-        ((GameHistoryMessages.PurchasedShares.value, 0, []), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.PurchasedShares.value, 0, []), {})]
 
 
 def test_purchase_shares_complete_action_ends_game_when_all_tiles_are_played():
@@ -793,9 +772,7 @@ def test_purchase_shares_complete_action_ends_game_when_all_tiles_are_played():
 
     assert len(result) == 1
     assert isinstance(result[0], server.ActionGameOver)
-    assert game.history_messages == [
-        ((GameHistoryMessages.AllTilesPlayed.value, None), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.AllTilesPlayed.value, None), {})]
     assert game.state_changes == [(GameStates.Completed.value, None, None)]
 
 
@@ -824,9 +801,7 @@ def test_purchase_shares_complete_action_ends_when_draw_empties_racks():
     assert game.tile_racks.draw_calls == [0]
     assert game.tile_racks.determine_calls == [[0]]
     assert game.tile_racks.replace_dead_tiles_calls == [0]
-    assert game.history_messages == [
-        ((GameHistoryMessages.AllTilesPlayed.value, None), {})
-    ]
+    assert game.history_messages == [((GameHistoryMessages.AllTilesPlayed.value, None), {})]
 
 
 def test_start_game_downgrades_short_teams_game_to_singles():

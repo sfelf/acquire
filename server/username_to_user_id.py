@@ -1,2 +1,1 @@
-username_to_user_id = {
-}
+username_to_user_id = {}

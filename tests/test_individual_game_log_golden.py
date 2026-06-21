@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 
 
@@ -26,7 +25,9 @@ def test_individual_game_log_maker_matches_sample_golden_fixture(logs_to_games_w
 
     with log_path.open() as log_file:
         game_logs = logs_to_games_without_database.IndividualGameLogMaker(1700000000, log_file).go()
-        actual = json.loads(json.dumps([normalize_individual_game_log(game_log) for game_log in game_logs]))
+        actual = json.loads(
+            json.dumps([normalize_individual_game_log(game_log) for game_log in game_logs])
+        )
 
     with expected_path.open() as expected_file:
         expected = json.load(expected_file)

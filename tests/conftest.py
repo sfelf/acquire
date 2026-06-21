@@ -8,7 +8,6 @@ from urllib.parse import quote
 
 import pytest
 
-
 REPO_DIR = Path(__file__).resolve().parents[1]
 SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
 if str(SERVER_DIR) not in sys.path:
@@ -37,9 +36,7 @@ def _docker_compose_command(project_name, include_test_override=False):
 def _run_docker_compose(project_name, *args, include_test_override=False):
     return subprocess.run(
         [
-            *_docker_compose_command(
-                project_name, include_test_override=include_test_override
-            ),
+            *_docker_compose_command(project_name, include_test_override=include_test_override),
             *args,
         ],
         check=True,
@@ -51,9 +48,7 @@ def _run_docker_compose(project_name, *args, include_test_override=False):
 def _cleanup_docker_compose(project_name, *args, include_test_override=False):
     subprocess.run(
         [
-            *_docker_compose_command(
-                project_name, include_test_override=include_test_override
-            ),
+            *_docker_compose_command(project_name, include_test_override=include_test_override),
             *args,
         ],
         check=False,
@@ -71,7 +66,7 @@ def mysql_test_url(pytestconfig):
     if not _is_marker_selected(pytestconfig, "mysql"):
         pytest.skip("mysql marker was not selected")
 
-    project_name = "acquire-pytest-mysql-%s" % os.getpid()
+    project_name = f"acquire-pytest-mysql-{os.getpid()}"
     mysql_port = os.environ.get("ACQUIRE_MYSQL_TEST_PORT", "33061")
     compose_env = {
         "ACQUIRE_MYSQL_TEST_PORT": mysql_port,
@@ -82,12 +77,9 @@ def mysql_test_url(pytestconfig):
     previous_env = {key: os.environ.get(key) for key in compose_env}
     os.environ.update(compose_env)
     try:
-        _run_docker_compose(
-            project_name, "up", "-d", "mysql", include_test_override=True
-        )
+        _run_docker_compose(project_name, "up", "-d", "mysql", include_test_override=True)
         yield (
-            "mysql+mysqlconnector://%s:%s@127.0.0.1:%s/%s"
-            % (
+            "mysql+mysqlconnector://{}:{}@127.0.0.1:{}/{}".format(
                 quote(compose_env["MYSQL_USER"], safe=""),
                 quote(compose_env["MYSQL_PASSWORD"], safe=""),
                 mysql_port,
@@ -95,9 +87,7 @@ def mysql_test_url(pytestconfig):
             )
         )
     finally:
-        _cleanup_docker_compose(
-            project_name, "down", "--volumes", include_test_override=True
-        )
+        _cleanup_docker_compose(project_name, "down", "--volumes", include_test_override=True)
         for key, value in previous_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -114,7 +104,7 @@ def e2e_base_url(pytestconfig):
     if not _is_marker_selected(pytestconfig, "e2e"):
         pytest.skip("e2e marker was not selected")
 
-    project_name = "acquire-pytest-e2e-%s" % os.getpid()
+    project_name = f"acquire-pytest-e2e-{os.getpid()}"
     ui_port = os.environ.get("ACQUIRE_E2E_PORT", "19000")
     previous_port = os.environ.get("ACQUIRE_UI_PORT")
     os.environ["ACQUIRE_UI_PORT"] = ui_port
@@ -138,11 +128,9 @@ def e2e_base_url(pytestconfig):
             "python",
             "initialize_database.py",
         )
-        yield "http://127.0.0.1:%s/" % ui_port
+        yield f"http://127.0.0.1:{ui_port}/"
     finally:
-        _cleanup_docker_compose(
-            project_name, "--profile", "legacy-node", "down", "--volumes"
-        )
+        _cleanup_docker_compose(project_name, "--profile", "legacy-node", "down", "--volumes")
         if previous_port is None:
             os.environ.pop("ACQUIRE_UI_PORT", None)
         else:

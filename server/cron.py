@@ -1,15 +1,16 @@
 import base64
 import collections
 import glob
-import orm
 import os
 import os.path
-import sqlalchemy.orm
-import sqlalchemy.sql
-import sqlalchemy.types
 import subprocess
 import time
 import traceback
+
+import orm
+import sqlalchemy.orm
+import sqlalchemy.sql
+import sqlalchemy.types
 import trueskill
 import ujson
 import util
@@ -86,6 +87,7 @@ class Logs2DB:
             game_player = self.lookup.get_game_player(game, player_index)
             game_player.score = score
             game_players.append(game_player)
+            assert self.completed_game_users is not None
             self.completed_game_users.add(game_player.user)
 
         self.calculate_new_ratings(game, game_players)
@@ -117,9 +119,7 @@ class Logs2DB:
             trueskill_ratings.append(trueskill_rating)
 
         new_ratings = [
-            orm.Rating(
-                user=game_player.user, rating_type=rating_type, time=game.end_time
-            )
+            orm.Rating(user=game_player.user, rating_type=rating_type, time=game.end_time)
             for game_player in game_players
         ]
         self.session.add_all(new_ratings)
@@ -145,9 +145,7 @@ class Logs2DB:
             new_ratings[3].mu = rating_groups_result[1][1].mu
             new_ratings[3].sigma = rating_groups_result[1][1].sigma
         else:
-            rating_groups = [
-                [trueskill_rating] for trueskill_rating in trueskill_ratings
-            ]
+            rating_groups = [[trueskill_rating] for trueskill_rating in trueskill_ratings]
             ranks = [[-game_player.score] for game_player in game_players]
             rating_groups_result = trueskill_environment.rate(rating_groups, ranks)
             for player_index, rating_group_result in enumerate(rating_groups_result):
@@ -267,7 +265,8 @@ class StatsGen:
         join rating_type on rating.rating_type_id = rating_type.rating_type_id
         join user on rating.user_id = user.user_id
         where rating.time >= unix_timestamp() - 30 * 24 * 60 * 60
-        order by rating.mu - rating.sigma * 3 desc, rating.mu desc, rating.time asc, rating.user_id asc
+        order by rating.mu - rating.sigma * 3 desc,
+            rating.mu desc, rating.time asc, rating.user_id asc
         """
     )
     user_ratings_sql = sqlalchemy.sql.text(
@@ -318,10 +317,7 @@ class StatsGen:
     def get_users_with_completed_games(self):
         users_with_completed_games = []
         for row in self.session.execute(StatsGen.users_with_completed_games_sql):
-            if row.encoded:
-                decoded = ujson.decode(row.encoded)
-            else:
-                decoded = get_empty_records()
+            decoded = ujson.decode(row.encoded) if row.encoded else get_empty_records()
             users_with_completed_games.append([row.user_id, row.name.decode(), decoded])
         return users_with_completed_games
 
@@ -336,9 +332,7 @@ class StatsGen:
 
     def output_user(self, user_id, username, records):
         ratings = {}
-        for row in self.session.execute(
-            StatsGen.user_ratings_sql, {"user_id": user_id}
-        ):
+        for row in self.session.execute(StatsGen.user_ratings_sql, {"user_id": user_id}):
             ratings[row.name.decode()] = [row.time, row.mu, row.sigma]
 
         games = []
@@ -382,26 +376,20 @@ def process_logs(write_stats_files):
 
         kv_last_log_timestamp = lookup.get_key_value("cron last log timestamp")
         last_log_timestamp = (
-            1408905413
-            if kv_last_log_timestamp.value is None
-            else int(kv_last_log_timestamp.value)
+            1408905413 if kv_last_log_timestamp.value is None else int(kv_last_log_timestamp.value)
         )
         kv_last_offset = lookup.get_key_value("cron last offset")
         last_offset = 0 if kv_last_offset.value is None else int(kv_last_offset.value)
 
         completed_game_users = set()
-        for log_timestamp, filename in util.get_log_file_filenames(
-            "py", begin=last_log_timestamp
-        ):
+        for log_timestamp, filename in util.get_log_file_filenames("py", begin=last_log_timestamp):
             if log_timestamp != last_log_timestamp:
                 last_offset = 0
 
             with util.open_possibly_gzipped_file(filename) as f:
                 if last_offset:
                     f.seek(last_offset)
-                last_offset, new_completed_game_users = logs2db.process_logs(
-                    f, log_timestamp
-                )
+                last_offset, new_completed_game_users = logs2db.process_logs(f, log_timestamp)
                 completed_game_users.update(new_completed_game_users)
 
             last_log_timestamp = log_timestamp
@@ -416,10 +404,7 @@ def process_logs(write_stats_files):
             statsgen.output_ratings()
             for user in completed_game_users:
                 record = lookup.get_record(user)
-                if record:
-                    decoded = ujson.decode(record.encoded)
-                else:
-                    decoded = get_empty_records()
+                decoded = ujson.decode(record.encoded) if record else get_empty_records()
                 statsgen.output_user(user.user_id, user.name, decoded)
 
             ratings_filenames = glob.glob("stats_temp/*.json")
@@ -430,9 +415,7 @@ def process_logs(write_stats_files):
                 command.extend(users_filenames)
                 subprocess.call(command)
 
-                ratings_filenames = ratings_filenames + [
-                    x + ".gz" for x in ratings_filenames
-                ]
+                ratings_filenames = ratings_filenames + [x + ".gz" for x in ratings_filenames]
                 users_filenames = users_filenames + [x + ".gz" for x in users_filenames]
 
                 command = ["touch", "-r", "stats_temp/ratings.json"]
@@ -465,7 +448,7 @@ def main():
     while True:
         try:
             process_logs(True)
-        except:
+        except BaseException:
             print(traceback.format_exc())
 
         time.sleep(60)

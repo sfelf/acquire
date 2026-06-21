@@ -1,10 +1,10 @@
 import asyncio
 
 import pytest
-import server
 import ujson
 from enums import CommandsToClient, CommandsToServer, GameActions, GameModes, GameStates
 
+import server
 
 pytestmark = pytest.mark.integration
 
@@ -48,19 +48,12 @@ def _flatten_client_messages(decoded_writes):
 
 
 def _send_protocol_line(protocol, client_id, message):
-    protocol.data_received(
-        ("%d %s\n" % (client_id, ujson.dumps(message))).encode("utf-8")
-    )
+    protocol.data_received(f"{client_id} {ujson.dumps(message)}\n".encode())
 
 
 def _connect_protocol_client(protocol, username, socket_id=None):
-    socket_id = socket_id or "socket-%s" % username
-    protocol.data_received(
-        (
-            'connect ["%s","127.0.0.1","%s",false]\n'
-            % (username, socket_id)
-        ).encode("utf-8")
-    )
+    socket_id = socket_id or f"socket-{username}"
+    protocol.data_received((f'connect ["{username}","127.0.0.1","{socket_id}",false]\n').encode())
 
 
 def _messages_after(transport, start_index):
@@ -145,7 +138,7 @@ def test_python_server_protocol_handles_connect_and_global_chat():
                 0,
             )
         except PermissionError as exc:
-            pytest.skip("local socket binding is not permitted: %s" % exc)
+            pytest.skip(f"local socket binding is not permitted: {exc}")
         host, port = tcp_server.sockets[0].getsockname()
         writer = None
         try:
@@ -164,9 +157,7 @@ def test_python_server_protocol_handles_connect_and_global_chat():
             writer.write(
                 (
                     "1 "
-                    + ujson.dumps(
-                        [CommandsToServer.SendGlobalChatMessage.value, " hello "]
-                    )
+                    + ujson.dumps([CommandsToServer.SendGlobalChatMessage.value, " hello "])
                     + "\n"
                 ).encode()
             )
@@ -278,8 +269,7 @@ def test_protocol_handles_create_join_start_and_game_chat_flow():
 
     assert game_server.game_id_to_game[game_id].state == GameStates.InProgress.value
     assert any(
-        message == [CommandsToClient.SetTurn.value, 0]
-        for message in _messages_after(transport, 0)
+        message == [CommandsToClient.SetTurn.value, 0] for message in _messages_after(transport, 0)
     )
 
 
@@ -330,7 +320,7 @@ def test_protocol_handles_watch_leave_disconnect_and_rejoin_flow():
     assert game_server.client_id_to_client[watcher_id].game_id is None
 
     write_index = len(transport.writes)
-    server_protocol.data_received(("disconnect %d\n" % alice_id).encode("utf-8"))
+    server_protocol.data_received(f"disconnect {alice_id}\n".encode())
     disconnect_messages = _messages_after(transport, write_index)
     assert [
         CommandsToClient.SetGamePlayerLeave.value,

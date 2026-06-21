@@ -1,6 +1,7 @@
-import orm
 import os
 import subprocess
+
+import orm
 
 
 def main():
@@ -8,6 +9,11 @@ def main():
     mysql_root_password = os.environ.get("MYSQL_ROOT_PASSWORD", "root")
     mysql_socket = os.environ.get("MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock")
     escaped_mysql_database = mysql_database.replace("`", "``")
+    reset_schema_sql = (
+        f"drop schema if exists `{escaped_mysql_database}`; "
+        f"create schema `{escaped_mysql_database}` "
+        "default character set utf8mb4 collate utf8mb4_bin;"
+    )
 
     subprocess.call(
         [
@@ -18,8 +24,7 @@ def main():
             "root",
             "-p" + mysql_root_password,
             "-e",
-            "drop schema if exists `%s`; create schema `%s` default character set utf8mb4 collate utf8mb4_bin;"
-            % (escaped_mysql_database, escaped_mysql_database),
+            reset_schema_sql,
         ]
     )
 
