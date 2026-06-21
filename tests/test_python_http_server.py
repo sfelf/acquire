@@ -1,21 +1,20 @@
-import email.message
 import io
 import urllib.parse
 from contextlib import contextmanager
-from http import HTTPStatus
+from types import SimpleNamespace
 
 import enums
 import http_server
 import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
 
 
-def make_handler(
+def make_client(
     tmp_path,
-    path="/",
-    method="GET",
-    body=b"",
+    *,
     log_output=None,
     session_scope=None,
     accepted_client_version="VERSION",
@@ -24,46 +23,14 @@ def make_handler(
     stats_root = tmp_path / "stats"
     main_root.mkdir(exist_ok=True)
     stats_root.mkdir(exist_ok=True)
-
-    handler = http_server.AcquireHTTPRequestHandler.__new__(
-        http_server.AcquireHTTPRequestHandler
+    app = http_server.create_app(
+        main_static_root=main_root,
+        stats_static_root=stats_root,
+        log_output=log_output or io.StringIO(),
+        session_scope=session_scope or (lambda: fake_session_scope(object())),
+        accepted_client_version=accepted_client_version,
     )
-    handler.main_static_root = main_root
-    handler.stats_static_root = stats_root
-    handler.log_output = log_output or io.StringIO()
-    if session_scope is not None:
-        handler.session_scope = session_scope
-    handler.accepted_client_version = accepted_client_version
-    handler.path = path
-    handler.command = method
-    handler.rfile = io.BytesIO(body)
-    handler.wfile = io.BytesIO()
-    handler.responses = []
-    handler.headers_sent = []
-    headers = email.message.Message()
-    headers["Content-Length"] = str(len(body))
-    if method == "POST":
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-    handler.headers = headers
-
-    def send_response(status):
-        handler.responses.append(status)
-
-    def send_header(name, value):
-        handler.headers_sent.append((name, value))
-
-    def end_headers():
-        handler.headers_ended = True
-
-    def send_error(status):
-        handler.responses.append(status)
-        handler.headers_ended = True
-
-    handler.send_response = send_response
-    handler.send_header = send_header
-    handler.end_headers = end_headers
-    handler.send_error = send_error
-    return handler
+    return TestClient(app), main_root, stats_root
 
 
 @contextmanager
@@ -72,120 +39,121 @@ def fake_session_scope(session):
 
 
 def test_python_http_server_serves_main_static_assets(tmp_path):
-    handler = make_handler(tmp_path)
-    (handler.main_static_root / "css").mkdir()
-    (handler.main_static_root / "index.html").write_text("<h1>Acquire</h1>", encoding="utf-8")
-    (handler.main_static_root / "css" / "main.css").write_text(
+    client, main_root, _stats_root = make_client(tmp_path)
+    (main_root / "css").mkdir()
+    (main_root / "index.html").write_text("<h1>Acquire</h1>", encoding="utf-8")
+    (main_root / "css" / "main.css").write_text(
         "body { color: black; }",
         encoding="utf-8",
     )
 
-    handler.do_GET()
-    index_body = handler.wfile.getvalue()
+    index_response = client.get("/")
+    css_response = client.get("/css/main.css")
 
-    css_handler = make_handler(tmp_path, "/css/main.css")
-    css_handler.main_static_root = handler.main_static_root
-    css_handler.stats_static_root = handler.stats_static_root
-    css_handler.do_GET()
-
-    assert handler.responses == [HTTPStatus.OK]
-    assert ("Content-Type", "text/html") in handler.headers_sent
-    assert index_body == b"<h1>Acquire</h1>"
-    assert css_handler.responses == [HTTPStatus.OK]
-    assert ("Content-Type", "text/css") in css_handler.headers_sent
-    assert css_handler.wfile.getvalue() == b"body { color: black; }"
+    assert index_response.status_code == 200
+    assert index_response.headers["content-type"].startswith("text/html")
+    assert index_response.content == b"<h1>Acquire</h1>"
+    assert css_response.status_code == 200
+    assert css_response.headers["content-type"].startswith("text/css")
+    assert css_response.content == b"body { color: black; }"
 
 
 def test_python_http_server_serves_stats_static_assets(tmp_path):
-    handler = make_handler(tmp_path, "/stats/")
-    (handler.stats_static_root / "js").mkdir()
-    (handler.stats_static_root / "index.html").write_text(
+    client, _main_root, stats_root = make_client(tmp_path)
+    (stats_root / "js").mkdir()
+    (stats_root / "index.html").write_text(
         "<h1>Acquire stats</h1>",
         encoding="utf-8",
     )
-    (handler.stats_static_root / "js" / "stats.js").write_text(
+    (stats_root / "js" / "stats.js").write_text(
         "window.stats = true;",
         encoding="utf-8",
     )
 
-    handler.do_GET()
-    index_body = handler.wfile.getvalue()
+    index_response = client.get("/stats/")
+    js_response = client.get("/stats/js/stats.js")
 
-    js_handler = make_handler(tmp_path, "/stats/js/stats.js")
-    js_handler.main_static_root = handler.main_static_root
-    js_handler.stats_static_root = handler.stats_static_root
-    js_handler.do_GET()
-
-    assert handler.responses == [HTTPStatus.OK]
-    assert ("Content-Type", "text/html") in handler.headers_sent
-    assert index_body == b"<h1>Acquire stats</h1>"
-    assert js_handler.responses == [HTTPStatus.OK]
-    assert ("Content-Type", "text/javascript") in js_handler.headers_sent
-    assert js_handler.wfile.getvalue() == b"window.stats = true;"
+    assert index_response.status_code == 200
+    assert index_response.headers["content-type"].startswith("text/html")
+    assert index_response.content == b"<h1>Acquire stats</h1>"
+    assert js_response.status_code == 200
+    assert js_response.headers["content-type"].startswith("text/javascript")
+    assert js_response.content == b"window.stats = true;"
 
 
 def test_python_http_server_redirects_stats_index_without_trailing_slash(tmp_path):
-    handler = make_handler(tmp_path, "/stats")
-    (handler.stats_static_root / "index.html").write_text(
+    client, _main_root, stats_root = make_client(tmp_path)
+    (stats_root / "index.html").write_text(
         "<h1>Acquire stats</h1>",
         encoding="utf-8",
     )
 
-    handler.do_GET()
+    response = client.get("/stats", follow_redirects=False)
 
-    assert handler.responses == [HTTPStatus.MOVED_PERMANENTLY]
-    assert ("Location", "/stats/") in handler.headers_sent
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 301
+    assert response.headers["location"] == "/stats/"
+    assert response.content == b""
 
 
 def test_python_http_server_redirects_stats_query_to_slash_path(tmp_path):
-    handler = make_handler(tmp_path, "/stats?ratings=singles")
+    client, _main_root, _stats_root = make_client(tmp_path)
 
-    handler.do_GET()
+    response = client.get("/stats?ratings=singles", follow_redirects=False)
 
-    assert handler.responses == [HTTPStatus.MOVED_PERMANENTLY]
-    assert ("Location", "/stats/?ratings=singles") in handler.headers_sent
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 301
+    assert response.headers["location"] == "/stats/?ratings=singles"
 
 
 def test_python_http_server_redirects_stats_head_requests(tmp_path):
-    handler = make_handler(tmp_path, "/stats", method="HEAD")
+    client, _main_root, _stats_root = make_client(tmp_path)
 
-    handler.do_HEAD()
+    response = client.head("/stats", follow_redirects=False)
 
-    assert handler.responses == [HTTPStatus.MOVED_PERMANENTLY]
-    assert ("Location", "/stats/") in handler.headers_sent
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 301
+    assert response.headers["location"] == "/stats/"
+    assert response.content == b""
 
 
 def test_python_http_server_rejects_path_traversal(tmp_path):
-    handler = make_handler(tmp_path, "/../secret.txt")
+    client, _main_root, _stats_root = make_client(tmp_path)
     (tmp_path / "secret.txt").write_text("hidden", encoding="utf-8")
 
-    handler.do_GET()
+    response = client.get("/../secret.txt")
 
-    assert handler.responses == [HTTPStatus.NOT_FOUND]
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 404
+
+
+def test_python_http_server_does_not_expose_openapi_schema(tmp_path):
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 404
 
 
 def test_safe_join_normalizes_empty_paths_to_index(tmp_path):
     root = tmp_path / "main"
     root.mkdir()
 
-    assert http_server.AcquireHTTPRequestHandler._safe_join(root, ".") == (
-        root / "index.html"
-    ).resolve()
+    assert http_server.safe_join(root, ".") == (root / "index.html").resolve()
+
+
+def test_safe_join_rejects_static_root_itself(tmp_path):
+    root = tmp_path / "main"
+    root.mkdir()
+
+    assert http_server.safe_join(root, "./..") is None
 
 
 def test_python_http_server_head_sends_headers_without_body(tmp_path):
-    handler = make_handler(tmp_path, method="HEAD")
-    (handler.main_static_root / "index.html").write_text("<h1>Acquire</h1>", encoding="utf-8")
+    client, main_root, _stats_root = make_client(tmp_path)
+    (main_root / "index.html").write_text("<h1>Acquire</h1>", encoding="utf-8")
 
-    handler.do_HEAD()
+    response = client.head("/")
 
-    assert handler.responses == [HTTPStatus.OK]
-    assert ("Content-Length", "16") in handler.headers_sent
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 200
+    assert response.headers["content-length"] == "16"
+    assert response.content == b""
 
 
 def test_python_http_server_accepts_report_error_posts(tmp_path):
@@ -195,93 +163,75 @@ def test_python_http_server_accepts_report_error_posts(tmp_path):
             "message": "first\nsecond",
             "trace": "trace\nline",
         }
-    ).encode()
-    handler = make_handler(
-        tmp_path,
+    )
+    client, _main_root, _stats_root = make_client(tmp_path, log_output=log_output)
+
+    response = client.post(
         "/server/report-error",
-        method="POST",
-        body=body,
-        log_output=log_output,
+        content=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    handler.do_POST()
-
-    assert handler.responses == [HTTPStatus.OK]
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 200
+    assert response.content == b""
     assert "/server/report-error: first\n\tsecond" in log_output.getvalue()
     assert "\ttrace\n\tline" in log_output.getvalue()
 
 
 def test_python_http_server_report_error_logs_null_missing_fields(tmp_path):
     log_output = io.StringIO()
-    handler = make_handler(
-        tmp_path,
-        "/server/report-error",
-        method="POST",
-        body=b"",
-        log_output=log_output,
-    )
+    client, _main_root, _stats_root = make_client(tmp_path, log_output=log_output)
 
-    handler.do_POST()
+    response = client.post("/server/report-error", content=b"")
 
-    assert handler.responses == [HTTPStatus.OK]
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 200
+    assert response.content == b""
     assert "/server/report-error: <null>" in log_output.getvalue()
     assert "\t<null>" in log_output.getvalue()
 
 
 def test_python_http_server_rejects_oversized_report_error_before_reading(tmp_path):
     log_output = io.StringIO()
-    handler = make_handler(
-        tmp_path,
+    client, _main_root, _stats_root = make_client(tmp_path, log_output=log_output)
+
+    response = client.post(
         "/server/report-error",
-        method="POST",
-        body=b"",
-        log_output=log_output,
-    )
-    handler.headers.replace_header(
-        "Content-Length",
-        str(http_server.MAX_REPORT_ERROR_BODY_BYTES + 1),
+        content=b"",
+        headers={"Content-Length": str(http_server.MAX_REPORT_ERROR_BODY_BYTES + 1)},
     )
 
-    handler.do_POST()
-
-    assert handler.responses == [HTTPStatus.REQUEST_ENTITY_TOO_LARGE]
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 413
     assert log_output.getvalue() == ""
 
 
-@pytest.mark.parametrize("content_length", ["not-a-number", "-1"])
-def test_python_http_server_rejects_invalid_report_error_content_length(
-    tmp_path,
-    content_length,
-):
-    log_output = io.StringIO()
-    handler = make_handler(
-        tmp_path,
-        "/server/report-error",
-        method="POST",
-        body=b"",
-        log_output=log_output,
-    )
-    handler.headers.replace_header("Content-Length", content_length)
+@pytest.mark.parametrize(("content_length", "status_code"), [("not-a-number", 400), ("-1", 400)])
+def test_validate_content_length_rejects_invalid_values(content_length, status_code):
+    request = SimpleNamespace(headers={"content-length": content_length})
 
-    handler.do_POST()
+    with pytest.raises(HTTPException) as exc_info:
+        http_server.validate_content_length(request)
 
-    assert handler.responses == [HTTPStatus.BAD_REQUEST]
-    assert handler.wfile.getvalue() == b""
-    assert log_output.getvalue() == ""
+    assert exc_info.value.status_code == status_code
+
+
+def test_validate_content_length_rejects_missing_header_before_body_buffering():
+    request = SimpleNamespace(headers={})
+
+    with pytest.raises(HTTPException) as exc_info:
+        http_server.validate_content_length(request)
+
+    assert exc_info.value.status_code == 411
 
 
 def test_python_http_server_rejects_unknown_post_routes(tmp_path):
-    handler = make_handler(tmp_path, "/server/unknown", method="POST")
+    client, _main_root, _stats_root = make_client(tmp_path)
 
-    handler.do_POST()
+    response = client.post("/server/unknown")
 
-    assert handler.responses == [HTTPStatus.NOT_FOUND]
+    assert response.status_code == 404
 
 
-def test_python_http_server_set_password_persists_valid_password(tmp_path):
+def test_python_http_server_set_password_persists_valid_password(tmp_path, monkeypatch):
     session = object()
     calls = []
     body = urllib.parse.urlencode(
@@ -290,31 +240,29 @@ def test_python_http_server_set_password_persists_valid_password(tmp_path):
             "username": " alice ",
             "password": "a" * 64,
         }
-    ).encode()
+    )
 
     def set_password(session_arg, **kwargs):
         calls.append((session_arg, kwargs))
         return None
 
-    handler = make_handler(
+    client, _main_root, _stats_root = make_client(
         tmp_path,
-        "/server/set-password",
-        method="POST",
-        body=body,
         session_scope=lambda: fake_session_scope(session),
         accepted_client_version="VERSION",
     )
-    original_set_password = http_server.auth.set_password
-    http_server.auth.set_password = set_password
-    try:
-        handler.do_POST()
-    finally:
-        http_server.auth.set_password = original_set_password
+    monkeypatch.setattr(http_server.auth, "set_password", set_password)
 
-    assert handler.responses == [HTTPStatus.OK]
-    assert ("Content-Type", "application/json") in handler.headers_sent
-    assert ("Content-Length", "4") in handler.headers_sent
-    assert handler.wfile.getvalue() == b"null"
+    response = client.post(
+        "/server/set-password",
+        content=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["content-length"] == "4"
+    assert response.content == b"null"
     assert calls == [
         (
             session,
@@ -328,53 +276,65 @@ def test_python_http_server_set_password_persists_valid_password(tmp_path):
     ]
 
 
-def test_python_http_server_set_password_returns_legacy_error_body(tmp_path):
-    body = urllib.parse.urlencode({"version": "old"}).encode()
+def test_python_http_server_set_password_runs_database_work_in_threadpool(tmp_path, monkeypatch):
+    threadpool_calls = []
 
+    async def run_in_threadpool(func, **kwargs):
+        threadpool_calls.append((func, kwargs))
+        return enums.Errors.NotUsingLatestVersion
+
+    client, _main_root, _stats_root = make_client(tmp_path)
+    monkeypatch.setattr(http_server, "run_in_threadpool", run_in_threadpool)
+
+    response = client.post(
+        "/server/set-password",
+        content=urllib.parse.urlencode({"version": "old"}),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"0"
+    assert len(threadpool_calls) == 1
+    assert threadpool_calls[0][0] is http_server.set_password_in_session
+    assert threadpool_calls[0][1]["accepted_client_version"] == "VERSION"
+
+
+def test_python_http_server_set_password_returns_legacy_error_body(tmp_path, monkeypatch):
     def set_password(session_arg, **kwargs):
         return enums.Errors.NotUsingLatestVersion
 
-    handler = make_handler(
-        tmp_path,
-        "/server/set-password",
-        method="POST",
-        body=body,
-        session_scope=lambda: fake_session_scope(object()),
-    )
-    original_set_password = http_server.auth.set_password
-    http_server.auth.set_password = set_password
-    try:
-        handler.do_POST()
-    finally:
-        http_server.auth.set_password = original_set_password
+    client, _main_root, _stats_root = make_client(tmp_path)
+    monkeypatch.setattr(http_server.auth, "set_password", set_password)
 
-    assert handler.responses == [HTTPStatus.OK]
-    assert ("Content-Type", "application/json") in handler.headers_sent
-    assert handler.wfile.getvalue() == b"0"
+    response = client.post(
+        "/server/set-password",
+        content=urllib.parse.urlencode({"version": "old"}),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.content == b"0"
 
 
 def test_python_http_server_rejects_invalid_set_password_content_length(tmp_path):
-    handler = make_handler(
-        tmp_path,
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    response = client.post(
         "/server/set-password",
-        method="POST",
-        body=b"",
-        session_scope=lambda: fake_session_scope(object()),
+        content=b"",
+        headers={"Content-Length": str(http_server.MAX_REPORT_ERROR_BODY_BYTES + 1)},
     )
-    handler.headers.replace_header("Content-Length", "not-a-number")
 
-    handler.do_POST()
-
-    assert handler.responses == [HTTPStatus.BAD_REQUEST]
-    assert handler.wfile.getvalue() == b""
+    assert response.status_code == 413
 
 
-def test_make_handler_returns_configured_handler_class(tmp_path):
+def test_create_app_returns_configured_fastapi_app(tmp_path):
     log_output = io.StringIO()
     main_root = tmp_path / "main"
     stats_root = tmp_path / "stats"
 
-    handler_class = http_server.make_handler(
+    app = http_server.create_app(
         main_static_root=main_root,
         stats_static_root=stats_root,
         log_output=log_output,
@@ -382,11 +342,7 @@ def test_make_handler_returns_configured_handler_class(tmp_path):
         accepted_client_version="TEST",
     )
 
-    assert issubclass(handler_class, http_server.AcquireHTTPRequestHandler)
-    assert handler_class.main_static_root == main_root
-    assert handler_class.stats_static_root == stats_root
-    assert handler_class.log_output == log_output
-    assert handler_class.accepted_client_version == "TEST"
+    assert app.title == "Acquire Python HTTP"
 
 
 def test_parse_args_accepts_http_server_options(tmp_path):
@@ -409,26 +365,13 @@ def test_parse_args_accepts_http_server_options(tmp_path):
     assert args.stats_static_root == tmp_path / "stats"
 
 
-def test_run_http_server_builds_threading_server(monkeypatch, tmp_path):
+def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
     calls = []
 
-    class FakeHTTPServer:
-        def __init__(self, address, handler):
-            self.address = address
-            self.handler = handler
-            calls.append(("init", address, handler.main_static_root, handler.stats_static_root))
+    def run(app, **kwargs):
+        calls.append((app.title, kwargs))
 
-        def __enter__(self):
-            calls.append(("enter",))
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            calls.append(("exit", exc_type, exc, traceback))
-
-        def serve_forever(self):
-            calls.append(("serve_forever", self.address))
-
-    monkeypatch.setattr(http_server, "ThreadingHTTPServer", FakeHTTPServer)
+    monkeypatch.setattr(http_server.uvicorn, "run", run)
 
     http_server.run_http_server(
         host="127.0.0.1",
@@ -439,14 +382,12 @@ def test_run_http_server_builds_threading_server(monkeypatch, tmp_path):
 
     assert calls == [
         (
-            "init",
-            ("127.0.0.1", 19001),
-            tmp_path / "main",
-            tmp_path / "stats",
-        ),
-        ("enter",),
-        ("serve_forever", ("127.0.0.1", 19001)),
-        ("exit", None, None, None),
+            "Acquire Python HTTP",
+            {
+                "host": "127.0.0.1",
+                "port": 19001,
+            },
+        )
     ]
 
 

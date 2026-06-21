@@ -93,8 +93,11 @@ change can be reviewed and validated independently.
 3. Move auth and user checks fully into Python. In progress. Consolidate login,
    session, and user lookup behavior in the Python backend, with MySQL-backed
    coverage for successful credentials, failed credentials, missing users,
-   existing users, and session edge cases.
-4. Add a Python websocket or SockJS-compatible gateway path. Preserve the
+   existing users, and session edge cases. Password setup is Python-owned;
+   SockJS login remains on the legacy Node gateway until the Python gateway
+   path is implemented.
+4. Add a Python websocket or SockJS-compatible gateway path. In progress.
+   Introduce FastAPI as the Python HTTP framework first, then preserve the
    existing client protocol, keep the Node gateway available as the known-good
    comparison path, and add parity tests for representative workflows.
 5. Switch local development and e2e tests to the Python gateway by default.
