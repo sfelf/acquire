@@ -180,12 +180,32 @@ def test_legacy_gateway_serves_main_ui(e2e_base_url):
     assert 'id="page-login"' in body
 
 
+def test_legacy_gateway_serves_main_ui_assets(e2e_base_url):
+    css_status, css_body = _read_url(e2e_base_url.rstrip("/") + "/css/main.css")
+    js_status, js_body = _read_url(e2e_base_url.rstrip("/") + "/js/main.js")
+
+    assert css_status == 200
+    assert "body" in css_body
+    assert js_status == 200
+    assert "SockJS" in js_body
+
+
 def test_legacy_gateway_serves_stats_ui(e2e_base_url):
     status, body = _read_url(e2e_base_url.rstrip("/") + "/stats/")
 
     assert status == 200
     assert "Acquire stats" in body
     assert 'id="page-stats"' in body
+
+
+def test_legacy_gateway_serves_stats_ui_assets(e2e_base_url):
+    css_status, css_body = _read_url(e2e_base_url.rstrip("/") + "/stats/css/stats.css")
+    js_status, js_body = _read_url(e2e_base_url.rstrip("/") + "/stats/js/stats.js")
+
+    assert css_status == 200
+    assert "body" in css_body
+    assert js_status == 200
+    assert "showRatings" in js_body
 
 
 def test_legacy_gateway_accepts_report_error_posts(e2e_base_url):
