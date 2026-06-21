@@ -323,6 +323,71 @@ def test_python_http_server_sockjs_websocket_closes_malformed_login_payload(tmp_
         websocket.receive_text()
 
 
+def test_decode_login_payload_rejects_invalid_json():
+    with pytest.raises(ValueError, match="invalid login payload JSON"):
+        http_server.decode_login_payload("not json")
+
+
+def test_python_http_server_sockjs_websocket_closes_multiple_login_messages(tmp_path):
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
+    ):
+        assert websocket.receive_text() == "o"
+        websocket.send_text(
+            http_server.ujson.dumps(
+                [
+                    http_server.ujson.dumps(["VERSION", "alice", ""]),
+                    http_server.ujson.dumps(["VERSION", "bob", ""]),
+                ]
+            )
+        )
+        websocket.receive_text()
+
+
+def test_python_http_server_sockjs_websocket_closes_non_string_login_fields(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        raise TypeError("login fields must be strings")
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
+    ):
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", 1, ""]))
+        websocket.receive_text()
+
+
+def test_python_http_server_sockjs_websocket_closes_when_server_disconnects(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    gateway = http_server.websocket_gateway.SockJSGateway()
+    client, _main_root, _stats_root = make_client(tmp_path, realtime_gateway=gateway)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
+    ):
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(websocket.receive_text())
+        )
+        gateway.write_from_game_server(b"disconnect 1\n")
+        websocket.receive_text()
+
+
 def test_python_http_server_sockjs_websocket_forwards_authenticated_messages(
     tmp_path, monkeypatch
 ):
