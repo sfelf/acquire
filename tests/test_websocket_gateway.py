@@ -1,11 +1,15 @@
+import asyncio
+from contextlib import suppress
+
 import pytest
 import websocket_gateway
 
 pytestmark = pytest.mark.unit
 
 
-def test_decode_sockjs_frame_returns_empty_messages_for_heartbeats():
+def test_decode_sockjs_frame_returns_empty_messages_for_heartbeats_and_empty_frames():
     assert websocket_gateway.decode_sockjs_frame("h") == []
+    assert websocket_gateway.decode_sockjs_frame("") == []
 
 
 @pytest.mark.parametrize("frame", ['{"message":"hello"}', "[1]", "not json"])
@@ -47,3 +51,39 @@ def test_sockjs_gateway_maps_connects_messages_and_disconnects():
         '[[21,1,"hello"]]'
     )
     assert connection.outbound_frames.get_nowait() is None
+
+
+def test_sockjs_gateway_cleanup_loop_runs_for_owned_servers(monkeypatch):
+    async def run_cleanup_smoke():
+        gateway = websocket_gateway.SockJSGateway()
+        cleanup_ran = asyncio.Event()
+
+        def destroy_expired_games():
+            cleanup_ran.set()
+
+        async def sleep(delay):
+            await asyncio.sleep(0)
+
+        monkeypatch.setattr(gateway.game_server, "destroy_expired_games", destroy_expired_games)
+
+        gateway.start_cleanup_loop(cleanup_interval=0, sleep=sleep)
+
+        await asyncio.wait_for(cleanup_ran.wait(), timeout=1)
+        assert gateway.cleanup_task is not None
+        gateway.cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await gateway.cleanup_task
+
+    asyncio.run(run_cleanup_smoke())
+
+
+def test_sockjs_gateway_does_not_cleanup_externally_managed_servers():
+    game_server = websocket_gateway.game_server_module.Server()
+    gateway = websocket_gateway.SockJSGateway(game_server)
+
+    async def run_start():
+        gateway.start_cleanup_loop(cleanup_interval=0)
+
+    asyncio.run(run_start())
+
+    assert gateway.cleanup_task is None

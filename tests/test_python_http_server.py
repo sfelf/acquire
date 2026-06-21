@@ -1,4 +1,5 @@
 import io
+import time
 import urllib.parse
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -20,6 +21,8 @@ def make_client(
     session_scope=None,
     accepted_client_version="VERSION",
     realtime_gateway=None,
+    sockjs_heartbeat_interval=60,
+    expired_game_cleanup_interval=60,
 ):
     main_root = tmp_path / "main"
     stats_root = tmp_path / "stats"
@@ -32,6 +35,8 @@ def make_client(
         session_scope=session_scope or (lambda: fake_session_scope(object())),
         accepted_client_version=accepted_client_version,
         realtime_gateway=realtime_gateway,
+        sockjs_heartbeat_interval=sockjs_heartbeat_interval,
+        expired_game_cleanup_interval=expired_game_cleanup_interval,
     )
     return TestClient(app), main_root, stats_root
 
@@ -250,6 +255,19 @@ def test_python_http_server_rejects_unknown_post_routes(tmp_path):
     assert response.status_code == 404
 
 
+def test_python_http_server_serves_sockjs_info_negotiation_endpoint(tmp_path):
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    response = client.get("/sockjs/info")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["websocket"] is True
+    assert body["origins"] == ["*:*"]
+    assert body["cookie_needed"] is False
+    assert isinstance(body["entropy"], int)
+
+
 def test_python_http_server_sockjs_websocket_logs_in_and_receives_initial_state(
     tmp_path, monkeypatch
 ):
@@ -283,6 +301,35 @@ def test_python_http_server_sockjs_websocket_logs_in_and_receives_initial_state(
         "alice",
         None,
     ] in messages
+
+
+def test_python_http_server_sockjs_websocket_sends_idle_heartbeats(tmp_path, monkeypatch):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path, sockjs_heartbeat_interval=0.01)
+
+    with client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket:
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(websocket.receive_text())
+        )
+        assert websocket.receive_text() == "h"
+
+
+def test_python_http_server_sockjs_websocket_rejects_duplicate_session_ids(tmp_path):
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with client.websocket_connect("/sockjs/000/socket-alice/websocket") as first_websocket:
+        assert first_websocket.receive_text() == "o"
+        with (
+            pytest.raises(WebSocketDisconnect),
+            client.websocket_connect("/sockjs/000/socket-alice/websocket") as second_websocket,
+        ):
+            assert second_websocket.receive_text() == "o"
+            second_websocket.receive_text()
 
 
 def test_python_http_server_sockjs_websocket_sends_fatal_login_errors(
@@ -386,6 +433,86 @@ def test_python_http_server_sockjs_websocket_closes_when_server_disconnects(
         )
         gateway.write_from_game_server(b"disconnect 1\n")
         websocket.receive_text()
+
+
+def test_python_http_server_sockjs_websocket_ignores_empty_frames(tmp_path, monkeypatch):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket:
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(websocket.receive_text())
+        )
+        websocket.send_text("")
+        websocket.send_text(
+            encode_sockjs_message(
+                [
+                    http_server.enums.CommandsToServer.SendGlobalChatMessage.value,
+                    "after empty frame",
+                ]
+            )
+        )
+        messages = decode_sockjs_messages(websocket.receive_text())
+
+    assert [
+        http_server.enums.CommandsToClient.AddGlobalChatMessage.value,
+        1,
+        "after empty frame",
+    ] in messages
+
+
+def test_python_http_server_sockjs_websocket_closes_invalid_post_login_frames(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
+    ):
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(websocket.receive_text())
+        )
+        websocket.send_text("not json")
+        websocket.receive_text()
+
+
+def test_python_http_server_sockjs_websocket_drops_frames_before_login_maps(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        time.sleep(0.05)
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path, sockjs_heartbeat_interval=0.01)
+
+    with client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket:
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        websocket.send_text(
+            encode_sockjs_message(
+                [
+                    http_server.enums.CommandsToServer.SendGlobalChatMessage.value,
+                    "sent before mapping",
+                ]
+            )
+        )
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(websocket.receive_text())
+        )
+        assert websocket.receive_text() == "h"
 
 
 def test_python_http_server_sockjs_websocket_forwards_authenticated_messages(

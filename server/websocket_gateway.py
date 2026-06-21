@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import Awaitable, Callable
 
 import ujson
 from fastapi import WebSocket
@@ -19,6 +20,12 @@ import server as game_server_module
 
 SOCKJS_OPEN_FRAME = "o"
 SOCKJS_HEARTBEAT_FRAME = "h"
+SOCKJS_HEARTBEAT_INTERVAL_SECONDS = 25.0
+EXPIRED_GAME_CLEANUP_INTERVAL_SECONDS = 15.0
+
+
+class DuplicateSessionIdError(ValueError):
+    """Raised when a websocket attempts to reuse an active SockJS session id."""
 
 
 @dataclasses.dataclass
@@ -64,7 +71,7 @@ def decode_sockjs_frame(frame: str) -> list[str]:
     Raises:
         ValueError: If the frame is not a SockJS application message array.
     """
-    if frame == SOCKJS_HEARTBEAT_FRAME:
+    if frame in {"", SOCKJS_HEARTBEAT_FRAME}:
         return []
 
     try:
@@ -111,10 +118,12 @@ class SockJSGateway:
                 is created when omitted.
         """
         self.game_server = game_server or game_server_module.Server()
+        self.owns_game_server = game_server is None
         self.game_server.transport_write = self.write_from_game_server
         self.socket_id_to_connection: dict[str, GatewayConnection] = {}
         self.client_id_to_connection: dict[int, GatewayConnection] = {}
         self.lock = asyncio.Lock()
+        self.cleanup_task: asyncio.Task[None] | None = None
 
     def new_connection(self, socket_id: str, websocket: WebSocket) -> GatewayConnection:
         """Create gateway bookkeeping for an accepted websocket.
@@ -125,10 +134,57 @@ class SockJSGateway:
 
         Returns:
             Connection state for the websocket.
+
+        Raises:
+            DuplicateSessionIdError: If another active connection already uses
+                the same SockJS session id.
         """
+        if socket_id in self.socket_id_to_connection:
+            raise DuplicateSessionIdError(f"active SockJS session id: {socket_id}")
         connection = GatewayConnection(socket_id=socket_id, websocket=websocket)
         self.socket_id_to_connection[socket_id] = connection
         return connection
+
+    def start_cleanup_loop(
+        self,
+        *,
+        cleanup_interval: float = EXPIRED_GAME_CLEANUP_INTERVAL_SECONDS,
+        sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    ) -> None:
+        """Start periodic expired-game cleanup for an owned game server.
+
+        The legacy `server.main()` scheduled this maintenance loop for the
+        standalone Python socket server. When the FastAPI gateway creates and
+        owns the in-process server, it must schedule the same cleanup so
+        abandoned games expire and ids return to the delayed-reuse pool.
+
+        Args:
+            cleanup_interval: Seconds between cleanup attempts.
+            sleep: Async sleep function, injectable for tests.
+        """
+        if (
+            not self.owns_game_server
+            or self.cleanup_task is not None
+            and not self.cleanup_task.done()
+        ):
+            return
+        self.cleanup_task = asyncio.create_task(
+            self._cleanup_expired_games_forever(
+                cleanup_interval=cleanup_interval,
+                sleep=sleep,
+            )
+        )
+
+    async def _cleanup_expired_games_forever(
+        self,
+        *,
+        cleanup_interval: float,
+        sleep: Callable[[float], Awaitable[object]],
+    ) -> None:
+        while True:
+            await sleep(cleanup_interval)
+            async with self.lock:
+                self.game_server.destroy_expired_games()
 
     def remove_connection(self, connection: GatewayConnection) -> None:
         """Remove gateway bookkeeping for a websocket connection.
