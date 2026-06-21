@@ -77,11 +77,36 @@ Status: complete.
 
 ## Phase 5: Python Backend Consolidation
 
-- Move Node-owned HTTP endpoints into Python.
-- Move auth and user database checks into Python.
-- Replace the Node.js SockJS gateway with a Python websocket path.
-- Preserve the existing client protocol until tests prove it is safe to change.
-- Remove the Node.js server from runtime once parity is covered.
+Status: planned.
+
+Phase 5 will be completed as a sequence of focused PRs so each runtime boundary
+change can be reviewed and validated independently.
+
+1. Runtime boundary inventory. Document every Node-owned HTTP endpoint and
+   SockJS message path, map each behavior to the existing Python equivalent or a
+   missing Python implementation, and add any missing characterization tests
+   before changing runtime code.
+2. Move Node-owned HTTP endpoints to Python. Implement Python equivalents for
+   non-websocket HTTP routes currently served by `server/server.js`, keep the
+   Node gateway running during the transition, and prove existing browser flows
+   still work through integration and e2e coverage.
+3. Move auth and user checks fully into Python. Consolidate login, session, and
+   user lookup behavior in the Python backend, with MySQL-backed coverage for
+   successful credentials, failed credentials, missing users, existing users,
+   and session edge cases.
+4. Add a Python websocket or SockJS-compatible gateway path. Preserve the
+   existing client protocol, keep the Node gateway available as the known-good
+   comparison path, and add parity tests for representative workflows.
+5. Switch local development and e2e tests to the Python gateway by default.
+   Update Docker Compose, local development docs, and e2e defaults while keeping
+   the legacy Node gateway behind an explicit compatibility profile.
+6. Remove Node.js from the main runtime path. Remove the Node gateway from the
+   default local runtime, remove runtime dependency on Node-generated artifacts
+   where only the gateway needed them, and update agent/project docs to reflect
+   Python as the primary backend.
+7. Cleanup follow-up. Delete dead Node server code only after the Python path is
+   proven stable, remove obsolete tests, docs, scripts, and dependency
+   references, and tighten CI around the Python-only runtime path.
 
 ## Phase 6: Dependency And Deployment Modernization
 
