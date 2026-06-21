@@ -48,20 +48,20 @@ Notes:
 
 ## Phase 3: Golden Replay Tests
 
-Status: expanded for the current fixture set; continue adding representative historical logs before refactoring.
+Status: complete.
 
-- Use historical game logs as replay fixtures. Complete for the initial redacted real-server fixture.
+- Use historical game logs as replay fixtures. Complete for the current refactor safety baseline.
 - Add a replay harness for current game behavior. Complete for parser-level replay, individual-game extraction, and `LogProcessor` replay summaries.
-- Store expected outputs or final states as golden files. Complete for the current fixture set.
+- Store expected outputs or final states as golden files. Complete for the current refactor safety baseline.
 - Document how to add new replay fixtures. Complete.
-- Use replay tests as the main safety net for the major refactor. In progress.
+- Use replay tests as the main safety net for the major refactor. Complete for the current refactor safety baseline.
 
-Remaining work before the major refactor:
+Notes:
 
 - Add MySQL-backed integration coverage for schema creation, seed data, and persistence behavior. Complete for the current refactor safety baseline; expand when refactor work changes persistence behavior.
 - Add fuller integration and e2e coverage around the current Python/Node split. Complete for the current refactor safety baseline; add targeted parity cases if Node retirement uncovers additional gateway behavior.
-- Add more historical log fixtures when representative edge cases are available.
-- Add richer final-state and replay-to-server synchronization golden assertions for future historical fixtures as they are added.
+- Historical fixtures include synthetic parser coverage and a representative redacted real-server fixture with summary, replay, final-state, and replay-to-server sync golden assertions.
+- Future historical fixtures can still be added when new edge cases are discovered during refactor work, but they are no longer blocking Phase 3 completion.
 
 ## Phase 4: Local Development Docker
 
