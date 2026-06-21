@@ -1,3 +1,8 @@
+"""Generate and inline JavaScript enum definitions from Python enum values.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import collections
 import glob
 import inspect
@@ -8,6 +13,11 @@ import enums
 
 
 def get_server_enums():
+    """Return enum values declared by the Python server.
+
+    Returns:
+        Ordered mappings from enum class name to member name/value pairs.
+    """
     lookups = {}
 
     for class_name in [obj[0] for obj in inspect.getmembers(enums) if inspect.isclass(obj[1])]:
@@ -21,6 +31,16 @@ def get_server_enums():
 
 
 def get_pubsub_enums():
+    """Return client PubSub enum values inferred from JavaScript sources.
+
+    Server command names are reserved under the `Server_` prefix. Client-side
+    names are discovered by scanning legacy client JavaScript files, so this
+    helper assumes those files exist in the checkout and still reference
+    `enums.PubSub` directly.
+
+    Returns:
+        Ordered PubSub member name/value pairs.
+    """
     lookup = collections.OrderedDict()
 
     for name, member in enums.CommandsToClient.__members__.items():
@@ -47,12 +67,26 @@ def get_pubsub_enums():
 
 
 def get_all_enums():
+    """Return every enum mapping needed by client generation.
+
+    Returns:
+        Mapping from enum class name to ordered member name/value pairs.
+    """
     lookups = get_server_enums()
     lookups["PubSub"] = get_pubsub_enums()
     return lookups
 
 
 def generate_enums_js(mode):
+    """Print a CommonJS enum module for the requested build mode.
+
+    Development mode emits all Python and PubSub enums. Release mode scans the
+    built JavaScript bundle and emits only enum classes that are referenced
+    there, which keeps the generated release asset smaller.
+
+    Args:
+        mode: Either `development` or `release`.
+    """
     if mode == "release":
         class_names_set = set()
         for filename in glob.glob("dist/build/js/*.js"):
@@ -90,6 +124,15 @@ def generate_enums_js(mode):
 
 
 def replace_enums(pathnames):
+    """Inline Python enum references in generated JavaScript files.
+
+    This mutates files in place and is intended for release output, not source
+    files. The replacement deliberately avoids object-property expressions such
+    as `other.enums.X` so only global enum references are rewritten.
+
+    Args:
+        pathnames: JavaScript files to rewrite.
+    """
     all_enums = get_all_enums()
     for pathname in pathnames:
         with open(pathname) as f:

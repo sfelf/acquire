@@ -1,3 +1,8 @@
+"""Recreate in-progress games from serialized server-game snapshots.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import inspect
 import os
 import pickle
@@ -12,6 +17,17 @@ server_dict = dict(inspect.getmembers(server))
 
 
 def recreate_game(server_, filename):
+    """Load one serialized game snapshot into a live server instance.
+
+    The snapshot contains internal server objects saved by replay tooling. This
+    bypasses normal game construction, allocates fresh public and internal ids,
+    restores mutable sub-objects, and registers the result in
+    `server_.game_id_to_game`.
+
+    Args:
+        server_: Server instance that will own the recreated game.
+        filename: Pickle file containing serialized game data.
+    """
     with open(filename, "rb") as f:
         game_data = pickle.load(f)
 
@@ -68,6 +84,15 @@ def recreate_game(server_, filename):
 
 
 def recreate_some_games(server_):
+    """Recreate up to five recent snapshot games missing from the database.
+
+    This maintenance helper scans a legacy snapshot directory, removes games
+    that are already persisted in MySQL, and restores the highest-tile-count
+    remaining games into the provided server.
+
+    Args:
+        server_: Server instance that will own recreated games.
+    """
     input_dir = "/opt/data/tim/"
     regex = re.compile(r"^(\d+)_0*(\d+)_0*(\d+).bin$")
 

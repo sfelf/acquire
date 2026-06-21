@@ -1,7 +1,16 @@
+"""Shared enum values for the Python server and generated client assets.
+
+This module is the canonical source for command identifiers, game state values,
+board cell types, and other protocol constants used by the legacy Python server
+and client enum generation scripts.
+"""
+
 import enum
 
 
 class CommandsToClient(enum.Enum):
+    """Command identifiers sent from the server to connected clients."""
+
     FatalError = 0
     SetClientId = 1
     SetClientIdToData = 2
@@ -29,6 +38,8 @@ class CommandsToClient(enum.Enum):
 
 
 class CommandsToServer(enum.Enum):
+    """Command identifiers sent from clients to the server."""
+
     CreateGame = 0
     JoinGame = 1
     RejoinGame = 2
@@ -40,6 +51,8 @@ class CommandsToServer(enum.Enum):
 
 
 class Errors(enum.Enum):
+    """Error identifiers returned to clients."""
+
     NotUsingLatestVersion = 0
     GenericError = 1
     InvalidUsername = 2
@@ -54,6 +67,8 @@ class Errors(enum.Enum):
 
 
 class GameActions(enum.Enum):
+    """Action identifiers for player moves during a game."""
+
     StartGame = 0
     PlayTile = 1
     SelectNewChain = 2
@@ -65,6 +80,8 @@ class GameActions(enum.Enum):
 
 
 class GameBoardTypes(enum.Enum):
+    """Cell and chain identifiers used on the Acquire game board."""
+
     Luxor = 0
     Tower = 1
     American = 2
@@ -85,6 +102,8 @@ class GameBoardTypes(enum.Enum):
 
 
 class GameHistoryMessages(enum.Enum):
+    """History message identifiers stored and sent for game events."""
+
     TurnBegan = 0
     DrewPositionTile = 1
     StartedGame = 2
@@ -107,12 +126,16 @@ class GameHistoryMessages(enum.Enum):
 
 
 class GameModes(enum.Enum):
+    """Supported game mode identifiers."""
+
     Singles = 0
     Teams = 1
     Max = 2
 
 
 class GameStates(enum.Enum):
+    """Lifecycle state identifiers for games."""
+
     Starting = 0
     StartingFull = 1
     InProgress = 2
@@ -120,6 +143,8 @@ class GameStates(enum.Enum):
 
 
 class Notifications(enum.Enum):
+    """Notification preference identifiers used by client settings."""
+
     GameFull = 0
     GameStarted = 1
     YourTurn = 2
@@ -127,6 +152,8 @@ class Notifications(enum.Enum):
 
 
 class Options(enum.Enum):
+    """Configurable client option identifiers."""
+
     EnablePageTitleNotifications = 0
     Sound = 1
     Volume = 2
@@ -137,6 +164,8 @@ class Options(enum.Enum):
 
 
 class ScoreSheetIndexes(enum.Enum):
+    """Column indexes for per-player score sheet rows."""
+
     Luxor = 0
     Tower = 1
     American = 2
@@ -152,6 +181,8 @@ class ScoreSheetIndexes(enum.Enum):
 
 
 class ScoreSheetRows(enum.Enum):
+    """Row indexes for score sheet updates sent to clients."""
+
     Player0 = 0
     Player1 = 1
     Player2 = 2

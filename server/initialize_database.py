@@ -1,3 +1,8 @@
+"""Initialize the MySQL schema and seed lookup tables for local development.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import os
 import subprocess
 
@@ -5,6 +10,7 @@ import orm
 
 
 def main():
+    """Run the module command-line entry point."""
     mysql_database = os.environ.get("MYSQL_DATABASE", "acquire")
     mysql_root_password = os.environ.get("MYSQL_ROOT_PASSWORD", "root")
     mysql_socket = os.environ.get("MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock")
