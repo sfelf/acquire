@@ -82,7 +82,7 @@ Status: planned.
 Phase 5 will be completed as a sequence of focused PRs so each runtime boundary
 change can be reviewed and validated independently.
 
-1. Runtime boundary inventory. Document every Node-owned HTTP endpoint and
+1. Runtime boundary inventory. In progress. Document every Node-owned HTTP endpoint and
    SockJS message path, map each behavior to the existing Python equivalent or a
    missing Python implementation, and add any missing characterization tests
    before changing runtime code.
