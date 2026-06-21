@@ -3,6 +3,8 @@
 This module is part of the legacy Python runtime and replay tooling.
 """
 
+from __future__ import annotations
+
 import asyncio
 import collections
 import heapq
@@ -12,9 +14,13 @@ import random
 import re
 import time
 import traceback
+from collections.abc import Callable
+from typing import cast
 
 import enums
 import ujson
+
+BoardCoordinate = tuple[int, int]
 
 
 class ServerProtocol(asyncio.Protocol):
@@ -25,29 +31,30 @@ class ServerProtocol(asyncio.Protocol):
     object and can trigger outbound messages back through the same transport.
     """
 
-    def __init__(self, server):
+    def __init__(self, server: Server) -> None:
         """Initialize the socket protocol bridge.
 
         Args:
             server: Server instance that owns clients and games.
         """
         self.server = server
-        self.transport = None
-        self.unprocessed_data = []
+        self.transport: asyncio.Transport | None = None
+        self.unprocessed_data: list[bytes] = []
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Register the active gateway transport.
 
         Args:
             transport: Asyncio transport connected to the socket.
         """
+        transport = cast(asyncio.Transport, transport)
         self.transport = transport
         self.server.transport_write = transport.write
         print("time:", time.time())
         print("connection_made")
         print()
 
-    def connection_lost(self, exc):
+    def connection_lost(self, exc: Exception | None) -> None:
         """Log that the gateway transport disconnected.
 
         Args:
@@ -57,7 +64,7 @@ class ServerProtocol(asyncio.Protocol):
         print("connection_lost")
         print()
 
-    def data_received(self, data):
+    def data_received(self, data: bytes) -> None:
         """Parse and dispatch newline-delimited gateway messages.
 
         Incoming data can split messages across socket reads, so partial bytes
@@ -105,18 +112,18 @@ class ReuseIdManager:
     gateway or browser messages may still be in flight.
     """
 
-    def __init__(self, return_wait):
+    def __init__(self, return_wait: float) -> None:
         """Initialize the delayed-reuse id pool.
 
         Args:
             return_wait: Seconds to wait before a returned id can be reused.
         """
         self.return_wait = return_wait
-        self._used = set()
-        self._unused = []
-        self._unused_wait = []
+        self._used: set[int] = set()
+        self._unused: list[int] = []
+        self._unused_wait: list[tuple[float, int]] = []
 
-    def get_id(self):
+    def get_id(self) -> int:
         """Return the lowest available id, releasing any expired returned ids.
 
         Returns:
@@ -133,7 +140,7 @@ class ReuseIdManager:
         self._used.add(next_id)
         return next_id
 
-    def return_id(self, returned_id):
+    def return_id(self, returned_id: int) -> None:
         """Mark an id for delayed reuse.
 
         Args:
@@ -146,11 +153,11 @@ class ReuseIdManager:
 class IncrementIdManager:
     """Allocate monotonically increasing numeric ids."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the monotonic counter."""
         self._last_id = 0
 
-    def get_id(self):
+    def get_id(self) -> int:
         """Return the next monotonic id.
 
         Returns:
@@ -159,7 +166,7 @@ class IncrementIdManager:
         self._last_id += 1
         return self._last_id
 
-    def return_id(self, returned_id):
+    def return_id(self, returned_id: int) -> None:
         """Accept a returned id without reusing it.
 
         Args:
@@ -168,7 +175,7 @@ class IncrementIdManager:
         pass
 
 
-def dummy_transport_write(data):
+def dummy_transport_write(data: bytes) -> None:
     """Ignore data before a real gateway transport is connected.
 
     Args:
@@ -185,20 +192,20 @@ class Server:
     batches are queued here before being serialized to the gateway socket.
     """
 
-    re_camelcase = re.compile(r"(.)([A-Z])")
+    re_camelcase: re.Pattern[str] = re.compile(r"(.)([A-Z])")
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize empty server state and id managers."""
-        self.next_client_id_manager = ReuseIdManager(60)
-        self.client_id_to_client = {}
-        self.client_ids = set()
-        self.username_to_client = {}
-        self.next_game_id_manager = ReuseIdManager(60)
-        self.next_internal_game_id_manager = IncrementIdManager()
-        self.game_id_to_game = {}
+        self.next_client_id_manager: ReuseIdManager = ReuseIdManager(60)
+        self.client_id_to_client: dict[int, Client] = {}
+        self.client_ids: set[int] = set()
+        self.username_to_client: dict[str, Client] = {}
+        self.next_game_id_manager: ReuseIdManager = ReuseIdManager(60)
+        self.next_internal_game_id_manager: IncrementIdManager = IncrementIdManager()
+        self.game_id_to_game: dict[int, Game] = {}
         self.client_ids_and_messages = []
 
-        self.transport_write = dummy_transport_write
+        self.transport_write: Callable[[bytes], None] = dummy_transport_write
 
     def add_pending_messages(self, messages, client_ids=None):
         """Queue outbound command messages for one or more clients.
@@ -232,7 +239,7 @@ class Server:
             new_list.append([client_ids, messages])
         self.client_ids_and_messages = new_list
 
-    def flush_pending_messages(self):
+    def flush_pending_messages(self) -> None:
         """Serialize queued command batches to the gateway transport."""
         outgoing = []
         for client_ids, messages in self.client_ids_and_messages:
@@ -250,7 +257,7 @@ class Server:
 
         self.transport_write(b"".join(outgoing))
 
-    def destroy_expired_games(self):
+    def destroy_expired_games(self) -> None:
         """Remove abandoned games whose expiration time has passed.
 
         Destroying a game returns its ids to the delayed-reuse pools, removes it
@@ -282,7 +289,14 @@ class Server:
 class Client:
     """Represent a connected user in the Python game server."""
 
-    def __init__(self, server, username, ip_address, socket_id, replace_existing_user):
+    def __init__(
+        self,
+        server: Server,
+        username: str,
+        ip_address: str,
+        socket_id: str,
+        replace_existing_user: bool,
+    ) -> None:
         """Register a newly connected client.
 
         Construction has side effects: it allocates a client id, writes the
@@ -305,7 +319,7 @@ class Client:
         self.player_id = None
 
         self._server.client_id_to_client[self.client_id] = self
-        messages_client = []
+        messages_client: list[list[int | str]] = []
 
         def output_connect_messages():
             """Output connect messages."""
@@ -427,7 +441,7 @@ class Client:
 
         self._server.flush_pending_messages()
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Disconnect the client and publish any required leave/logout state.
 
         The client is removed from server registries, its id is returned to the
@@ -462,7 +476,7 @@ class Client:
         else:
             print()
 
-    def on_message(self, payload):
+    def on_message(self, payload: bytes) -> None:
         """Decode and dispatch one client command payload.
 
         Malformed payloads or argument mismatches are treated as protocol
@@ -490,7 +504,7 @@ class Client:
             traceback.print_exc()
             self.disconnect()
 
-    def _on_message_create_game(self, mode, max_players):
+    def _on_message_create_game(self, mode: int, max_players: int) -> None:
         """On message create game.
 
         Args:
@@ -516,7 +530,7 @@ class Client:
             game.join_game(self)
             self._server.game_id_to_game[game_id] = game
 
-    def _on_message_join_game(self, game_id):
+    def _on_message_join_game(self, game_id: int) -> None:
         """On message join game.
 
         Args:
@@ -525,7 +539,7 @@ class Client:
         if not self.game_id and game_id in self._server.game_id_to_game:
             self._server.game_id_to_game[game_id].join_game(self)
 
-    def _on_message_rejoin_game(self, game_id):
+    def _on_message_rejoin_game(self, game_id: int) -> None:
         """On message rejoin game.
 
         Args:
@@ -534,7 +548,7 @@ class Client:
         if not self.game_id and game_id in self._server.game_id_to_game:
             self._server.game_id_to_game[game_id].rejoin_game(self)
 
-    def _on_message_watch_game(self, game_id):
+    def _on_message_watch_game(self, game_id: int) -> None:
         """On message watch game.
 
         Args:
@@ -543,7 +557,7 @@ class Client:
         if not self.game_id and game_id in self._server.game_id_to_game:
             self._server.game_id_to_game[game_id].watch_game(self)
 
-    def _on_message_leave_game(self):
+    def _on_message_leave_game(self) -> None:
         """On message leave game."""
         if self.game_id:
             self._server.game_id_to_game[self.game_id].leave_game(self)
@@ -558,7 +572,7 @@ class Client:
         if self.game_id:
             self._server.game_id_to_game[self.game_id].do_game_action(self, game_action_id, data)
 
-    def _on_message_send_global_chat_message(self, chat_message):
+    def _on_message_send_global_chat_message(self, chat_message: str) -> None:
         """On message send global chat message.
 
         Args:
@@ -576,7 +590,7 @@ class Client:
                 ]
             )
 
-    def _on_message_send_game_chat_message(self, chat_message):
+    def _on_message_send_game_chat_message(self, chat_message: str) -> None:
         """On message send game chat message.
 
         Args:
@@ -618,7 +632,7 @@ class GameBoard:
             for y in range(9):
                 self.board_type_to_coordinates[board[x][y]].add((x, y))
 
-    def _set_cell(self, coordinates, board_type):
+    def _set_cell(self, coordinates: BoardCoordinate, board_type: int) -> list[int]:
         """Update one board cell and return its client command.
 
         Args:
@@ -635,7 +649,7 @@ class GameBoard:
         self.board_type_to_coordinates[board_type].add(coordinates)
         return [enums.CommandsToClient.SetGameBoardCell.value, x, y, board_type]
 
-    def set_cell(self, coordinates, board_type):
+    def set_cell(self, coordinates: BoardCoordinate, board_type: int) -> None:
         """Update one board cell and queue the change for game clients.
 
         Args:
@@ -646,7 +660,7 @@ class GameBoard:
             [self._set_cell(coordinates, board_type)], self.game.client_ids
         )
 
-    def fill_cells(self, coordinates, board_type):
+    def fill_cells(self, coordinates: BoardCoordinate, board_type: int) -> None:
         """Flood-fill connected board cells and queue the changed cells.
 
         The fill expands through neighboring cells until it reaches empty,
@@ -712,8 +726,8 @@ class ScoreSheet:
         self.chain_size = [0, 0, 0, 0, 0, 0, 0]
         self.price = [0, 0, 0, 0, 0, 0, 0]
 
-        self.creator_username = None
-        self.username_to_player_id = {}
+        self.creator_username: str | None = None
+        self.username_to_player_id: dict[str, int] = {}
 
     def join_game(self, client, position_tile):
         """Add a player and publish score-sheet join state.
@@ -820,7 +834,7 @@ class ScoreSheet:
             ]
         )
 
-    def is_username_in_game(self, username):
+    def is_username_in_game(self, username: str) -> bool:
         """Return whether is username in game.
 
         Args:
@@ -831,7 +845,7 @@ class ScoreSheet:
         """
         return username in self.username_to_player_id
 
-    def get_creator_player_id(self):
+    def get_creator_player_id(self) -> int | None:
         """Get creator player id.
 
         Returns:
@@ -839,7 +853,7 @@ class ScoreSheet:
         """
         return self.username_to_player_id[self.creator_username] if self.creator_username else None
 
-    def adjust_player_data(self, player_id, score_sheet_index, adjustment):
+    def adjust_player_data(self, player_id: int, score_sheet_index: int, adjustment: int) -> None:
         """Adjust player data.
 
         Args:
@@ -864,7 +878,7 @@ class ScoreSheet:
             self.game.client_ids,
         )
 
-    def set_chain_size(self, game_board_type_id, chain_size):
+    def set_chain_size(self, game_board_type_id: int, chain_size: int) -> None:
         """Set chain size.
 
         Args:
@@ -951,7 +965,7 @@ class ScoreSheet:
 
         return bonus_data
 
-    def update_net_worths(self):
+    def update_net_worths(self) -> None:
         """Update net worths."""
         net_worths = []
         for player_datum in self.player_data:
@@ -1223,7 +1237,7 @@ class Action:
         """Prepare the action before it is offered to clients."""
         pass
 
-    def send_message(self, client_ids):
+    def send_message(self, client_ids: set[int]) -> None:
         """Queue the SetGameAction command for selected clients.
 
         Args:
@@ -2089,7 +2103,9 @@ class Game:
                 new_actions = action.prepare()
             action.send_message(self.client_ids)
 
-    def set_state(self, state, mode=None, max_players=None):
+    def set_state(
+        self, state: int, mode: int | None = None, max_players: int | None = None
+    ) -> None:
         """Set game state and publish the corresponding client/log records.
 
         State changes can also update mode, maximum players, begin/end times,
@@ -2244,7 +2260,7 @@ class Game:
         self.actions[-1].send_message({client.client_id})
 
 
-def main():
+def main() -> None:
     """Run the module command-line entry point."""
     server = Server()
     server_protocol = ServerProtocol(server)

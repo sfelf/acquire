@@ -6,6 +6,7 @@ This module is part of the legacy Python runtime and replay tooling.
 import collections
 import os
 from contextlib import contextmanager
+from typing import cast
 
 from sqlalchemy import (
     Column,
@@ -89,7 +90,7 @@ class Game(Base):
     game_state = relationship("GameState")
     game_mode = relationship("GameMode")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -118,7 +119,7 @@ class GameMode(Base):
     name = Column(String(8, convert_unicode="force"), nullable=False)
     __table_args__ = (UniqueConstraint("name"),)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -142,7 +143,7 @@ class GamePlayer(Base):
     game = relationship("Game")
     user = relationship("User")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -169,7 +170,7 @@ class GameState(Base):
     name = Column(String(16, convert_unicode="force"), nullable=False)
     __table_args__ = (UniqueConstraint("name"),)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -188,7 +189,7 @@ class KeyValue(Base):
     value = Column(Text(convert_unicode="force"), nullable=False)
     __table_args__ = (UniqueConstraint("key"),)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -215,7 +216,7 @@ class Rating(Base):
     user = relationship("User")
     rating_type = relationship("RatingType")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -244,7 +245,7 @@ class RatingType(Base):
     name = Column(String(8, convert_unicode="force"), nullable=False)
     __table_args__ = (UniqueConstraint("name"),)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -268,7 +269,7 @@ class Record(Base):
 
     user = relationship("User")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -290,7 +291,7 @@ class User(Base):
     password = Column(String(64, convert_unicode="force"))
     __table_args__ = (UniqueConstraint("name"),)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
 
         Returns:
@@ -316,17 +317,23 @@ class Lookup:
             session: SQLAlchemy session used for all queries and new ORM rows.
         """
         self.session = session
-        self.game_lookup = collections.defaultdict(dict)
-        self.game_mode_lookup = {}
-        self.game_player_lookup = collections.defaultdict(lambda: collections.defaultdict(dict))
-        self.game_state_lookup = {}
-        self.key_value_lookup = {}
-        self.rating_lookup = collections.defaultdict(dict)
-        self.rating_type_lookup = {}
-        self.record_lookup = {}
-        self.user_lookup = {}
+        self.game_lookup: collections.defaultdict[int, dict[int, Game]] = collections.defaultdict(
+            dict
+        )
+        self.game_mode_lookup: dict[str, GameMode | None] = {}
+        self.game_player_lookup: collections.defaultdict[
+            int, collections.defaultdict[int, dict[int, GamePlayer]]
+        ] = collections.defaultdict(lambda: collections.defaultdict(dict))
+        self.game_state_lookup: dict[str, GameState | None] = {}
+        self.key_value_lookup: dict[str, KeyValue] = {}
+        self.rating_lookup: collections.defaultdict[str, dict[str, Rating]] = (
+            collections.defaultdict(dict)
+        )
+        self.rating_type_lookup: dict[str, RatingType | None] = {}
+        self.record_lookup: dict[str, Record] = {}
+        self.user_lookup: dict[str, User] = {}
 
-    def get_game(self, log_time, number):
+    def get_game(self, log_time: int, number: int) -> Game:
         """Return the persisted or newly added game for a log identity.
 
         A `(log_time, number)` pair is the stable identity used by historical
@@ -343,7 +350,10 @@ class Lookup:
         if game:
             return game
 
-        game = self.session.query(Game).filter_by(log_time=log_time, number=number).scalar()
+        game = cast(
+            Game | None,
+            self.session.query(Game).filter_by(log_time=log_time, number=number).scalar(),
+        )
         if not game:
             game = Game(log_time=log_time, number=number)
             self.session.add(game)
@@ -351,7 +361,7 @@ class Lookup:
         self.game_lookup[log_time][number] = game
         return game
 
-    def get_game_mode(self, name):
+    def get_game_mode(self, name: str) -> GameMode | None:
         """Return the game mode lookup row for a mode name.
 
         Args:
@@ -364,12 +374,14 @@ class Lookup:
         if game_mode:
             return game_mode
 
-        game_mode = self.session.query(GameMode).filter_by(name=name).scalar()
+        game_mode = cast(
+            GameMode | None, self.session.query(GameMode).filter_by(name=name).scalar()
+        )
 
         self.game_mode_lookup[name] = game_mode
         return game_mode
 
-    def get_game_player(self, game, player_index):
+    def get_game_player(self, game: Game, player_index: int) -> GamePlayer:
         """Return the player row for a game seat.
 
         Persisted games are queried by database id; unsaved games use the
@@ -388,10 +400,11 @@ class Lookup:
             return game_player
 
         if game.game_id:
-            game_player = (
+            game_player = cast(
+                GamePlayer | None,
                 self.session.query(GamePlayer)
                 .filter_by(game_id=game.game_id, player_index=player_index)
-                .scalar()
+                .scalar(),
             )
 
         if not game_player:
@@ -401,7 +414,7 @@ class Lookup:
         self.game_player_lookup[game.log_time][game.number][player_index] = game_player
         return game_player
 
-    def get_game_state(self, name):
+    def get_game_state(self, name: str) -> GameState | None:
         """Return the game state lookup row for a state name.
 
         Args:
@@ -414,12 +427,14 @@ class Lookup:
         if game_state:
             return game_state
 
-        game_state = self.session.query(GameState).filter_by(name=name).scalar()
+        game_state = cast(
+            GameState | None, self.session.query(GameState).filter_by(name=name).scalar()
+        )
 
         self.game_state_lookup[name] = game_state
         return game_state
 
-    def get_key_value(self, key):
+    def get_key_value(self, key: str) -> KeyValue:
         """Return a mutable key/value row, creating it when absent.
 
         Cron import stores progress offsets in this table. New rows are added to
@@ -436,7 +451,7 @@ class Lookup:
         if key_value:
             return key_value
 
-        key_value = self.session.query(KeyValue).filter_by(key=key).scalar()
+        key_value = cast(KeyValue | None, self.session.query(KeyValue).filter_by(key=key).scalar())
         if not key_value:
             key_value = KeyValue(key=key)
             self.session.add(key_value)
@@ -444,7 +459,7 @@ class Lookup:
         self.key_value_lookup[key] = key_value
         return key_value
 
-    def get_rating(self, user, rating_type):
+    def get_rating(self, user: User, rating_type: RatingType) -> Rating | None:
         """Return the latest persisted rating for a user and rating type.
 
         Unsaved users cannot have persisted ratings, so this returns `None`
@@ -463,12 +478,13 @@ class Lookup:
             return rating
 
         if user.user_id:
-            rating = (
+            rating = cast(
+                Rating | None,
                 self.session.query(Rating)
                 .filter_by(user=user, rating_type=rating_type)
                 .order_by(Rating.rating_id.desc())
                 .limit(1)
-                .scalar()
+                .scalar(),
             )
 
         if rating:
@@ -476,7 +492,7 @@ class Lookup:
 
         return rating
 
-    def add_rating(self, rating):
+    def add_rating(self, rating: Rating) -> None:
         """Cache a newly created rating as the latest known rating.
 
         Args:
@@ -484,7 +500,7 @@ class Lookup:
         """
         self.rating_lookup[rating.user.name][rating.rating_type.name] = rating
 
-    def get_rating_type(self, name):
+    def get_rating_type(self, name: str) -> RatingType | None:
         """Return the rating type lookup row for a name.
 
         Args:
@@ -497,12 +513,14 @@ class Lookup:
         if rating_type:
             return rating_type
 
-        rating_type = self.session.query(RatingType).filter_by(name=name).scalar()
+        rating_type = cast(
+            RatingType | None, self.session.query(RatingType).filter_by(name=name).scalar()
+        )
 
         self.rating_type_lookup[name] = rating_type
         return rating_type
 
-    def get_record(self, user):
+    def get_record(self, user: User) -> Record | None:
         """Return the encoded stats record for a persisted user.
 
         Unsaved users cannot have records, so this returns `None` until the user
@@ -520,14 +538,16 @@ class Lookup:
             return record
 
         if user.user_id:
-            record = self.session.query(Record).filter_by(user=user).limit(1).scalar()
+            record = cast(
+                Record | None, self.session.query(Record).filter_by(user=user).limit(1).scalar()
+            )
 
         if record:
             self.record_lookup[user.name] = record
 
         return record
 
-    def add_record(self, record):
+    def add_record(self, record: Record) -> None:
         """Cache a newly created stats record.
 
         Args:
@@ -535,7 +555,7 @@ class Lookup:
         """
         self.record_lookup[record.user.name] = record
 
-    def get_user(self, name):
+    def get_user(self, name: str) -> User:
         """Return the persisted or newly added user for a username.
 
         Missing users are added to the session with no password because log
@@ -551,7 +571,7 @@ class Lookup:
         if user:
             return user
 
-        user = self.session.query(User).filter_by(name=name).scalar()
+        user = cast(User | None, self.session.query(User).filter_by(name=name).scalar())
         if not user:
             user = User(name=name)
             self.session.add(user)

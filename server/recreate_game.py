@@ -7,16 +7,17 @@ import inspect
 import os
 import pickle
 import re
+from typing import cast
 
 import orm
 import sqlalchemy.sql
 
 import server
 
-server_dict = dict(inspect.getmembers(server))
+server_dict: dict[str, object] = dict(inspect.getmembers(server))
 
 
-def recreate_game(server_, filename):
+def recreate_game(server_: server.Server, filename: str) -> None:
     """Load one serialized game snapshot into a live server instance.
 
     The snapshot contains internal server objects saved by replay tooling. This
@@ -65,7 +66,7 @@ def recreate_game(server_, filename):
 
     game.actions = []
     for action_data in game_data["actions"]:
-        cls = server_dict[action_data["__name__"]]
+        cls = cast(type[server.Action], server_dict[action_data["__name__"]])
         action = cls.__new__(cls)
         action.game = game
         for key, value in action_data.items():
@@ -83,7 +84,7 @@ def recreate_game(server_, filename):
     server_.game_id_to_game[game.game_id] = game
 
 
-def recreate_some_games(server_):
+def recreate_some_games(server_: server.Server) -> None:
     """Recreate up to five recent snapshot games missing from the database.
 
     This maintenance helper scans a legacy snapshot directory, removes games

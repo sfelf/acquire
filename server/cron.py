@@ -24,7 +24,7 @@ import util
 class Logs2DB:
     """Import parsed log records into ORM objects and rating records."""
 
-    rating_type_to_draw_probability = {
+    rating_type_to_draw_probability: dict[str, float] = {
         "Singles2": 0.00271,
         "Singles3": 0.00421,
         "Singles4": 0.01664,
@@ -281,7 +281,7 @@ class Logs2DB:
                 record.encoded = ujson.encode(decoded)
 
 
-def get_empty_records():
+def get_empty_records() -> list[list[int]]:
     """Get empty records.
 
     Returns:
@@ -450,7 +450,7 @@ class StatsGen:
             f.write(ujson.dumps(contents))
 
 
-record_key_to_record_index = {
+record_key_to_record_index: dict[str, int] = {
     "Singles2": 0,
     "Singles3": 1,
     "Singles4": 2,
@@ -458,7 +458,7 @@ record_key_to_record_index = {
 }
 
 
-def process_logs(write_stats_files):
+def process_logs(write_stats_files: bool) -> None:
     """Process logs.
 
     Args:
@@ -528,7 +528,7 @@ def process_logs(write_stats_files):
                 subprocess.call(command)
 
 
-def output_all_stats_files():
+def output_all_stats_files() -> None:
     """Output all stats files."""
     with orm.session_scope() as session:
         statsgen = StatsGen(session, "/tmp/tim/acquire/stats")
@@ -539,7 +539,7 @@ def output_all_stats_files():
             statsgen.output_user(user_id, username, records)
 
 
-def main():
+def main() -> None:
     """Run the module command-line entry point."""
     while True:
         try:
