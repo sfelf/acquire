@@ -30,6 +30,15 @@ def real_cron_module(real_orm_module):
 
 
 @pytest.fixture
+def real_auth_module(real_orm_module):
+    sys.modules.pop("auth", None)
+    try:
+        yield importlib.import_module("auth")
+    finally:
+        sys.modules.pop("auth", None)
+
+
+@pytest.fixture
 def mysql_engine(mysql_test_url):
     engine = sqlalchemy.create_engine(mysql_test_url)
     try:
@@ -193,6 +202,92 @@ def test_session_scope_commits_and_rolls_back_against_mysql(
         session.close()
 
     assert names == ["committed"]
+
+
+def test_auth_password_and_login_rules_against_mysql(
+    mysql_engine,
+    real_orm_module,
+    real_auth_module,
+    empty_mysql_schema,
+):
+    password_hash = "a" * 64
+    replacement_hash = "b" * 64
+    real_orm_module.Base.metadata.create_all(mysql_engine)
+    session = make_mysql_session(mysql_engine)
+    try:
+        assert (
+            real_auth_module.set_password(
+                session,
+                version="VERSION",
+                username="alice",
+                password=password_hash,
+            )
+            is None
+        )
+        session.commit()
+
+        alice = session.query(real_orm_module.User).filter_by(name="alice").one()
+        assert alice.password == password_hash
+        assert (
+            real_auth_module.set_password(
+                session,
+                version="VERSION",
+                username="alice",
+                password=replacement_hash,
+            )
+            is real_auth_module.enums.Errors.ExistingPassword
+        )
+
+        success = real_auth_module.check_login(
+            session,
+            version="VERSION",
+            username="alice",
+            password=password_hash,
+        )
+        assert success.error is None
+        assert success.replace_existing_user is True
+
+        wrong_password = real_auth_module.check_login(
+            session,
+            version="VERSION",
+            username="alice",
+            password=replacement_hash,
+        )
+        assert wrong_password.error is real_auth_module.enums.Errors.IncorrectPassword
+
+        missing_user = real_auth_module.check_login(
+            session,
+            version="VERSION",
+            username="missing",
+            password="",
+        )
+        assert missing_user.error is None
+        assert missing_user.replace_existing_user is False
+
+        missing_user_with_password = real_auth_module.check_login(
+            session,
+            version="VERSION",
+            username="missing",
+            password=password_hash,
+        )
+        assert missing_user_with_password.error is real_auth_module.enums.Errors.ProvidedPassword
+
+        session.add(real_orm_module.User(name="bob", password=None))
+        session.commit()
+        assert (
+            real_auth_module.set_password(
+                session,
+                version="VERSION",
+                username="bob",
+                password=replacement_hash,
+            )
+            is None
+        )
+        session.commit()
+        bob = session.query(real_orm_module.User).filter_by(name="bob").one()
+        assert bob.password == replacement_hash
+    finally:
+        session.close()
 
 
 def test_mysql_enforces_runtime_unique_constraints(
