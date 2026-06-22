@@ -61,6 +61,13 @@ def _app_table_names(engine):
     return _table_names(engine) - {"alembic_version"}
 
 
+def _check_constraint_names(inspector, table_name):
+    return {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints(table_name)
+    }
+
+
 def test_postgres_database_accepts_writes_and_reads(postgres_engine):
     table_name = f"pytest_postgres_smoke_{uuid.uuid4().hex}"
     table_created = False
@@ -176,3 +183,57 @@ def test_alembic_baseline_runs_against_postgres(
     with postgres_engine.begin() as connection:
         connection.execute(sqlalchemy.text("drop table if exists alembic_version"))
     assert not _table_names(postgres_engine)
+
+
+def test_alembic_baseline_preserves_mysql_numeric_contract_against_postgres(
+    postgres_engine,
+    empty_postgres_schema,
+):
+    with postgres_engine.begin() as connection:
+        command.upgrade(_alembic_config(connection), "head")
+
+    inspector = sqlalchemy.inspect(postgres_engine)
+    assert "ck_game_log_time_unsigned" in _check_constraint_names(inspector, "game")
+    assert "ck_game_mode_game_mode_id_unsigned" in _check_constraint_names(
+        inspector, "game_mode"
+    )
+    assert "ck_game_player_score_unsigned" in _check_constraint_names(
+        inspector, "game_player"
+    )
+
+    rating_columns = {
+        column["name"]: column["type"]
+        for column in inspector.get_columns("rating")
+    }
+    assert rating_columns["mu"].__class__.__name__ == "REAL"
+    assert rating_columns["sigma"].__class__.__name__ == "REAL"
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            sqlalchemy.text(
+                'insert into "user" (user_id, name, password) values (:id, :name, null)'
+            ),
+            {"id": 2_147_483_648, "name": "above-signed-int"},
+        )
+
+    with (
+        pytest.raises(sqlalchemy.exc.IntegrityError),
+        postgres_engine.begin() as connection,
+    ):
+        connection.execute(
+            sqlalchemy.text(
+                'insert into "user" (user_id, name, password) values (-1, :name, null)'
+            ),
+            {"name": "negative-id"},
+        )
+
+    with (
+        pytest.raises(sqlalchemy.exc.IntegrityError),
+        postgres_engine.begin() as connection,
+    ):
+        connection.execute(
+            sqlalchemy.text(
+                'insert into game_mode (game_mode_id, name) values (256, :name)'
+            ),
+            {"name": "TooLarge"},
+        )

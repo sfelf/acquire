@@ -46,8 +46,25 @@ class FakeType:
         return self
 
 
+class FakeConstraint:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.ddl_if_args = None
+        self.ddl_if_kwargs = None
+
+    def ddl_if(self, *args, **kwargs):
+        self.ddl_if_args = args
+        self.ddl_if_kwargs = kwargs
+        return self
+
+
 def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
+    fake_sqlalchemy.BigInteger = lambda *args, **kwargs: FakeType(
+        "big-integer", args, kwargs
+    )
+    fake_sqlalchemy.CheckConstraint = FakeConstraint
     fake_sqlalchemy.create_engine = lambda *args, **kwargs: ("engine", args, kwargs)
     fake_sqlalchemy.Column = FakeColumn
     fake_sqlalchemy.Float = lambda *args, **kwargs: FakeType("float", args, kwargs)
@@ -67,6 +84,9 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_mysql.SMALLINT = lambda *args, **kwargs: FakeType("mysql-smallint", args, kwargs)
     fake_mysql.TINYINT = lambda *args, **kwargs: FakeType("mysql-tinyint", args, kwargs)
 
+    fake_postgresql = types.ModuleType("sqlalchemy.dialects.postgresql")
+    fake_postgresql.REAL = lambda *args, **kwargs: FakeType("postgres-real", args, kwargs)
+
     fake_engine = types.ModuleType("sqlalchemy.engine")
     fake_engine_url = types.ModuleType("sqlalchemy.engine.url")
     fake_engine_url.URL = FakeURL
@@ -76,13 +96,16 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_orm.relationship = lambda *args, **kwargs: ("relationship", args, kwargs)
     fake_orm.sessionmaker = lambda bind=None: lambda autoflush=False: None
 
-    fake_sqlalchemy.dialects = types.SimpleNamespace(mysql=fake_mysql)
+    fake_sqlalchemy.dialects = types.SimpleNamespace(
+        mysql=fake_mysql, postgresql=fake_postgresql
+    )
     fake_sqlalchemy.engine = types.SimpleNamespace(url=fake_engine_url)
     fake_sqlalchemy.orm = fake_orm
 
     monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects", fake_sqlalchemy.dialects)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.postgresql", fake_postgresql)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine", fake_engine)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine.url", fake_engine_url)
     monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_orm)
