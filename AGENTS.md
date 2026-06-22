@@ -1,6 +1,10 @@
 # Agent Instructions
 
-This repository is in a modernization and refactor effort. Tooling, documentation, CI, Docker-backed local development, and the pytest foundation are in place; the current goal is to consolidate the runtime into the Python backend while preserving behavior with the existing test suite.
+This repository is in a modernization and refactor effort. Tooling,
+documentation, CI, Docker-backed local development, pytest coverage, and Python
+backend consolidation are in place; the current goal is dependency and
+deployment modernization while preserving behavior with the existing test
+suite.
 
 ## Current Architecture
 
@@ -95,4 +99,4 @@ uv run pre-commit run --all-files
 3. Add golden replay tests from historical game logs.
 4. Add local-development Docker support.
 5. Consolidate the runtime into Python and deprecate Node.js.
-6. Upgrade dependencies and plan the MySQL-to-Postgres migration after coverage is strong.
+6. Upgrade dependencies, add migration tooling, modernize frontend asset builds, and plan deployment.

@@ -130,8 +130,14 @@ def e2e_base_url(pytestconfig):
             "run",
             "--rm",
             "python-gateway",
-            "python",
-            "initialize_database.py",
+            "sh",
+            "-c",
+            "for i in $(seq 1 30); do "
+            "test -S /var/run/mysqld/mysqld.sock && exec python initialize_database.py; "
+            "sleep 1; "
+            "done; "
+            "echo 'MySQL socket was not ready at /var/run/mysqld/mysqld.sock' >&2; "
+            "exit 1",
         )
         yield f"http://127.0.0.1:{ui_port}/"
     finally:

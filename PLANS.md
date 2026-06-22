@@ -77,7 +77,7 @@ Status: complete.
 
 ## Phase 5: Python Backend Consolidation
 
-Status: in progress.
+Status: complete.
 
 Phase 5 will be completed as a sequence of focused PRs so each runtime boundary
 change can be reviewed and validated independently.
@@ -106,21 +106,33 @@ change can be reviewed and validated independently.
    Remove the Node gateway from the default local runtime, separate legacy
    client asset generation from the running Python gateway stack, and update
    agent/project docs to reflect Python as the primary backend.
-7. Cleanup follow-up. In progress in
-   `codex/phase-5-remove-legacy-node-gateway`.
+7. Cleanup follow-up. Complete.
    Delete dead Node server code now that the Python path owns local HTTP,
    SockJS, auth, and gameplay workflows; remove obsolete docs, scripts, and
    dependency references; and tighten CI around the Python-only runtime path.
 
 ## Phase 6: Dependency And Deployment Modernization
 
-- Upgrade Python runtime dependencies.
-- Upgrade SQLAlchemy.
-- Add Alembic migrations.
-- Plan and execute a MySQL-to-Postgres migration.
-- Modernize frontend tooling.
-- Tighten `ruff` and `mypy`.
-- Add production Docker and AWS deployment paths.
+Status: planned.
+
+Phase 6 should be split into small PRs so dependency risk, database migration
+risk, frontend build changes, and deployment changes can be reviewed
+independently.
+
+1. Upgrade Python runtime dependencies in controlled groups, starting with
+   compatibility patches needed for supported Python versions.
+2. Upgrade SQLAlchemy and add focused ORM/session regression coverage for any
+   behavior that changes during the upgrade.
+3. Add Alembic migrations for the current MySQL schema before changing database
+   engines.
+4. Plan and execute the MySQL-to-Postgres migration after migrations and
+   persistence tests are in place.
+5. Modernize frontend tooling so client asset generation no longer depends on
+   the legacy Node.js 6-era toolchain.
+6. Tighten `ruff` and `mypy` incrementally once dependency upgrades reduce
+   legacy typing friction.
+7. Add production Docker and AWS deployment paths after the local Python
+   runtime image is stable.
 
 ## Open Notes
 
