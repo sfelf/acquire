@@ -4,10 +4,10 @@ This project is in the Python-gateway consolidation phase:
 
 - MySQL stores user and historical game data.
 - `server/http_server.py` runs the default FastAPI HTTP and SockJS-compatible gateway.
-- `server/server.py` remains available as the legacy socket-based Python game server for Node gateway parity checks.
-- `server/server.js` is the legacy Node.js SockJS and HTTP gateway behind an opt-in compatibility profile.
+- `server/server.py` owns the Python game state and gameplay command handling.
+- Node.js is used only by the opt-in client asset build helper until the frontend toolchain is modernized.
 
-The Docker Compose setup is intended for local development only while test coverage expands and the Node.js gateway is being retired.
+The Docker Compose setup is intended for local development only while deployment support matures.
 
 The local Python image intentionally installs from `requirements.local-docker.txt` instead of the legacy `requirements.txt`. The legacy file still contains an old MySQL connector zip URL that is no longer reliably fetchable, and broad runtime dependency upgrades are deferred until coverage is stronger.
 
@@ -22,7 +22,7 @@ cp .env.example .env
 Generate the gitignored browser assets:
 
 ```bash
-docker compose --profile client-build up --build client-assets
+docker compose --profile client-build run --rm client-assets
 ```
 
 This one-time setup helper uses the legacy Node.js toolchain to compile
@@ -58,40 +58,7 @@ Initialize the local database in another terminal:
 docker compose run --rm python-gateway python initialize_database.py
 ```
 
-The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, the Python gateway, and the legacy Node gateway.
-
-## Legacy Node Gateway
-
-The Node.js gateway is available as an opt-in profile for local parity checks:
-
-```bash
-docker compose --profile legacy-node up --build mysql python-server node-gateway
-```
-
-Initialize the local database in another terminal if you have not already done so:
-
-```bash
-docker compose run --rm python-server python initialize_database.py
-```
-
-Then open the legacy local UI:
-
-```text
-http://localhost:9001/
-```
-
-The legacy profile includes the same client asset build helpers before starting `server/server.js`.
-In Docker, the gateway listens on container port `9000`, publishes host port `9001` by default, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
-Outside Docker, the gateway keeps the legacy default of listening on `javascript.sock`.
-The gateway still removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
-
-Set `ACQUIRE_LEGACY_UI_PORT` in `.env` to use a different host port for the legacy gateway:
-
-```env
-ACQUIRE_LEGACY_UI_PORT=9003
-```
-
-This profile exists as a known-good compatibility path while the Python gateway becomes the primary local runtime. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
+The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, and the Python gateway.
 
 ## Useful Commands
 
@@ -101,7 +68,7 @@ Stop containers:
 docker compose down
 ```
 
-Stop containers and remove the local MySQL data volume, MySQL socket volume, and container-side Node dependency cache:
+Stop containers and remove the local MySQL data volume, MySQL socket volume, and container-side Node dependency cache used by the client build helper:
 
 ```bash
 docker compose down --volumes

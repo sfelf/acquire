@@ -1,8 +1,9 @@
 """Implement legacy-compatible authentication and password rules.
 
-The legacy Node gateway currently owns login validation and `/server/set-password`.
-Phase 5 moves those rules into Python so the future Python websocket gateway and
-HTTP server can share one behavior-preserving implementation.
+The removed Node gateway used these rules for login validation and
+`/server/set-password`. The Python HTTP and websocket gateway share this
+behavior-preserving implementation so the client contract stays stable while
+the backend is refactored.
 """
 
 from __future__ import annotations
@@ -106,8 +107,9 @@ def normalize_form_value(value: str | None) -> str:
 def normalize_login_value(value: object) -> str:
     """Collapse and trim whitespace in a login tuple value.
 
-    The Node gateway calls `.replace()` on each login tuple field. Non-string
-    values therefore raise and cause the socket to close without a fatal error.
+    The removed Node gateway called `.replace()` on each login tuple field.
+    Non-string values therefore raise and cause the socket to close without a
+    fatal error.
 
     Args:
         value: Login tuple field supplied by the client.
@@ -185,7 +187,7 @@ def check_login(
 ) -> LoginResult:
     """Validate a legacy SockJS login tuple.
 
-    This preserves the Node gateway's behavior: malformed non-string fields
+    This preserves the removed Node gateway's behavior: malformed non-string fields
     raise before a fatal error can be sent, missing users may log in only with an
     empty password and are not created, and login password strings are compared
     as-is without hash-format validation.

@@ -1,9 +1,8 @@
 """Serve Python-owned HTTP routes with FastAPI during backend consolidation.
 
-This module is the Phase 5 landing place for non-websocket routes that are
-moving out of the legacy Node gateway. FastAPI owns the route table and ASGI
-runtime while the route implementations preserve legacy response bodies and
-normalization rules for compatibility with the existing client.
+FastAPI owns the route table and ASGI runtime while the route implementations
+preserve legacy response bodies and normalization rules for compatibility with
+the existing client.
 """
 
 from __future__ import annotations

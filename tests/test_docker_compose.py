@@ -14,9 +14,17 @@ def test_default_compose_runtime_excludes_node_services():
     services = _load_compose_services()
 
     assert "profiles" not in services["python-gateway"]
-    assert services["client-enums"]["profiles"] == ["client-build", "legacy-node"]
-    assert services["client-assets"]["profiles"] == ["client-build", "legacy-node"]
-    assert services["node-gateway"]["profiles"] == ["legacy-node"]
+    assert services["client-enums"]["profiles"] == ["client-build"]
+    assert services["client-assets"]["profiles"] == ["client-build"]
+    assert "python-server" not in services
+    assert "node-gateway" not in services
+
+
+def test_compose_does_not_define_legacy_node_profile():
+    services = _load_compose_services()
+
+    for service in services.values():
+        assert "legacy-node" not in service.get("profiles", [])
 
 
 def test_python_gateway_does_not_depend_on_client_asset_build():

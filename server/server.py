@@ -26,7 +26,9 @@ BoardCoordinate = tuple[int, int]
 class ServerProtocol(asyncio.Protocol):
     """Bridge the Unix socket protocol into server/client operations.
 
-    The legacy Node gateway writes newline-delimited commands to this protocol.
+    The historical socket gateway wrote newline-delimited commands to this
+    protocol. The parser remains covered while the in-process FastAPI gateway
+    preserves the same game-server behavior.
     Parsed connection and client-message events mutate the in-memory `Server`
     object and can trigger outbound messages back through the same transport.
     """

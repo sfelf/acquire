@@ -44,7 +44,7 @@ Docker Compose support is available for local MySQL and the Python FastAPI gatew
 
 ```bash
 cp .env.example .env
-docker compose --profile client-build up --build client-assets
+docker compose --profile client-build run --rm client-assets
 docker compose up --build mysql python-gateway
 ```
 
@@ -57,14 +57,10 @@ docker compose run --rm python-gateway python initialize_database.py
 Then open [http://localhost:9000/](http://localhost:9000/).
 
 The first command generates the gitignored browser assets once for the Python
-gateway. The legacy Node.js gateway remains available as an opt-in compatibility
-profile on [http://localhost:9001/](http://localhost:9001/) by default:
+gateway. Node.js is only used for that legacy client asset build step; the local
+HTTP and SockJS runtime is Python-owned.
 
-```bash
-docker compose --profile legacy-node up --build mysql python-server node-gateway
-```
-
-See [docs/local-development.md](docs/local-development.md) for UI access, database initialization, teardown, and the optional legacy Node.js gateway profile.
+See [docs/local-development.md](docs/local-development.md) for UI access, database initialization, and teardown.
 
 ## Install dependencies
 
