@@ -29,6 +29,9 @@ def get_configured_url() -> str:
     Tests can set `sqlalchemy.url` directly on the Alembic config. Normal local
     commands fall back to the same URL assembled by `server/orm.py`, preserving
     the existing MySQL environment-variable behavior.
+
+    Returns:
+        Configured Alembic URL or the ORM-derived runtime URL.
     """
     configured_url = config.get_main_option("sqlalchemy.url")
     if configured_url:
@@ -56,6 +59,9 @@ def get_connectable() -> Connection | Engine:
     Docker-backed database fixture. CLI commands use `server/orm.py`'s engine
     when no URL is supplied, which keeps MySQL socket and auth plugin settings
     aligned with the legacy runtime.
+
+    Returns:
+        Injected SQLAlchemy connection, configured engine, or ORM runtime engine.
     """
     connection = config.attributes.get("connection")
     if connection is not None:

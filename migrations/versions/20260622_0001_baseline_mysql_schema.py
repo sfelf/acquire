@@ -21,9 +21,13 @@ MYSQL_TABLE_OPTIONS = {
     "mysql_collate": "utf8mb4_bin",
 }
 
+game_mode_table = sa.table("game_mode", sa.column("name", sa.String(length=8)))
+game_state_table = sa.table("game_state", sa.column("name", sa.String(length=16)))
+rating_type_table = sa.table("rating_type", sa.column("name", sa.String(length=8)))
+
 
 def upgrade() -> None:
-    """Create the existing Acquire MySQL schema."""
+    """Create the existing Acquire MySQL schema and required lookup rows."""
     op.create_table(
         "game_mode",
         sa.Column("game_mode_id", mysql.TINYINT(unsigned=True), nullable=False),
@@ -121,6 +125,31 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("game_player_id"),
         sa.UniqueConstraint("game_id", "player_index"),
         **MYSQL_TABLE_OPTIONS,
+    )
+    op.bulk_insert(
+        game_mode_table,
+        [
+            {"name": "Singles"},
+            {"name": "Teams"},
+        ],
+    )
+    op.bulk_insert(
+        game_state_table,
+        [
+            {"name": "Starting"},
+            {"name": "StartingFull"},
+            {"name": "InProgress"},
+            {"name": "Completed"},
+        ],
+    )
+    op.bulk_insert(
+        rating_type_table,
+        [
+            {"name": "Singles2"},
+            {"name": "Singles3"},
+            {"name": "Singles4"},
+            {"name": "Teams"},
+        ],
     )
 
 

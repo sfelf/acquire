@@ -246,11 +246,27 @@ def test_alembic_baseline_matches_current_orm_schema_against_mysql(
 
     session = make_mysql_session(mysql_engine)
     try:
-        seed_lookup_rows(session, real_orm_module)
         session.add(real_orm_module.User(name="Alice", password=None))
         session.add(real_orm_module.User(name="alice", password=None))
         session.commit()
-        assert session.query(real_orm_module.GameMode).filter_by(name="Singles").one().game_mode_id
+        assert [
+            row.name
+            for row in session.query(real_orm_module.GameMode).order_by(
+                real_orm_module.GameMode.game_mode_id
+            )
+        ] == ["Singles", "Teams"]
+        assert [
+            row.name
+            for row in session.query(real_orm_module.GameState).order_by(
+                real_orm_module.GameState.game_state_id
+            )
+        ] == ["Starting", "StartingFull", "InProgress", "Completed"]
+        assert [
+            row.name
+            for row in session.query(real_orm_module.RatingType).order_by(
+                real_orm_module.RatingType.rating_type_id
+            )
+        ] == ["Singles2", "Singles3", "Singles4", "Teams"]
         assert session.query(real_orm_module.User).filter_by(name="Alice").one().user_id
         assert session.query(real_orm_module.User).filter_by(name="alice").one().user_id
     finally:
