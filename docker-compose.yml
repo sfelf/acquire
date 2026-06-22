@@ -118,7 +118,7 @@ services:
       python-server:
         condition: service_healthy
     ports:
-      - "${ACQUIRE_UI_PORT:-9000}:9000"
+      - "${ACQUIRE_LEGACY_UI_PORT:-9001}:9000"
     volumes:
       - .:/app
       - node-modules:/app/node_modules

@@ -36,7 +36,7 @@ http://localhost:9000/
 Set `ACQUIRE_UI_PORT` in `.env` to use a different host port:
 
 ```env
-ACQUIRE_UI_PORT=9001
+ACQUIRE_UI_PORT=9002
 ```
 
 Initialize the local database in another terminal:
@@ -63,16 +63,22 @@ Initialize the local database in another terminal if you have not already done s
 docker compose run --rm python-server python initialize_database.py
 ```
 
-Then open the local UI:
+Then open the legacy local UI:
 
 ```text
-http://localhost:9000/
+http://localhost:9001/
 ```
 
 The profile generates the gitignored client assets before starting `server/server.js`: `client/main/css/main.css`, `client/stats/css/stats.css`, `client/main/js/enums.js`, and `client/main/js/main.js`.
-In Docker, the gateway listens on port `9000`, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
+In Docker, the gateway listens on container port `9000`, publishes host port `9001` by default, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
 Outside Docker, the gateway keeps the legacy default of listening on `javascript.sock`.
 The gateway still removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
+
+Set `ACQUIRE_LEGACY_UI_PORT` in `.env` to use a different host port for the legacy gateway:
+
+```env
+ACQUIRE_LEGACY_UI_PORT=9003
+```
 
 This profile exists as a known-good compatibility path while the Python gateway becomes the primary local runtime. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
 

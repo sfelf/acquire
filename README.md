@@ -55,7 +55,8 @@ docker compose run --rm python-gateway python initialize_database.py
 
 Then open [http://localhost:9000/](http://localhost:9000/).
 
-The legacy Node.js gateway remains available as an opt-in compatibility profile:
+The legacy Node.js gateway remains available as an opt-in compatibility profile on
+[http://localhost:9001/](http://localhost:9001/) by default:
 
 ```bash
 docker compose --profile legacy-node up --build mysql python-server node-gateway
