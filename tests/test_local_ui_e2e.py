@@ -172,7 +172,7 @@ def _read_url(url_or_request, timeout=60):
             time.sleep(1)
 
 
-def test_legacy_gateway_serves_main_ui(e2e_base_url):
+def test_python_gateway_serves_main_ui(e2e_base_url):
     status, body = _read_url(e2e_base_url.rstrip("/") + "/")
 
     assert status == 200
@@ -180,7 +180,7 @@ def test_legacy_gateway_serves_main_ui(e2e_base_url):
     assert 'id="page-login"' in body
 
 
-def test_legacy_gateway_serves_main_ui_assets(e2e_base_url):
+def test_python_gateway_serves_main_ui_assets(e2e_base_url):
     css_status, css_body = _read_url(e2e_base_url.rstrip("/") + "/css/main.css")
     js_status, js_body = _read_url(e2e_base_url.rstrip("/") + "/js/main.js")
 
@@ -190,7 +190,7 @@ def test_legacy_gateway_serves_main_ui_assets(e2e_base_url):
     assert "SockJS" in js_body
 
 
-def test_legacy_gateway_serves_stats_ui(e2e_base_url):
+def test_python_gateway_serves_stats_ui(e2e_base_url):
     status, body = _read_url(e2e_base_url.rstrip("/") + "/stats/")
 
     assert status == 200
@@ -198,7 +198,7 @@ def test_legacy_gateway_serves_stats_ui(e2e_base_url):
     assert 'id="page-stats"' in body
 
 
-def test_legacy_gateway_serves_stats_ui_assets(e2e_base_url):
+def test_python_gateway_serves_stats_ui_assets(e2e_base_url):
     css_status, css_body = _read_url(e2e_base_url.rstrip("/") + "/stats/css/stats.css")
     js_status, js_body = _read_url(e2e_base_url.rstrip("/") + "/stats/js/stats.js")
 
@@ -208,7 +208,7 @@ def test_legacy_gateway_serves_stats_ui_assets(e2e_base_url):
     assert "showRatings" in js_body
 
 
-def test_legacy_gateway_accepts_report_error_posts(e2e_base_url):
+def test_python_gateway_accepts_report_error_posts(e2e_base_url):
     data = urllib.parse.urlencode(
         {
             "message": "e2e smoke",
@@ -228,7 +228,7 @@ def test_legacy_gateway_accepts_report_error_posts(e2e_base_url):
     assert body == ""
 
 
-def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
+def test_python_gateway_supports_basic_game_workflow(e2e_base_url):
     username_1 = f"e2e-{uuid.uuid4().hex[:8]}"
     username_2 = f"e2e-{uuid.uuid4().hex[:8]}"
 
@@ -396,7 +396,7 @@ def test_legacy_gateway_supports_basic_game_workflow(e2e_base_url):
             assert any(expected_message(message) for message in play_tile_messages)
 
 
-def test_legacy_gateway_supports_watch_leave_and_rejoin_workflow(e2e_base_url):
+def test_python_gateway_supports_watch_leave_and_rejoin_workflow(e2e_base_url):
     player_username = f"e2e-player-{uuid.uuid4().hex[:8]}"
     watcher_username = f"e2e-watch-{uuid.uuid4().hex[:8]}"
 

@@ -8,7 +8,7 @@ Testing is the main safety mechanism for the planned refactor.
 - Protocol tests cover the Python server input and output message format.
 - Golden replay tests use historical game logs to protect current gameplay behavior.
 - MySQL integration tests cover schema and persistence behavior.
-- End-to-end smoke tests cover the full legacy stack while Node.js is still present.
+- End-to-end smoke tests cover the default Python gateway stack while Node.js remains available as a compatibility profile.
 
 ## Pytest Markers
 
@@ -49,7 +49,7 @@ uv run pytest -m mysql
 uv run pytest -m e2e
 ```
 
-The `mysql` marker starts a disposable Docker Compose MySQL service when `ACQUIRE_MYSQL_TEST_URL` is not set. Set `ACQUIRE_MYSQL_TEST_URL` only when you want the tests to use an existing disposable test schema; MySQL integration tests may create and drop ORM tables. The `e2e` marker starts the local Compose stack with the legacy Node gateway when `ACQUIRE_E2E_URL` is not set. Set `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack.
+The `mysql` marker starts a disposable Docker Compose MySQL service when `ACQUIRE_MYSQL_TEST_URL` is not set. Set `ACQUIRE_MYSQL_TEST_URL` only when you want the tests to use an existing disposable test schema; MySQL integration tests may create and drop ORM tables. The `e2e` marker starts the local Compose stack with the Python gateway when `ACQUIRE_E2E_URL` is not set. Set `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack.
 
 ## Golden Replay Plan
 

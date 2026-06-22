@@ -1,12 +1,12 @@
 # Agent Instructions
 
-This repository is in a modernization and refactor effort. Tooling, documentation, CI, Docker-backed local development, and the pytest foundation are in place; the current goal is to deepen marker coverage, including MySQL, integration, e2e, and golden replay tests, before changing runtime behavior.
+This repository is in a modernization and refactor effort. Tooling, documentation, CI, Docker-backed local development, and the pytest foundation are in place; the current goal is to consolidate the runtime into the Python backend while preserving behavior with the existing test suite.
 
 ## Current Architecture
 
-- `server/server.js` is the legacy Node.js HTTP and SockJS gateway.
-- `server/server.py` contains the Python game server and socket protocol handling.
-- `server/http_server.py` contains the FastAPI app for Python-owned HTTP routes.
+- `server/http_server.py` contains the FastAPI app for the default local HTTP and SockJS-compatible gateway.
+- `server/server.py` contains the Python game server and legacy socket protocol handling.
+- `server/server.js` is the legacy Node.js HTTP and SockJS gateway, kept behind the `legacy-node` compatibility profile.
 - MySQL is the current database.
 - Client assets live under `client/` and are generated with the legacy shell scripts.
 - `requirements.txt` remains the source of legacy runtime dependencies for now.
