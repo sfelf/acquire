@@ -12,6 +12,11 @@ def test_decode_sockjs_frame_returns_empty_messages_for_heartbeats_and_empty_fra
     assert websocket_gateway.decode_sockjs_frame("") == []
 
 
+def test_decode_raw_websocket_frame_wraps_non_empty_frame_as_payload():
+    assert websocket_gateway.decode_raw_websocket_frame('[6,"hello"]') == ['[6,"hello"]']
+    assert websocket_gateway.decode_raw_websocket_frame("") == []
+
+
 @pytest.mark.parametrize("frame", ['{"message":"hello"}', "[1]", "not json"])
 def test_decode_sockjs_frame_rejects_invalid_application_frames(frame):
     with pytest.raises(ValueError):
@@ -51,6 +56,35 @@ def test_sockjs_gateway_maps_connects_messages_and_disconnects():
         '[[21,1,"hello"]]'
     )
     assert connection.outbound_frames.get_nowait() is None
+
+
+def test_sockjs_gateway_uses_connection_specific_outbound_encoding():
+    gateway = websocket_gateway.SockJSGateway()
+    connection = gateway.new_connection(
+        "socket-1",
+        object(),
+        encode_messages=websocket_gateway.encode_raw_websocket_message,
+    )
+
+    gateway.write_from_game_server(b'connect ["socket-1",1]\n1 [[21,1,"hello"]]\n')
+
+    assert connection.outbound_frames.get_nowait() == '[[21,1,"hello"]]'
+
+
+def test_sockjs_gateway_rejects_payloads_after_client_is_unmapped():
+    gateway = websocket_gateway.SockJSGateway()
+    connection = gateway.new_connection("socket-1", object())
+    received_payloads = []
+
+    class DisconnectedClient:
+        def on_message(self, payload):
+            received_payloads.append(payload)
+
+    connection.client = DisconnectedClient()
+    connection.client_id = 1
+
+    assert gateway.receive_client_payload(connection, '[6,"too late"]') is False
+    assert received_payloads == []
 
 
 def test_sockjs_gateway_cleanup_loop_runs_for_owned_servers(monkeypatch):

@@ -28,19 +28,6 @@ class DuplicateSessionIdError(ValueError):
     """Raised when a websocket attempts to reuse an active SockJS session id."""
 
 
-@dataclasses.dataclass
-class GatewayConnection:
-    """Track one browser websocket connection and its server-side client."""
-
-    socket_id: str
-    websocket: WebSocket
-    outbound_frames: asyncio.Queue[str | None] = dataclasses.field(
-        default_factory=asyncio.Queue
-    )
-    client_id: int | None = None
-    client: game_server_module.Client | None = None
-
-
 def encode_sockjs_messages(messages_json: str) -> str:
     """Wrap a legacy client-message JSON string in a SockJS websocket frame.
 
@@ -52,6 +39,33 @@ def encode_sockjs_messages(messages_json: str) -> str:
         SockJS array frame text suitable for a raw websocket transport.
     """
     return "a" + ujson.dumps([messages_json])
+
+
+def encode_raw_websocket_message(messages_json: str) -> str:
+    """Return a legacy client-message JSON string for raw websocket clients.
+
+    Args:
+        messages_json: JSON string that should be delivered as one raw
+            websocket message.
+
+    Returns:
+        Unwrapped websocket message text.
+    """
+    return messages_json
+
+
+@dataclasses.dataclass
+class GatewayConnection:
+    """Track one browser websocket connection and its server-side client."""
+
+    socket_id: str
+    websocket: WebSocket
+    encode_messages: Callable[[str], str] = encode_sockjs_messages
+    outbound_frames: asyncio.Queue[str | None] = dataclasses.field(
+        default_factory=asyncio.Queue
+    )
+    client_id: int | None = None
+    client: game_server_module.Client | None = None
 
 
 def decode_sockjs_frame(frame: str) -> list[str]:
@@ -82,6 +96,18 @@ def decode_sockjs_frame(frame: str) -> list[str]:
     if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
         raise ValueError("SockJS frame must be a list of strings")
     return parsed
+
+
+def decode_raw_websocket_frame(frame: str) -> list[str]:
+    """Decode one inbound raw websocket frame into an application message.
+
+    Args:
+        frame: Raw websocket text frame.
+
+    Returns:
+        Single application message, or no messages for an empty frame.
+    """
+    return [] if frame == "" else [frame]
 
 
 def normalize_client_payload(payload: str) -> str:
@@ -125,12 +151,19 @@ class SockJSGateway:
         self.lock = asyncio.Lock()
         self.cleanup_task: asyncio.Task[None] | None = None
 
-    def new_connection(self, socket_id: str, websocket: WebSocket) -> GatewayConnection:
+    def new_connection(
+        self,
+        socket_id: str,
+        websocket: WebSocket,
+        *,
+        encode_messages: Callable[[str], str] = encode_sockjs_messages,
+    ) -> GatewayConnection:
         """Create gateway bookkeeping for an accepted websocket.
 
         Args:
             socket_id: SockJS session id from the websocket URL.
             websocket: Accepted FastAPI websocket.
+            encode_messages: Transport-specific outbound message encoder.
 
         Returns:
             Connection state for the websocket.
@@ -141,7 +174,11 @@ class SockJSGateway:
         """
         if socket_id in self.socket_id_to_connection:
             raise DuplicateSessionIdError(f"active SockJS session id: {socket_id}")
-        connection = GatewayConnection(socket_id=socket_id, websocket=websocket)
+        connection = GatewayConnection(
+            socket_id=socket_id,
+            websocket=websocket,
+            encode_messages=encode_messages,
+        )
         self.socket_id_to_connection[socket_id] = connection
         return connection
 
@@ -249,7 +286,11 @@ class SockJSGateway:
             `True` when the connection remains active after dispatch, otherwise
             `False`.
         """
-        if connection.client is None:
+        if (
+            connection.client is None
+            or connection.client_id is None
+            or connection.client_id not in self.game_server.client_id_to_client
+        ):
             return False
         connection.client.on_message(normalize_client_payload(payload).encode())
         return (
@@ -294,9 +335,8 @@ class SockJSGateway:
         connection.outbound_frames.put_nowait(None)
 
     def _handle_messages(self, key: str, value: str) -> None:
-        frame = encode_sockjs_messages(value)
         for client_id_text in key.split(","):
             connection = self.client_id_to_connection.get(int(client_id_text))
             if connection is None:
                 continue
-            connection.outbound_frames.put_nowait(frame)
+            connection.outbound_frames.put_nowait(connection.encode_messages(value))

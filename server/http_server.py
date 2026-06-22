@@ -248,18 +248,21 @@ def decode_login_payload(payload: str) -> tuple[object, object, object]:
     return parsed[0], parsed[1], parsed[2]
 
 
-def encode_fatal_error(error: enums.Errors) -> str:
-    """Encode a legacy fatal-error message as a SockJS websocket frame.
+def encode_fatal_error(
+    error: enums.Errors,
+    *,
+    encode_messages: Callable[[str], str] = websocket_gateway.encode_sockjs_messages,
+) -> str:
+    """Encode a legacy fatal-error message for a websocket transport.
 
     Args:
         error: Fatal login error to send to the client.
+        encode_messages: Transport-specific outbound message encoder.
 
     Returns:
-        SockJS frame text containing the fatal-error command.
+        Frame text containing the fatal-error command.
     """
-    return websocket_gateway.encode_sockjs_messages(
-        ujson.dumps([[enums.CommandsToClient.FatalError.value, error.value]])
-    )
+    return encode_messages(ujson.dumps([[enums.CommandsToClient.FatalError.value, error.value]]))
 
 
 def resolve_static_path(
@@ -406,30 +409,40 @@ def create_app(
             }
         )
 
-    @app.websocket("/sockjs/{server_id}/{session_id}/websocket")
-    async def sockjs_websocket(
+    async def serve_websocket_connection(
         websocket: WebSocket,
-        server_id: str,
-        session_id: str,
+        *,
+        socket_id: str,
+        decode_frame: Callable[[str], list[str]],
+        encode_messages: Callable[[str], str],
+        open_frame: str | None,
+        heartbeat_frame: str | None,
     ) -> None:
-        """Serve the raw SockJS websocket transport from Python.
+        """Serve one legacy websocket transport connection.
 
-        This route is the first Python-owned realtime gateway path. It accepts
-        the raw websocket URL used by the generated client and existing e2e
-        tests, unwraps SockJS application frames, delegates login validation to
-        Python auth, and forwards authenticated commands into `server.Client`.
+        SockJS session transports and the legacy raw websocket transport share
+        login, game-server dispatch, and cleanup semantics. The caller supplies
+        the small pieces that differ by transport: framing, the optional SockJS
+        open frame, and whether idle heartbeats should be emitted.
 
         Args:
             websocket: Incoming FastAPI websocket connection.
-            server_id: SockJS server id path segment.
-            session_id: SockJS session id path segment.
+            socket_id: Gateway socket identifier to map to the game server.
+            decode_frame: Transport-specific inbound frame decoder.
+            encode_messages: Transport-specific outbound message encoder.
+            open_frame: Optional frame sent immediately after accept.
+            heartbeat_frame: Optional idle heartbeat frame.
         """
-        del server_id
         await websocket.accept()
-        await websocket.send_text(websocket_gateway.SOCKJS_OPEN_FRAME)
+        if open_frame is not None:
+            await websocket.send_text(open_frame)
 
         try:
-            connection = gateway.new_connection(session_id, websocket)
+            connection = gateway.new_connection(
+                socket_id,
+                websocket,
+                encode_messages=encode_messages,
+            )
         except websocket_gateway.DuplicateSessionIdError:
             await websocket.close()
             return
@@ -439,14 +452,17 @@ def create_app(
 
         async def send_queued_frames() -> None:
             while True:
-                try:
-                    frame = await asyncio.wait_for(
-                        connection.outbound_frames.get(),
-                        timeout=sockjs_heartbeat_interval,
-                    )
-                except TimeoutError:
-                    await websocket.send_text(websocket_gateway.SOCKJS_HEARTBEAT_FRAME)
-                    continue
+                if heartbeat_frame is None:
+                    frame = await connection.outbound_frames.get()
+                else:
+                    try:
+                        frame = await asyncio.wait_for(
+                            connection.outbound_frames.get(),
+                            timeout=sockjs_heartbeat_interval,
+                        )
+                    except TimeoutError:
+                        await websocket.send_text(heartbeat_frame)
+                        continue
                 if frame is None:
                     with suppress(RuntimeError):
                         await websocket.close()
@@ -457,7 +473,7 @@ def create_app(
             try:
                 while True:
                     frame = await websocket.receive_text()
-                    payloads = websocket_gateway.decode_sockjs_frame(frame)
+                    payloads = decode_frame(frame)
                     if not payloads or not mapped.is_set():
                         continue
                     await inbound_payloads.put(payloads)
@@ -471,7 +487,7 @@ def create_app(
         try:
             while True:
                 login_frame = await websocket.receive_text()
-                login_messages = websocket_gateway.decode_sockjs_frame(login_frame)
+                login_messages = decode_frame(login_frame)
                 if login_messages:
                     break
             if len(login_messages) != 1:
@@ -494,7 +510,12 @@ def create_app(
                 return
 
             if login_result.error is not None:
-                await websocket.send_text(encode_fatal_error(login_result.error))
+                await websocket.send_text(
+                    encode_fatal_error(
+                        login_result.error,
+                        encode_messages=encode_messages,
+                    )
+                )
                 await websocket.close()
                 return
 
@@ -540,6 +561,55 @@ def create_app(
                 receiver_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await receiver_task
+
+    @app.websocket("/sockjs/websocket")
+    async def sockjs_raw_websocket(websocket: WebSocket) -> None:
+        """Serve the legacy raw websocket transport from Python.
+
+        The old Node gateway enabled SockJS `websocket-raw` alongside the
+        session-scoped SockJS websocket transport. Raw websocket clients connect
+        to `/sockjs/websocket` and exchange unwrapped application JSON strings,
+        so this route does not emit SockJS open or heartbeat frames.
+
+        Args:
+            websocket: Incoming FastAPI websocket connection.
+        """
+        await serve_websocket_connection(
+            websocket,
+            socket_id=f"raw-{secrets.token_hex(16)}",
+            decode_frame=websocket_gateway.decode_raw_websocket_frame,
+            encode_messages=websocket_gateway.encode_raw_websocket_message,
+            open_frame=None,
+            heartbeat_frame=None,
+        )
+
+    @app.websocket("/sockjs/{server_id}/{session_id}/websocket")
+    async def sockjs_websocket(
+        websocket: WebSocket,
+        server_id: str,
+        session_id: str,
+    ) -> None:
+        """Serve the SockJS websocket transport from Python.
+
+        This route accepts the session-scoped SockJS websocket URL used by the
+        generated client and existing e2e tests, unwraps SockJS application
+        frames, delegates login validation to Python auth, and forwards
+        authenticated commands into `server.Client`.
+
+        Args:
+            websocket: Incoming FastAPI websocket connection.
+            server_id: SockJS server id path segment.
+            session_id: SockJS session id path segment.
+        """
+        del server_id
+        await serve_websocket_connection(
+            websocket,
+            socket_id=session_id,
+            decode_frame=websocket_gateway.decode_sockjs_frame,
+            encode_messages=websocket_gateway.encode_sockjs_messages,
+            open_frame=websocket_gateway.SOCKJS_OPEN_FRAME,
+            heartbeat_frame=websocket_gateway.SOCKJS_HEARTBEAT_FRAME,
+        )
 
     @app.api_route("/stats", methods=["GET", "HEAD"])
     async def redirect_stats_root(request: Request) -> RedirectResponse:

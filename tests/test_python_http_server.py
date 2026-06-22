@@ -318,6 +318,37 @@ def test_python_http_server_sockjs_websocket_logs_in_and_receives_initial_state(
     ] in messages
 
 
+def test_python_http_server_raw_websocket_logs_in_and_receives_unwrapped_messages(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with client.websocket_connect("/sockjs/websocket") as websocket:
+        websocket.send_text(http_server.ujson.dumps(["VERSION", "alice", ""]))
+        messages = http_server.ujson.loads(websocket.receive_text())
+
+        websocket.send_text(
+            http_server.ujson.dumps(
+                [
+                    http_server.enums.CommandsToServer.SendGlobalChatMessage.value,
+                    "hello from raw websocket",
+                ]
+            )
+        )
+        chat_messages = http_server.ujson.loads(websocket.receive_text())
+
+    assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in messages
+    assert [
+        http_server.enums.CommandsToClient.AddGlobalChatMessage.value,
+        1,
+        "hello from raw websocket",
+    ] in chat_messages
+
+
 def test_python_http_server_sockjs_websocket_ignores_empty_frames_before_login(
     tmp_path, monkeypatch
 ):
@@ -383,6 +414,31 @@ def test_python_http_server_sockjs_websocket_sends_fatal_login_errors(
         assert websocket.receive_text() == "o"
         websocket.send_text(encode_sockjs_message(["old", "alice", ""]))
         messages = decode_sockjs_messages(websocket.receive_text())
+
+    assert messages == [
+        [
+            http_server.enums.CommandsToClient.FatalError.value,
+            http_server.enums.Errors.NotUsingLatestVersion.value,
+        ]
+    ]
+
+
+def test_python_http_server_raw_websocket_sends_unwrapped_fatal_login_errors(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(
+            http_server.enums.Errors.NotUsingLatestVersion,
+            "alice",
+            "",
+        )
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with client.websocket_connect("/sockjs/websocket") as websocket:
+        websocket.send_text(http_server.ujson.dumps(["old", "alice", ""]))
+        messages = http_server.ujson.loads(websocket.receive_text())
 
     assert messages == [
         [
