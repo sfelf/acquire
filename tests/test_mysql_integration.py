@@ -63,9 +63,15 @@ def mysql_engine(mysql_test_url):
 
 @pytest.fixture
 def empty_mysql_schema(mysql_engine, real_orm_module):
-    real_orm_module.Base.metadata.drop_all(mysql_engine)
+    drop_application_schema(mysql_engine, real_orm_module)
     yield
-    real_orm_module.Base.metadata.drop_all(mysql_engine)
+    drop_application_schema(mysql_engine, real_orm_module)
+
+
+def drop_application_schema(mysql_engine, orm):
+    orm.Base.metadata.drop_all(mysql_engine)
+    with mysql_engine.begin() as connection:
+        connection.execute(sqlalchemy.text("drop table if exists alembic_version"))
 
 
 def seed_lookup_rows(session, orm):
@@ -274,7 +280,9 @@ def test_alembic_baseline_matches_current_orm_schema_against_mysql(
 
     with mysql_engine.begin() as connection:
         command.downgrade(_alembic_config(connection), "base")
-    assert not _app_table_names(mysql_engine)
+    with mysql_engine.begin() as connection:
+        connection.execute(sqlalchemy.text("drop table if exists alembic_version"))
+    assert not _table_names(mysql_engine)
 
 
 def _column_contract(inspector, table_name):
