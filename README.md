@@ -33,10 +33,11 @@ uv run pytest -m unit
 uv run pytest -m golden
 uv run pytest -m integration
 uv run pytest -m mysql
+uv run pytest -m postgres
 uv run pytest -m e2e
 ```
 
-MySQL and e2e marker runs create isolated Docker Compose projects when service URL environment variables are not set. Use `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want to point those tests at already-running services. Integration tests skip when the local environment blocks socket binding.
+MySQL, Postgres, and e2e marker runs create isolated Docker Compose projects when service URL environment variables are not set. Use `ACQUIRE_MYSQL_TEST_URL`, `ACQUIRE_POSTGRES_TEST_URL`, or `ACQUIRE_E2E_URL` only when you want to point those tests at already-running services. Integration tests skip when the local environment blocks socket binding.
 
 ## Local Docker Development
 

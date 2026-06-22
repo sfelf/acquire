@@ -82,5 +82,8 @@ jobs:
       - name: Run MySQL marker tests
         run: uv run pytest -m mysql
 
+      - name: Run Postgres marker tests
+        run: uv run pytest -m postgres
+
       - name: Run e2e marker tests
         run: uv run pytest -m e2e

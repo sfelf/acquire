@@ -1,12 +1,15 @@
 import importlib
 import os
+import socket
 import subprocess
 import sys
+import time
 import types
 from pathlib import Path
 from urllib.parse import quote
 
 import pytest
+import sqlalchemy
 
 REPO_DIR = Path(__file__).resolve().parents[1]
 SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
@@ -57,6 +60,12 @@ def _cleanup_docker_compose(project_name, *args, include_test_override=False):
     )
 
 
+def _get_available_local_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return str(sock.getsockname()[1])
+
+
 @pytest.fixture(scope="session")
 def mysql_test_url(pytestconfig):
     configured_url = os.environ.get("ACQUIRE_MYSQL_TEST_URL")
@@ -86,6 +95,57 @@ def mysql_test_url(pytestconfig):
                 compose_env["MYSQL_DATABASE"],
             )
         )
+    finally:
+        _cleanup_docker_compose(project_name, "down", "--volumes", include_test_override=True)
+        for key, value in previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@pytest.fixture(scope="session")
+def postgres_test_url(pytestconfig):
+    configured_url = os.environ.get("ACQUIRE_POSTGRES_TEST_URL")
+    if configured_url:
+        yield configured_url
+        return
+    if not _is_marker_selected(pytestconfig, "postgres"):
+        pytest.skip("postgres marker was not selected")
+
+    project_name = f"acquire-pytest-postgres-{os.getpid()}"
+    postgres_port = os.environ.get("ACQUIRE_POSTGRES_TEST_PORT", _get_available_local_port())
+    compose_env = {
+        "ACQUIRE_POSTGRES_TEST_PORT": postgres_port,
+        "POSTGRES_DB": os.environ.get("POSTGRES_DB", "acquire"),
+        "POSTGRES_USER": os.environ.get("POSTGRES_USER", "acquire"),
+        "POSTGRES_PASSWORD": os.environ.get("POSTGRES_PASSWORD", "acquire"),
+    }
+    previous_env = {key: os.environ.get(key) for key in compose_env}
+    os.environ.update(compose_env)
+    try:
+        _run_docker_compose(project_name, "up", "-d", "postgres", include_test_override=True)
+        postgres_url = "postgresql+psycopg://{}:{}@127.0.0.1:{}/{}".format(
+            quote(compose_env["POSTGRES_USER"], safe=""),
+            quote(compose_env["POSTGRES_PASSWORD"], safe=""),
+            postgres_port,
+            compose_env["POSTGRES_DB"],
+        )
+        engine = sqlalchemy.create_engine(postgres_url)
+        try:
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    with engine.connect() as connection:
+                        connection.execute(sqlalchemy.text("select 1"))
+                    break
+                except sqlalchemy.exc.DBAPIError:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(1)
+        finally:
+            engine.dispose()
+        yield postgres_url
     finally:
         _cleanup_docker_compose(project_name, "down", "--volumes", include_test_override=True)
         for key, value in previous_env.items():

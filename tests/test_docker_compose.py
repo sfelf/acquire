@@ -37,3 +37,12 @@ def test_python_gateway_explains_missing_client_assets():
     services = _load_compose_services()
 
     assert "client-build" in services["python-gateway"]["command"]
+
+
+def test_compose_defines_postgres_for_marker_tests():
+    services = _load_compose_services()
+
+    assert services["postgres"]["image"] == "postgres:17"
+    assert services["postgres"]["profiles"] == ["postgres"]
+    assert services["postgres"]["healthcheck"]["test"][0] == "CMD-SHELL"
+    assert "POSTGRES_DB" in services["postgres"]["environment"]

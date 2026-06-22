@@ -87,7 +87,8 @@ Run Docker-backed marker tests with the same marker commands used in CI and revi
 
 ```bash
 uv run pytest -m mysql
+uv run pytest -m postgres
 uv run pytest -m e2e
 ```
 
-By default, the MySQL marker uses host port `33061` and the e2e marker exposes the local UI on host port `19000`. Override those with `ACQUIRE_MYSQL_TEST_PORT` or `ACQUIRE_E2E_PORT` if either port is already in use. Set `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack instead of starting disposable Compose projects. `ACQUIRE_MYSQL_TEST_URL` must point at a disposable test schema because MySQL integration tests may create and drop ORM tables.
+By default, the MySQL marker uses host port `33061`, the Postgres marker chooses an available host port, and the e2e marker exposes the local UI on host port `19000`. Override those with `ACQUIRE_MYSQL_TEST_PORT`, `ACQUIRE_POSTGRES_TEST_PORT`, or `ACQUIRE_E2E_PORT` when you need a fixed port. Set `ACQUIRE_MYSQL_TEST_URL`, `ACQUIRE_POSTGRES_TEST_URL`, or `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack instead of starting disposable Compose projects. Database marker URLs must point at disposable test schemas because marker tests may create and drop tables.

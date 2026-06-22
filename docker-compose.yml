@@ -19,6 +19,22 @@ services:
       - mysql-data:/var/lib/mysql
       - mysql-socket:/var/run/mysqld
 
+  postgres:
+    image: postgres:17
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acquire}
+      POSTGRES_USER: ${POSTGRES_USER:-acquire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acquire}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   client-enums:
     build:
       context: .
@@ -82,4 +98,5 @@ services:
 volumes:
   mysql-data:
   mysql-socket:
+  postgres-data:
   node-modules:
