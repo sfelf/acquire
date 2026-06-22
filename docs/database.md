@@ -15,7 +15,9 @@ persistence coverage that protects the refactor.
 - MySQL integration tests cover schema creation, migrations, runtime
   constraints, auth persistence, lookup persistence, transaction behavior, and
   completed-game log import persistence. Postgres marker tests now cover
-  connectivity, ORM metadata creation, and the Alembic baseline.
+  connectivity, ORM metadata creation, the Alembic baseline, transaction
+  behavior, auth persistence, runtime constraints, lookup persistence, and
+  completed-game log import persistence.
 
 ## MySQL-Specific Surface Area
 
@@ -46,7 +48,8 @@ persistence coverage that protects the refactor.
    portable SQLAlchemy types where possible, with explicit treatment for
    binary/case-sensitive username semantics. In progress.
 5. Run schema, lookup, auth, session, and log-import persistence tests against
-   both MySQL and Postgres until parity is proven.
+   both MySQL and Postgres until parity is proven. Complete for the current
+   migration baseline.
 6. Replace `initialize_database.py` with Alembic upgrade plus seed data in
    local Docker and e2e setup, then remove the legacy reset command.
 7. Switch local development defaults from MySQL to Postgres after the dual
