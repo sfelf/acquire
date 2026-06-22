@@ -27,8 +27,37 @@ This repository is in a modernization and refactor effort. Tooling, documentatio
 - When reviewing docstrings, classify each reviewed docstring as `Summary only is sufficient`, `Longer description recommended`, or `Longer description required`, with a brief reason or the specific missing caller-relevant context.
 - In PR descriptions, list validation using canonical project commands such as `uv run pytest`; do not include local cache paths, virtualenv paths, or machine-specific environment overrides unless they are required for reviewers to reproduce the check.
 - Before opening or updating a PR, review coverage for newly changed code and add targeted tests for new branches, error paths, and cleanup paths so Codecov patch coverage does not fail even when total project coverage remains high.
-- Before opening a PR or pushing new changes to an existing PR, perform a local code review of the diff to look for behavior regressions, missing edge-case coverage, stale documentation, and PR-description accuracy.
 - If the agent created a PR, the agent may update that PR's branch or description without asking for additional permission unless the change is destructive or changes the requested scope.
+
+## Pre-PR And Push Workflow
+
+Before completing a task, opening a PR, or pushing updates to an existing PR, perform an autonomous local code review of the diff and directly fix any issues found. Do not stop to produce a separate textual review report or ask for permission to make non-destructive fixes within the requested scope.
+
+During the review, check for:
+
+- Logic regressions against the target branch architecture and current modernization constraints.
+- Missing edge-case handling, including error paths, `None` handling, boundary values, cleanup paths, and performance-sensitive changes.
+- Stale documentation, including inline comments, docstrings, `README.md`, docs under `docs/`, and API or protocol notes affected by changed signatures or behavior.
+- PR-description accuracy. Update any local PR description markdown file when one exists; otherwise update the GitHub PR description for agent-created PRs so it precisely matches the finalized behavior and validation.
+
+After fixing review findings, run the repo-appropriate verification commands:
+
+```bash
+uv run ruff check .
+uv run mypy
+uv run pytest
+uv run pre-commit run --all-files
+```
+
+If any verification step fails, treat the failure as a new issue, fix it, and rerun the failing command until it passes. Add or adjust tests when fixes touch changed code paths or uncovered branches.
+
+Once the review and verification are complete, include only brief execution-log entries in the chat using this format when applicable:
+
+```text
+**[Fixed Code]:** <File Name> - <Brief fix description>
+**[Updated Docs]:** <File Name> - <Brief documentation adjustment>
+**[Updated PR Description]:** <Brief summary of PR text changes>
+```
 
 ## Setup
 
