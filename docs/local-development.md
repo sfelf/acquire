@@ -1,6 +1,6 @@
 # Local Development
 
-This project is in the Python-gateway consolidation phase:
+The local development stack now uses the Python gateway as the default runtime:
 
 - MySQL stores user and historical game data.
 - `server/http_server.py` runs the default FastAPI HTTP and SockJS-compatible gateway.
@@ -9,7 +9,10 @@ This project is in the Python-gateway consolidation phase:
 
 The Docker Compose setup is intended for local development only while deployment support matures.
 
-The local Python image intentionally installs from `requirements.local-docker.txt` instead of the legacy `requirements.txt`. The legacy file still contains an old MySQL connector zip URL that is no longer reliably fetchable, and broad runtime dependency upgrades are deferred until coverage is stronger.
+The local Python image intentionally installs from `requirements.local-docker.txt` so
+Docker can keep a narrow, already-tested dependency surface while the legacy
+runtime requirements are modernized in controlled groups. SQLAlchemy remains
+intentionally pinned until the dedicated ORM upgrade step.
 
 ## Start The Local UI
 

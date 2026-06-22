@@ -1,12 +1,12 @@
 # Keep this Docker-only dependency set separate from requirements.txt.
-# The legacy runtime requirements still include an unreachable MySQL connector
-# zip URL and should not be upgraded globally until coverage is stronger.
+# SQLAlchemy remains pinned for a dedicated ORM upgrade PR, while broadly safe
+# compatibility dependencies are modernized in controlled groups.
 fastapi>=0.115,<1
-mysql-connector-python>=9.0,<10
+mysql-connector-python>=9.3,<10
 pytz==2016.10
 six>=1.17,<2
 SQLAlchemy==1.3.20
 trueskill==0.4.4
-ujson>=5.10,<6
+ujson>=5.13,<6
 uvicorn>=0.32,<1
 websockets>=14,<16
