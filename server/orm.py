@@ -19,8 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.mysql import FLOAT, INTEGER, SMALLINT, TINYINT
 from sqlalchemy.engine.url import URL
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 Base = declarative_base()
 mysql_user = os.environ.get("MYSQL_USER", "acquire")
@@ -32,7 +31,7 @@ connect_args = {}
 if mysql_auth_plugin:
     connect_args["auth_plugin"] = mysql_auth_plugin
 engine = create_engine(
-    URL(
+    URL.create(
         "mysql+mysqlconnector",
         username=mysql_user,
         password=mysql_password,
@@ -116,7 +115,7 @@ class GameMode(Base):
 
     __tablename__ = "game_mode"
     game_mode_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
-    name = Column(String(8, convert_unicode="force"), nullable=False)
+    name = Column(String(8), nullable=False)
     __table_args__ = (UniqueConstraint("name"),)
 
     def __repr__(self) -> str:
@@ -167,7 +166,7 @@ class GameState(Base):
 
     __tablename__ = "game_state"
     game_state_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
-    name = Column(String(16, convert_unicode="force"), nullable=False)
+    name = Column(String(16), nullable=False)
     __table_args__ = (UniqueConstraint("name"),)
 
     def __repr__(self) -> str:
@@ -185,8 +184,8 @@ class KeyValue(Base):
 
     __tablename__ = "key_value"
     key_value_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
-    key = Column(String(32, convert_unicode="force"), nullable=False)
-    value = Column(Text(convert_unicode="force"), nullable=False)
+    key = Column(String(32), nullable=False)
+    value = Column(Text, nullable=False)
     __table_args__ = (UniqueConstraint("key"),)
 
     def __repr__(self) -> str:
@@ -242,7 +241,7 @@ class RatingType(Base):
 
     __tablename__ = "rating_type"
     rating_type_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
-    name = Column(String(8, convert_unicode="force"), nullable=False)
+    name = Column(String(8), nullable=False)
     __table_args__ = (UniqueConstraint("name"),)
 
     def __repr__(self) -> str:
@@ -265,7 +264,7 @@ class Record(Base):
         primary_key=True,
         nullable=False,
     )
-    encoded = Column(String(255, convert_unicode="force"), nullable=False)
+    encoded = Column(String(255), nullable=False)
 
     user = relationship("User")
 
@@ -287,8 +286,8 @@ class User(Base):
 
     __tablename__ = "user"
     user_id = Column(INTEGER(unsigned=True), primary_key=True, nullable=False)
-    name = Column(String(32, convert_unicode="force"), nullable=False)
-    password = Column(String(64, convert_unicode="force"))
+    name = Column(String(32), nullable=False)
+    password = Column(String(64))
     __table_args__ = (UniqueConstraint("name"),)
 
     def __repr__(self) -> str:
@@ -395,7 +394,9 @@ class Lookup:
         Returns:
             Existing or newly added `GamePlayer` ORM object.
         """
-        game_player = self.game_player_lookup[game.log_time][game.number].get(player_index, None)
+        log_time = cast(int, game.log_time)
+        number = cast(int, game.number)
+        game_player = self.game_player_lookup[log_time][number].get(player_index, None)
         if game_player:
             return game_player
 
@@ -411,7 +412,7 @@ class Lookup:
             game_player = GamePlayer(game=game, player_index=player_index)
             self.session.add(game_player)
 
-        self.game_player_lookup[game.log_time][game.number][player_index] = game_player
+        self.game_player_lookup[log_time][number][player_index] = game_player
         return game_player
 
     def get_game_state(self, name: str) -> GameState | None:
@@ -473,7 +474,9 @@ class Lookup:
         Returns:
             Latest matching `Rating`, or `None` when none exists.
         """
-        rating = self.rating_lookup[user.name].get(rating_type.name, None)
+        user_name = cast(str, user.name)
+        rating_type_name = cast(str, rating_type.name)
+        rating = self.rating_lookup[user_name].get(rating_type_name, None)
         if rating:
             return rating
 
@@ -488,7 +491,7 @@ class Lookup:
             )
 
         if rating:
-            self.rating_lookup[user.name][rating_type.name] = rating
+            self.rating_lookup[user_name][rating_type_name] = rating
 
         return rating
 
@@ -498,7 +501,9 @@ class Lookup:
         Args:
             rating: Rating ORM object already associated with a user and type.
         """
-        self.rating_lookup[rating.user.name][rating.rating_type.name] = rating
+        user_name = cast(str, rating.user.name)
+        rating_type_name = cast(str, rating.rating_type.name)
+        self.rating_lookup[user_name][rating_type_name] = rating
 
     def get_rating_type(self, name: str) -> RatingType | None:
         """Return the rating type lookup row for a name.
@@ -533,7 +538,8 @@ class Lookup:
         Returns:
             Matching `Record`, or `None` when no record exists.
         """
-        record = self.record_lookup.get(user.name, None)
+        user_name = cast(str, user.name)
+        record = self.record_lookup.get(user_name, None)
         if record:
             return record
 
@@ -543,7 +549,7 @@ class Lookup:
             )
 
         if record:
-            self.record_lookup[user.name] = record
+            self.record_lookup[user_name] = record
 
         return record
 
@@ -553,7 +559,8 @@ class Lookup:
         Args:
             record: Record ORM object already associated with a user.
         """
-        self.record_lookup[record.user.name] = record
+        user_name = cast(str, record.user.name)
+        self.record_lookup[user_name] = record
 
     def get_user(self, name: str) -> User:
         """Return the persisted or newly added user for a username.

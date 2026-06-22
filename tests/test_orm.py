@@ -29,6 +29,10 @@ class FakeURL:
         self.drivername = drivername
         self.kwargs = kwargs
 
+    @classmethod
+    def create(cls, drivername, **kwargs):
+        return cls(drivername, **kwargs)
+
 
 def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
@@ -46,20 +50,17 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_mysql.SMALLINT = lambda *args, **kwargs: ("smallint", args, kwargs)
     fake_mysql.TINYINT = lambda *args, **kwargs: ("tinyint", args, kwargs)
 
-    fake_declarative = types.ModuleType("sqlalchemy.ext.declarative")
-    fake_declarative.declarative_base = lambda: FakeDeclarativeBase
-
     fake_engine = types.ModuleType("sqlalchemy.engine")
     fake_engine_url = types.ModuleType("sqlalchemy.engine.url")
     fake_engine_url.URL = FakeURL
 
     fake_orm = types.ModuleType("sqlalchemy.orm")
+    fake_orm.declarative_base = lambda: FakeDeclarativeBase
     fake_orm.relationship = lambda *args, **kwargs: ("relationship", args, kwargs)
     fake_orm.sessionmaker = lambda bind=None: lambda autoflush=False: None
 
     fake_sqlalchemy.dialects = types.SimpleNamespace(mysql=fake_mysql)
     fake_sqlalchemy.engine = types.SimpleNamespace(url=fake_engine_url)
-    fake_sqlalchemy.ext = types.SimpleNamespace(declarative=fake_declarative)
     fake_sqlalchemy.orm = fake_orm
 
     monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
@@ -67,8 +68,6 @@ def install_fake_sqlalchemy(monkeypatch):
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine", fake_engine)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine.url", fake_engine_url)
-    monkeypatch.setitem(sys.modules, "sqlalchemy.ext", fake_sqlalchemy.ext)
-    monkeypatch.setitem(sys.modules, "sqlalchemy.ext.declarative", fake_declarative)
     monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_orm)
 
 
