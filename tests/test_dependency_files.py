@@ -25,6 +25,7 @@ def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> 
     compatibility_requirements = {
         "mysql-connector-python>=9.3,<10",
         "six>=1.17,<2",
+        "sqlalchemy>=2,<3",
         "ujson>=5.13,<6",
     }
 

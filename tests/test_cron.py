@@ -793,8 +793,8 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
         ("first.log", 3, 100),
         ("second.log", 0, 200),
     ]
-    assert lookup.get_key_value("cron last log timestamp").value == 200
-    assert lookup.get_key_value("cron last offset").value == 7
+    assert lookup.get_key_value("cron last log timestamp").value == "200"
+    assert lookup.get_key_value("cron last offset").value == "7"
     assert session.flushed is True
     assert stats_calls == [
         ("ratings",),

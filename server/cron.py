@@ -11,6 +11,7 @@ import os.path
 import subprocess
 import time
 import traceback
+from typing import Protocol, cast
 
 import orm
 import sqlalchemy.orm
@@ -19,6 +20,12 @@ import sqlalchemy.types
 import trueskill
 import ujson
 import util
+
+
+class MutableKeyValue(Protocol):
+    """Represent the mutable value field on the legacy key/value ORM row."""
+
+    value: str
 
 
 class Logs2DB:
@@ -514,8 +521,8 @@ def process_logs(write_stats_files: bool) -> None:
 
             last_log_timestamp = log_timestamp
 
-        kv_last_log_timestamp.value = last_log_timestamp
-        kv_last_offset.value = last_offset
+        cast(MutableKeyValue, kv_last_log_timestamp).value = str(last_log_timestamp)
+        cast(MutableKeyValue, kv_last_offset).value = str(last_offset)
 
         session.flush()
 
@@ -524,8 +531,8 @@ def process_logs(write_stats_files: bool) -> None:
             statsgen.output_ratings()
             for user in completed_game_users:
                 record = lookup.get_record(user)
-                decoded = ujson.decode(record.encoded) if record else get_empty_records()
-                statsgen.output_user(user.user_id, user.name, decoded)
+                decoded = ujson.decode(cast(str, record.encoded)) if record else get_empty_records()
+                statsgen.output_user(cast(int, user.user_id), cast(str, user.name), decoded)
 
             ratings_filenames = glob.glob("stats_temp/*.json")
             users_filenames = glob.glob("stats_temp/users/*.json")

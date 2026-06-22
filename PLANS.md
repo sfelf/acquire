@@ -120,9 +120,9 @@ risk, frontend build changes, and deployment changes can be reviewed
 independently.
 
 1. Upgrade Python runtime dependencies in controlled groups, starting with
-   compatibility patches needed for supported Python versions. In progress.
+   compatibility patches needed for supported Python versions. Complete.
 2. Upgrade SQLAlchemy and add focused ORM/session regression coverage for any
-   behavior that changes during the upgrade.
+   behavior that changes during the upgrade. In progress.
 3. Add Alembic migrations for the current MySQL schema before changing database
    engines.
 4. Plan and execute the MySQL-to-Postgres migration after migrations and
