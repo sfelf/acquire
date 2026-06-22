@@ -1,16 +1,17 @@
 # Local Development
 
-This project is still in the legacy split-runtime phase:
+This project is in the Python-gateway consolidation phase:
 
 - MySQL stores user and historical game data.
-- `server/server.py` runs the Python game server over `python.sock`.
-- `server/server.js` is the legacy Node.js SockJS and HTTP gateway.
+- `server/http_server.py` runs the default FastAPI HTTP and SockJS-compatible gateway.
+- `server/server.py` remains available as the legacy socket-based Python game server for Node gateway parity checks.
+- `server/server.js` is the legacy Node.js SockJS and HTTP gateway behind an opt-in compatibility profile.
 
 The Docker Compose setup is intended for local development only while test coverage expands and the Node.js gateway is being retired.
 
 The local Python image intentionally installs from `requirements.local-docker.txt` instead of the legacy `requirements.txt`. The legacy file still contains an old MySQL connector zip URL that is no longer reliably fetchable, and broad runtime dependency upgrades are deferred until coverage is stronger.
 
-## Start MySQL And Python
+## Start The Local UI
 
 Copy the example environment file if you want to customize local credentials:
 
@@ -18,21 +19,35 @@ Copy the example environment file if you want to customize local credentials:
 cp .env.example .env
 ```
 
-Start MySQL and the Python game server:
+Start MySQL and the Python gateway:
 
 ```bash
-docker compose up --build mysql python-server
+docker compose up --build mysql python-gateway
 ```
 
-This starts the Python backend only. It does not expose the browser UI because the current UI still depends on the legacy Node.js gateway.
+The default gateway listens on port `9000`, serves the generated client files, and handles SockJS traffic through the same origin at `/sockjs`.
+
+Open the local UI:
+
+```text
+http://localhost:9000/
+```
+
+Set `ACQUIRE_UI_PORT` in `.env` to use a different host port:
+
+```env
+ACQUIRE_UI_PORT=9002
+```
 
 Initialize the local database in another terminal:
 
 ```bash
-docker compose run --rm python-server python initialize_database.py
+docker compose run --rm python-gateway python initialize_database.py
 ```
 
-The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, and the legacy Node gateway.
+The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, the Python gateway, and the legacy Node gateway.
+
+The default profile generates the gitignored client assets before starting FastAPI: `client/main/css/main.css`, `client/stats/css/stats.css`, `client/main/js/enums.js`, and `client/main/js/main.js`.
 
 ## Legacy Node Gateway
 
@@ -48,24 +63,24 @@ Initialize the local database in another terminal if you have not already done s
 docker compose run --rm python-server python initialize_database.py
 ```
 
-Then open the local UI:
+Then open the legacy local UI:
 
 ```text
-http://localhost:9000/
-```
-
-Set `ACQUIRE_UI_PORT` in `.env` to use a different host port:
-
-```env
-ACQUIRE_UI_PORT=9001
+http://localhost:9001/
 ```
 
 The profile generates the gitignored client assets before starting `server/server.js`: `client/main/css/main.css`, `client/stats/css/stats.css`, `client/main/js/enums.js`, and `client/main/js/main.js`.
-In Docker, the gateway listens on port `9000`, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
+In Docker, the gateway listens on container port `9000`, publishes host port `9001` by default, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
 Outside Docker, the gateway keeps the legacy default of listening on `javascript.sock`.
 The gateway still removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
 
-This profile exists to support the current split while Python backend parity is built out. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
+Set `ACQUIRE_LEGACY_UI_PORT` in `.env` to use a different host port for the legacy gateway:
+
+```env
+ACQUIRE_LEGACY_UI_PORT=9003
+```
+
+This profile exists as a known-good compatibility path while the Python gateway becomes the primary local runtime. Avoid expanding Node.js runtime behavior unless it is needed to preserve behavior during deprecation.
 
 ## Useful Commands
 

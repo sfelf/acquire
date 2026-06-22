@@ -111,26 +111,23 @@ def e2e_base_url(pytestconfig):
     try:
         _run_docker_compose(
             project_name,
-            "--profile",
-            "legacy-node",
             "up",
             "--build",
             "-d",
             "mysql",
-            "python-server",
-            "node-gateway",
+            "python-gateway",
         )
         _run_docker_compose(
             project_name,
             "run",
             "--rm",
-            "python-server",
+            "python-gateway",
             "python",
             "initialize_database.py",
         )
         yield f"http://127.0.0.1:{ui_port}/"
     finally:
-        _cleanup_docker_compose(project_name, "--profile", "legacy-node", "down", "--volumes")
+        _cleanup_docker_compose(project_name, "down", "--volumes")
         if previous_port is None:
             os.environ.pop("ACQUIRE_UI_PORT", None)
         else:

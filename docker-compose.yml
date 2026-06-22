@@ -23,6 +23,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.local
+    profiles:
+      - legacy-node
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-acquire}
       MYSQL_USER: ${MYSQL_USER:-acquire}
@@ -48,8 +50,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.local
-    profiles:
-      - legacy-node
     volumes:
       - .:/app
     working_dir: /app
@@ -57,8 +57,6 @@ services:
 
   client-assets:
     image: node:6
-    profiles:
-      - legacy-node
     depends_on:
       client-enums:
         condition: service_completed_successfully
@@ -71,6 +69,35 @@ services:
       && ./node_modules/.bin/node-sass --style expanded --sourcemap=none --no-cache client/main/css/main.scss client/main/css/main.css
       && ./node_modules/.bin/node-sass --style expanded --sourcemap=none --no-cache client/stats/css/stats.scss client/stats/css/stats.css
       && ./node_modules/webpack/bin/webpack.js -d client/main/js/app.js client/main/js/main.js"
+
+  python-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-acquire}
+      MYSQL_USER: ${MYSQL_USER:-acquire}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-acquire}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_SOCKET: /var/run/mysqld/mysqld.sock
+      MYSQL_AUTH_PLUGIN: ""
+    depends_on:
+      client-assets:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/sockjs/info >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "${ACQUIRE_UI_PORT:-9000}:9000"
+    volumes:
+      - .:/app
+      - mysql-socket:/var/run/mysqld
+    working_dir: /app/server
+    command: sh -c "python http_server.py --host 0.0.0.0 --port 9000"
 
   node-gateway:
     image: node:6
@@ -91,7 +118,7 @@ services:
       python-server:
         condition: service_healthy
     ports:
-      - "${ACQUIRE_UI_PORT:-9000}:9000"
+      - "${ACQUIRE_LEGACY_UI_PORT:-9001}:9000"
     volumes:
       - .:/app
       - node-modules:/app/node_modules

@@ -38,22 +38,31 @@ uv run pytest -m e2e
 
 MySQL and e2e marker runs create isolated Docker Compose projects when service URL environment variables are not set. Use `ACQUIRE_MYSQL_TEST_URL` or `ACQUIRE_E2E_URL` only when you want to point those tests at already-running services. Integration tests skip when the local environment blocks socket binding.
 
-## Local Docker development
+## Local Docker Development
 
-Docker Compose support is available for local MySQL and the current Python game server:
+Docker Compose support is available for local MySQL and the Python FastAPI gateway:
 
 ```bash
 cp .env.example .env
-docker compose up --build mysql python-server
+docker compose up --build mysql python-gateway
 ```
 
-The browser UI still runs through the legacy Node.js gateway during this phase. To launch it locally, use the legacy profile and open [http://localhost:9000/](http://localhost:9000/):
+Initialize the local database in another terminal:
+
+```bash
+docker compose run --rm python-gateway python initialize_database.py
+```
+
+Then open [http://localhost:9000/](http://localhost:9000/).
+
+The legacy Node.js gateway remains available as an opt-in compatibility profile on
+[http://localhost:9001/](http://localhost:9001/) by default:
 
 ```bash
 docker compose --profile legacy-node up --build mysql python-server node-gateway
 ```
 
-See [docs/local-development.md](docs/local-development.md) for database initialization, teardown, and the optional legacy Node.js gateway profile.
+See [docs/local-development.md](docs/local-development.md) for UI access, database initialization, teardown, and the optional legacy Node.js gateway profile.
 
 ## Install dependencies
 

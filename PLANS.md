@@ -44,7 +44,7 @@ Notes:
 
 - The pytest suite now covers the core Python server modules, log parser/processor helpers, ORM helpers, cron helpers, and replay fixtures without requiring MySQL for fast checks.
 - Coverage now has a 90% minimum threshold across the measured Python source without legacy-function exclusions.
-- Docker-backed `mysql` and `e2e` marker fixtures are in place. MySQL coverage now exercises schema creation, seed data, runtime constraints, lookup persistence, transaction behavior, and completed-game log import persistence. Integration coverage now exercises Python server protocol flows for connection, chat, game creation, joining, starting, watching, leaving, disconnecting, and rejoining. E2E coverage now verifies UI/report endpoints, login, global/game chat, game creation, joining, starting, tile play, watching, leaving, and rejoining through the legacy Node gateway into Python.
+- Docker-backed `mysql` and `e2e` marker fixtures are in place. MySQL coverage now exercises schema creation, seed data, runtime constraints, lookup persistence, transaction behavior, and completed-game log import persistence. Integration coverage now exercises Python server protocol flows for connection, chat, game creation, joining, starting, watching, leaving, disconnecting, and rejoining. E2E coverage now verifies UI/report endpoints, login, global/game chat, game creation, joining, starting, tile play, watching, leaving, and rejoining through the local browser gateway.
 
 ## Phase 3: Golden Replay Tests
 
@@ -70,7 +70,7 @@ Status: complete.
 - Add Docker Compose for local development. Complete.
 - Include MySQL as a local service. Complete.
 - Support the current Node.js and Python split without over-investing in Node.js as a long-term runtime. Complete.
-- Expose the legacy Node gateway for browser UI parity checks. Complete.
+- Expose the local browser UI and keep the legacy Node gateway available for parity checks. Complete.
 - Generate legacy client assets inside the local Docker profile. Complete.
 - Add `.env.example`. Complete.
 - Document local setup, UI access, and teardown commands. Complete.
@@ -94,14 +94,14 @@ change can be reviewed and validated independently.
    session, and user lookup behavior in the Python backend, with MySQL-backed
    coverage for successful credentials, failed credentials, missing users,
    existing users, and session edge cases. Password setup is Python-owned;
-   SockJS login remains on the legacy Node gateway until the Python gateway
-   path is implemented.
-4. Add a Python websocket or SockJS-compatible gateway path. In progress
-   in `codex/phase-5-python-websocket-gateway`.
+   SockJS login has moved onto the Python gateway path for the default local
+   runtime.
+4. Add a Python websocket or SockJS-compatible gateway path. Complete.
    Introduce FastAPI as the Python HTTP framework first, then preserve the
    existing client protocol, keep the Node gateway available as the known-good
    comparison path, and add parity tests for representative workflows.
-5. Switch local development and e2e tests to the Python gateway by default.
+5. Switch local development and e2e tests to the Python gateway by default. In
+   progress in `codex/phase-5-python-gateway-default`.
    Update Docker Compose, local development docs, and e2e defaults while keeping
    the legacy Node gateway behind an explicit compatibility profile.
 6. Remove Node.js from the main runtime path. Remove the Node gateway from the
