@@ -50,6 +50,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.local
+    profiles:
+      - client-build
+      - legacy-node
     volumes:
       - .:/app
     working_dir: /app
@@ -57,6 +60,9 @@ services:
 
   client-assets:
     image: node:6
+    profiles:
+      - client-build
+      - legacy-node
     depends_on:
       client-enums:
         condition: service_completed_successfully
@@ -82,8 +88,6 @@ services:
       MYSQL_SOCKET: /var/run/mysqld/mysqld.sock
       MYSQL_AUTH_PLUGIN: ""
     depends_on:
-      client-assets:
-        condition: service_completed_successfully
       mysql:
         condition: service_healthy
     healthcheck:
@@ -97,7 +101,12 @@ services:
       - .:/app
       - mysql-socket:/var/run/mysqld
     working_dir: /app/server
-    command: sh -c "python http_server.py --host 0.0.0.0 --port 9000"
+    command: >
+      sh -c "test -f /app/client/main/js/main.js
+      && test -f /app/client/main/css/main.css
+      && test -f /app/client/stats/css/stats.css
+      || { echo 'Run docker compose --profile client-build up --build client-assets before starting python-gateway.'; exit 1; }
+      && python http_server.py --host 0.0.0.0 --port 9000"
 
   node-gateway:
     image: node:6
