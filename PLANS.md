@@ -59,7 +59,7 @@ Status: complete.
 Notes:
 
 - Add MySQL-backed integration coverage for schema creation, seed data, and persistence behavior. Complete for the current refactor safety baseline; expand when refactor work changes persistence behavior.
-- Add fuller integration and e2e coverage around the current Python/Node split. Complete for the current refactor safety baseline; add targeted parity cases if Node retirement uncovers additional gateway behavior.
+- Add fuller integration and e2e coverage around the Python gateway. Complete for the current refactor safety baseline; add targeted cases if refactor work uncovers additional gateway behavior.
 - Historical fixtures include synthetic parser coverage and a representative redacted real-server fixture with summary, replay, final-state, and replay-to-server sync golden assertions.
 - Future historical fixtures can still be added when new edge cases are discovered during refactor work, but they are no longer blocking Phase 3 completion.
 
@@ -69,15 +69,15 @@ Status: complete.
 
 - Add Docker Compose for local development. Complete.
 - Include MySQL as a local service. Complete.
-- Support the current Node.js and Python split without over-investing in Node.js as a long-term runtime. Complete.
-- Expose the local browser UI and keep the legacy Node gateway available for parity checks. Complete.
+- Support the Python gateway while the Node.js backend runtime is retired. Complete.
+- Expose the local browser UI through the Python gateway. Complete.
 - Generate legacy client assets inside the local Docker profile. Complete.
 - Add `.env.example`. Complete.
 - Document local setup, UI access, and teardown commands. Complete.
 
 ## Phase 5: Python Backend Consolidation
 
-Status: planned.
+Status: in progress.
 
 Phase 5 will be completed as a sequence of focused PRs so each runtime boundary
 change can be reviewed and validated independently.
@@ -87,10 +87,9 @@ change can be reviewed and validated independently.
    missing Python implementation, and add any missing characterization tests
    before changing runtime code.
 2. Move Node-owned HTTP endpoints to Python. Complete. Implement Python equivalents for
-   non-websocket HTTP routes currently served by `server/server.js`, keep the
-   Node gateway running during the transition, and prove existing browser flows
-   still work through integration and e2e coverage.
-3. Move auth and user checks fully into Python. In progress. Consolidate login,
+   non-websocket HTTP routes formerly served by `server/server.js` and prove
+   existing browser flows still work through integration and e2e coverage.
+3. Move auth and user checks fully into Python. Complete. Consolidate login,
    session, and user lookup behavior in the Python backend, with MySQL-backed
    coverage for successful credentials, failed credentials, missing users,
    existing users, and session edge cases. Password setup is Python-owned;
@@ -98,20 +97,20 @@ change can be reviewed and validated independently.
    runtime.
 4. Add a Python websocket or SockJS-compatible gateway path. Complete.
    Introduce FastAPI as the Python HTTP framework first, then preserve the
-   existing client protocol, keep the Node gateway available as the known-good
-   comparison path, and add parity tests for representative workflows.
+   existing client protocol and add parity tests for representative workflows.
 5. Switch local development and e2e tests to the Python gateway by default.
    Complete.
-   Update Docker Compose, local development docs, and e2e defaults while keeping
-   the legacy Node gateway behind an explicit compatibility profile.
-6. Remove Node.js from the main runtime path. In progress in
-   `codex/phase-5-remove-node-main-runtime`.
+   Update Docker Compose, local development docs, and e2e defaults to use the
+   Python gateway.
+6. Remove Node.js from the main runtime path. Complete.
    Remove the Node gateway from the default local runtime, separate legacy
    client asset generation from the running Python gateway stack, and update
    agent/project docs to reflect Python as the primary backend.
-7. Cleanup follow-up. Delete dead Node server code only after the Python path is
-   proven stable, remove obsolete tests, docs, scripts, and dependency
-   references, and tighten CI around the Python-only runtime path.
+7. Cleanup follow-up. In progress in
+   `codex/phase-5-remove-legacy-node-gateway`.
+   Delete dead Node server code now that the Python path owns local HTTP,
+   SockJS, auth, and gameplay workflows; remove obsolete docs, scripts, and
+   dependency references; and tighten CI around the Python-only runtime path.
 
 ## Phase 6: Dependency And Deployment Modernization
 

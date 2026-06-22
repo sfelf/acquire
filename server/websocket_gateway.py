@@ -1,10 +1,10 @@
 """Bridge FastAPI websocket connections to the in-process game server.
 
-The legacy Node gateway translated SockJS client frames into the Python
+The removed Node gateway translated SockJS client frames into the Python
 server's newline-delimited socket protocol. This module keeps that translation
-boundary explicit while the runtime is consolidated into Python: FastAPI owns
-the browser websocket, and the existing `server.Server` / `server.Client`
-classes still own authoritative game state and command handling.
+boundary explicit inside Python: FastAPI owns the browser websocket, and the
+existing `server.Server` / `server.Client` classes still own authoritative game
+state and command handling.
 """
 
 from __future__ import annotations
