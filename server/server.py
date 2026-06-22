@@ -293,7 +293,7 @@ class Client:
         self,
         server: Server,
         username: str,
-        ip_address: str,
+        ip_address: str | None,
         socket_id: str,
         replace_existing_user: bool,
     ) -> None:
@@ -306,7 +306,8 @@ class Client:
         Args:
             server: Server instance that owns clients and games.
             username: Player username from the client or log.
-            ip_address: Client IP address reported by the gateway.
+            ip_address: Client IP address reported by the gateway, or `None`
+                when unavailable.
             socket_id: Gateway socket id for this connection.
             replace_existing_user: Whether to disconnect an existing client for the username.
         """
@@ -319,7 +320,7 @@ class Client:
         self.player_id = None
 
         self._server.client_id_to_client[self.client_id] = self
-        messages_client: list[list[int | str]] = []
+        messages_client: list[list[int | str | None]] = []
 
         def output_connect_messages():
             """Output connect messages."""

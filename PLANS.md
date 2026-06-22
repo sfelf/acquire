@@ -96,7 +96,8 @@ change can be reviewed and validated independently.
    existing users, and session edge cases. Password setup is Python-owned;
    SockJS login remains on the legacy Node gateway until the Python gateway
    path is implemented.
-4. Add a Python websocket or SockJS-compatible gateway path. In progress.
+4. Add a Python websocket or SockJS-compatible gateway path. In progress
+   in `codex/phase-5-python-websocket-gateway`.
    Introduce FastAPI as the Python HTTP framework first, then preserve the
    existing client protocol, keep the Node gateway available as the known-good
    comparison path, and add parity tests for representative workflows.

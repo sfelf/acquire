@@ -9,21 +9,25 @@ normalization rules for compatibility with the existing client.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import mimetypes
 import posixpath
+import secrets
 import sys
 import urllib.parse
 from collections.abc import Callable
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, suppress
 from pathlib import Path
 from typing import Literal, TextIO
 
 import auth
 import enums
 import orm
+import ujson
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+import websocket_gateway
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from starlette import status
 from starlette.concurrency import run_in_threadpool
@@ -34,6 +38,10 @@ DEFAULT_STATS_STATIC_ROOT = PROJECT_ROOT / "client" / "stats"
 MAX_REPORT_ERROR_BODY_BYTES = 100 * 1024
 SERVER_VERSION = "VERSION"
 SessionScope = Callable[[], AbstractContextManager[auth.AuthSession]]
+
+
+class InvalidWebsocketPayloadError(ValueError):
+    """Raised when a post-login websocket frame cannot be decoded."""
 
 
 class ReportErrorForm(BaseModel):
@@ -179,6 +187,84 @@ def set_password_in_session(
         )
 
 
+def check_login_in_session(
+    *,
+    session_scope: SessionScope,
+    version: object,
+    username: object,
+    password: object,
+    accepted_client_version: str,
+) -> auth.LoginResult:
+    """Validate a SockJS login tuple inside a database session.
+
+    Login validation still performs synchronous SQLAlchemy work. The websocket
+    route calls this helper through Starlette's threadpool so database latency
+    does not block other ASGI connections.
+
+    Args:
+        session_scope: Context manager factory for database sessions.
+        version: Client version tuple field.
+        username: Username tuple field.
+        password: Password tuple field.
+        accepted_client_version: Accepted client version token.
+
+    Returns:
+        Login result describing success or the legacy fatal error to send.
+
+    Raises:
+        TypeError: If any login tuple field is not a string.
+    """
+    with session_scope() as session:
+        result = auth.check_login(
+            session,
+            version=version,
+            username=username,
+            password=password,
+            server_version=accepted_client_version,
+        )
+        if result.error is enums.Errors.GenericError:
+            session.rollback()
+        return result
+
+
+def decode_login_payload(payload: str) -> tuple[object, object, object]:
+    """Decode the first websocket payload into a legacy login tuple.
+
+    Args:
+        payload: SockJS application payload string.
+
+    Returns:
+        Version, username, and password tuple values.
+
+    Raises:
+        ValueError: If the payload is not a JSON array with three fields.
+    """
+    try:
+        parsed = ujson.loads(payload)
+    except ValueError as exc:
+        raise ValueError("invalid login payload JSON") from exc
+    if not isinstance(parsed, list) or len(parsed) < 3:
+        raise ValueError("login payload must contain version, username, and password")
+    return parsed[0], parsed[1], parsed[2]
+
+
+def encode_fatal_error(
+    error: enums.Errors,
+    *,
+    encode_messages: Callable[[str], str] = websocket_gateway.encode_sockjs_messages,
+) -> str:
+    """Encode a legacy fatal-error message for a websocket transport.
+
+    Args:
+        error: Fatal login error to send to the client.
+        encode_messages: Transport-specific outbound message encoder.
+
+    Returns:
+        Frame text containing the fatal-error command.
+    """
+    return encode_messages(ujson.dumps([[enums.CommandsToClient.FatalError.value, error.value]]))
+
+
 def resolve_static_path(
     path: str,
     *,
@@ -210,13 +296,17 @@ def create_app(
     log_output: TextIO = sys.stdout,
     session_scope: SessionScope = orm.session_scope,
     accepted_client_version: str = SERVER_VERSION,
+    realtime_gateway: websocket_gateway.SockJSGateway | None = None,
+    sockjs_heartbeat_interval: float = websocket_gateway.SOCKJS_HEARTBEAT_INTERVAL_SECONDS,
+    expired_game_cleanup_interval: float = (
+        websocket_gateway.EXPIRED_GAME_CLEANUP_INTERVAL_SECONDS
+    ),
 ) -> FastAPI:
     """Create the FastAPI app for Python-owned HTTP routes.
 
-    The app serves generated static files, logs report-error submissions, and
-    persists password setup requests through the Python auth module. It does not
-    serve SockJS traffic yet; the legacy Node gateway remains the realtime path
-    until a later Phase 5 PR replaces it.
+    The app serves generated static files, logs report-error submissions,
+    persists password setup requests through the Python auth module, and
+    exposes the first Python-owned SockJS-compatible websocket path.
 
     Args:
         main_static_root: Root directory for generated `client/main` assets.
@@ -224,10 +314,14 @@ def create_app(
         log_output: Stream that receives report-error log lines.
         session_scope: Context manager factory for database sessions.
         accepted_client_version: Accepted client version token.
+        realtime_gateway: SockJS-compatible gateway for websocket traffic.
+        sockjs_heartbeat_interval: Idle seconds before sending a SockJS heartbeat.
+        expired_game_cleanup_interval: Seconds between expired-game cleanup attempts.
 
     Returns:
         Configured FastAPI application.
     """
+    gateway = realtime_gateway or websocket_gateway.SockJSGateway()
     app = FastAPI(
         title="Acquire Python HTTP",
         docs_url=None,
@@ -292,6 +386,226 @@ def create_app(
             content=auth.error_response_text(error),
             media_type="application/json",
             status_code=status.HTTP_200_OK,
+        )
+
+    @app.api_route("/sockjs/info", methods=["GET"])
+    async def sockjs_info() -> JSONResponse:
+        """Return the SockJS negotiation metadata expected by browser clients.
+
+        Existing generated client code creates `SockJS(server_url + "/sockjs")`,
+        so browsers request this endpoint before opening the raw websocket
+        transport. The response mirrors the fields supplied by the legacy
+        `sockjs` package for a same-origin websocket-only deployment.
+
+        Returns:
+            JSON SockJS info response.
+        """
+        return JSONResponse(
+            {
+                "websocket": True,
+                "origins": ["*:*"],
+                "cookie_needed": False,
+                "entropy": secrets.randbits(32),
+            }
+        )
+
+    async def serve_websocket_connection(
+        websocket: WebSocket,
+        *,
+        socket_id: str,
+        decode_frame: Callable[[str], list[str]],
+        encode_messages: Callable[[str], str],
+        open_frame: str | None,
+        heartbeat_frame: str | None,
+    ) -> None:
+        """Serve one legacy websocket transport connection.
+
+        SockJS session transports and the legacy raw websocket transport share
+        login, game-server dispatch, and cleanup semantics. The caller supplies
+        the small pieces that differ by transport: framing, the optional SockJS
+        open frame, and whether idle heartbeats should be emitted.
+
+        Args:
+            websocket: Incoming FastAPI websocket connection.
+            socket_id: Gateway socket identifier to map to the game server.
+            decode_frame: Transport-specific inbound frame decoder.
+            encode_messages: Transport-specific outbound message encoder.
+            open_frame: Optional frame sent immediately after accept.
+            heartbeat_frame: Optional idle heartbeat frame.
+        """
+        await websocket.accept()
+        if open_frame is not None:
+            await websocket.send_text(open_frame)
+
+        try:
+            connection = gateway.new_connection(
+                socket_id,
+                websocket,
+                encode_messages=encode_messages,
+            )
+        except websocket_gateway.DuplicateSessionIdError:
+            await websocket.close()
+            return
+        gateway.start_cleanup_loop(cleanup_interval=expired_game_cleanup_interval)
+        mapped = asyncio.Event()
+        inbound_payloads: asyncio.Queue[list[str] | Exception | None] = asyncio.Queue()
+
+        async def send_queued_frames() -> None:
+            while True:
+                if heartbeat_frame is None:
+                    frame = await connection.outbound_frames.get()
+                else:
+                    try:
+                        frame = await asyncio.wait_for(
+                            connection.outbound_frames.get(),
+                            timeout=sockjs_heartbeat_interval,
+                        )
+                    except TimeoutError:
+                        await websocket.send_text(heartbeat_frame)
+                        continue
+                if frame is None:
+                    with suppress(RuntimeError):
+                        await websocket.close()
+                    return
+                await websocket.send_text(frame)
+
+        async def receive_mapped_payloads() -> None:
+            try:
+                while True:
+                    frame = await websocket.receive_text()
+                    payloads = decode_frame(frame)
+                    if not payloads or not mapped.is_set():
+                        continue
+                    await inbound_payloads.put(payloads)
+            except ValueError as exc:
+                await inbound_payloads.put(InvalidWebsocketPayloadError(str(exc)))
+            except WebSocketDisconnect:
+                await inbound_payloads.put(None)
+
+        sender_task: asyncio.Task[None] | None = None
+        receiver_task: asyncio.Task[None] | None = None
+        try:
+            while True:
+                login_frame = await websocket.receive_text()
+                login_messages = decode_frame(login_frame)
+                if login_messages:
+                    break
+            version, username, password = decode_login_payload(login_messages[0])
+            receiver_task = asyncio.create_task(receive_mapped_payloads())
+            sender_task = asyncio.create_task(send_queued_frames())
+            try:
+                login_result = await run_in_threadpool(
+                    check_login_in_session,
+                    session_scope=session_scope,
+                    version=version,
+                    username=username,
+                    password=password,
+                    accepted_client_version=accepted_client_version,
+                )
+            except TypeError:
+                await websocket.close()
+                return
+
+            if login_result.error is not None:
+                await websocket.send_text(
+                    encode_fatal_error(
+                        login_result.error,
+                        encode_messages=encode_messages,
+                    )
+                )
+                await websocket.close()
+                return
+
+            async with gateway.lock:
+                gateway.login(
+                    connection,
+                    username=login_result.username,
+                    ip_address=websocket.headers.get("x-real-ip"),
+                    replace_existing_user=login_result.replace_existing_user,
+                )
+                mapped.set()
+
+            while True:
+                payloads_or_error = await inbound_payloads.get()
+                if payloads_or_error is None:
+                    return
+                if isinstance(payloads_or_error, Exception):
+                    raise payloads_or_error
+                connection_active = True
+                async with gateway.lock:
+                    for payload in payloads_or_error:
+                        if not gateway.receive_client_payload(connection, payload):
+                            connection_active = False
+                            break
+                if not connection_active:
+                    with suppress(RuntimeError):
+                        await websocket.close()
+                    return
+        except ValueError:
+            with suppress(RuntimeError):
+                await websocket.close()
+            return
+        except WebSocketDisconnect:
+            return
+        finally:
+            async with gateway.lock:
+                gateway.disconnect(connection)
+            if sender_task is not None:
+                sender_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await sender_task
+            if receiver_task is not None:
+                receiver_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await receiver_task
+
+    @app.websocket("/sockjs/websocket")
+    async def sockjs_raw_websocket(websocket: WebSocket) -> None:
+        """Serve the legacy raw websocket transport from Python.
+
+        The old Node gateway enabled SockJS `websocket-raw` alongside the
+        session-scoped SockJS websocket transport. Raw websocket clients connect
+        to `/sockjs/websocket` and exchange unwrapped application JSON strings,
+        so this route does not emit SockJS open or heartbeat frames.
+
+        Args:
+            websocket: Incoming FastAPI websocket connection.
+        """
+        await serve_websocket_connection(
+            websocket,
+            socket_id=f"raw-{secrets.token_hex(16)}",
+            decode_frame=websocket_gateway.decode_raw_websocket_frame,
+            encode_messages=websocket_gateway.encode_raw_websocket_message,
+            open_frame=None,
+            heartbeat_frame=None,
+        )
+
+    @app.websocket("/sockjs/{server_id}/{session_id}/websocket")
+    async def sockjs_websocket(
+        websocket: WebSocket,
+        server_id: str,
+        session_id: str,
+    ) -> None:
+        """Serve the SockJS websocket transport from Python.
+
+        This route accepts the session-scoped SockJS websocket URL used by the
+        generated client and existing e2e tests, unwraps SockJS application
+        frames, delegates login validation to Python auth, and forwards
+        authenticated commands into `server.Client`.
+
+        Args:
+            websocket: Incoming FastAPI websocket connection.
+            server_id: SockJS server id path segment.
+            session_id: SockJS session id path segment.
+        """
+        del server_id
+        await serve_websocket_connection(
+            websocket,
+            socket_id=session_id,
+            decode_frame=websocket_gateway.decode_sockjs_frame,
+            encode_messages=websocket_gateway.encode_sockjs_messages,
+            open_frame=websocket_gateway.SOCKJS_OPEN_FRAME,
+            heartbeat_frame=websocket_gateway.SOCKJS_HEARTBEAT_FRAME,
         )
 
     @app.api_route("/stats", methods=["GET", "HEAD"])
