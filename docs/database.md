@@ -8,22 +8,25 @@ persistence coverage that protects the refactor.
 
 - Python database models live in `server/orm.py`.
 - Alembic migrations live in `migrations/`.
-- The initial Alembic revision creates the current MySQL schema and required
-  lookup rows.
+- The initial Alembic revision creates the current schema and required lookup
+  rows against MySQL and Postgres.
 - `server/initialize_database.py` still provides a local reset path while the
   Compose workflows are migrated to Alembic-owned setup.
 - MySQL integration tests cover schema creation, migrations, runtime
   constraints, auth persistence, lookup persistence, transaction behavior, and
-  completed-game log import persistence.
+  completed-game log import persistence. Postgres marker tests now cover
+  connectivity, ORM metadata creation, and the Alembic baseline.
 
 ## MySQL-Specific Surface Area
 
-- `server/orm.py` imports MySQL dialect column types and builds a
-  `mysql+mysqlconnector` URL from `MYSQL_*` environment variables.
+- `server/orm.py` keeps MySQL as the default runtime URL from `MYSQL_*`
+  environment variables, but can use an explicit `ACQUIRE_DATABASE_URL` for
+  Postgres testing and migration work.
 - `server/initialize_database.py` shells out to the `mysql` CLI, recreates the
   schema with `utf8mb4_bin`, and seeds lookup rows.
-- `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses MySQL
-  dialect types and MySQL table collation options to match the current schema.
+- `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
+  SQLAlchemy types with MySQL variants and applies MySQL table collation
+  options only when running against MySQL.
 - `server/cron.py`, `server/recreate_game.py`, and `server/logs_to_games.py`
   use raw SQL that must be reviewed for cross-database behavior before the
   runtime switches engines.
@@ -33,15 +36,15 @@ persistence coverage that protects the refactor.
 ## Postgres Migration Sequence
 
 1. Add Postgres test dependencies and Docker Compose services while leaving
-   MySQL as the default runtime. In progress.
+   MySQL as the default runtime. Complete.
 2. Add a `postgres` pytest marker and Docker-backed fixture that can create a
-   disposable Postgres schema for integration tests. In progress.
+   disposable Postgres schema for integration tests. Complete.
 3. Make ORM URL construction engine-neutral, using explicit database URLs for
    tests and local services while preserving the existing MySQL environment
-   behavior during the transition.
+   behavior during the transition. In progress.
 4. Add a Postgres baseline migration path or revise the baseline to use
    portable SQLAlchemy types where possible, with explicit treatment for
-   binary/case-sensitive username semantics.
+   binary/case-sensitive username semantics. In progress.
 5. Run schema, lookup, auth, session, and log-import persistence tests against
    both MySQL and Postgres until parity is proven.
 6. Replace `initialize_database.py` with Alembic upgrade plus seed data in

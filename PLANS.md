@@ -113,7 +113,7 @@ change can be reviewed and validated independently.
 
 ## Phase 6: Dependency And Deployment Modernization
 
-Status: planned.
+Status: in progress.
 
 Phase 6 should be split into small PRs so dependency risk, database migration
 risk, frontend build changes, and deployment changes can be reviewed
@@ -130,9 +130,9 @@ independently.
    - Document the current MySQL-specific surface area and migration sequence.
      Complete.
    - Add Postgres dependencies and Docker-backed `postgres` marker fixtures
-     alongside existing MySQL tests. In progress.
+     alongside existing MySQL tests. Complete.
    - Make ORM models, migrations, and raw SQL portable while keeping MySQL
-     tests green.
+     tests green. In progress.
    - Run the persistence suite against both MySQL and Postgres during the
      transition.
    - Switch local development defaults to Postgres after parity is proven.
