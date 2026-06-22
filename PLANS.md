@@ -124,9 +124,20 @@ independently.
 2. Upgrade SQLAlchemy and add focused ORM/session regression coverage for any
    behavior that changes during the upgrade. Complete.
 3. Add Alembic migrations for the current MySQL schema before changing database
-   engines. In progress.
+   engines. Complete.
 4. Plan and execute the MySQL-to-Postgres migration after migrations and
-   persistence tests are in place.
+   persistence tests are in place. In progress.
+   - Document the current MySQL-specific surface area and migration sequence.
+     In progress.
+   - Add Postgres dependencies and Docker-backed `postgres` marker fixtures
+     alongside existing MySQL tests.
+   - Make ORM models, migrations, and raw SQL portable while keeping MySQL
+     tests green.
+   - Run the persistence suite against both MySQL and Postgres during the
+     transition.
+   - Switch local development defaults to Postgres after parity is proven.
+   - Remove MySQL-only runtime paths after deployment and rollback plans are
+     documented.
 5. Modernize frontend tooling so client asset generation no longer depends on
    the legacy Node.js 6-era toolchain.
 6. Tighten `ruff` and `mypy` incrementally once dependency upgrades reduce
