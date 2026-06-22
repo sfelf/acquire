@@ -201,6 +201,11 @@ class Logs2DB:
     def get_trueskill_environment(self, rating_type):
         """Get trueskill environment.
 
+        Ratings are persisted incrementally as cron imports new completed games,
+        so this must continue using the same TrueSkill-compatible calculation
+        until existing rating histories can be rebuilt or migrated to separate
+        OpenSkill rating types.
+
         Args:
             rating_type: Rating type ORM object or name, depending on the caller.
 
@@ -393,15 +398,17 @@ class StatsGen:
         users_with_completed_games = []
         for row in self.session.execute(StatsGen.users_with_completed_games_sql):
             decoded = ujson.decode(row.encoded) if row.encoded else get_empty_records()
-            users_with_completed_games.append([row.user_id, row.name.decode(), decoded])
+            users_with_completed_games.append(
+                [row.user_id, decode_database_text(row.name), decoded]
+            )
         return users_with_completed_games
 
     def output_ratings(self):
         """Output ratings."""
         rating_type_to_ratings = collections.defaultdict(list)
         for row in self.session.execute(StatsGen.ratings_sql):
-            rating_type_to_ratings[row.rating_type.decode()].append(
-                [row.name, row.time, row.mu, row.sigma, row.num_games]
+            rating_type_to_ratings[decode_database_text(row.rating_type)].append(
+                [decode_database_text(row.name), row.time, row.mu, row.sigma, row.num_games]
             )
 
         self.write_file("ratings", rating_type_to_ratings)
@@ -416,14 +423,14 @@ class StatsGen:
         """
         ratings = {}
         for row in self.session.execute(StatsGen.user_ratings_sql, {"user_id": user_id}):
-            ratings[row.name.decode()] = [row.time, row.mu, row.sigma]
+            ratings[decode_database_text(row.name)] = [row.time, row.mu, row.sigma]
 
         games = []
         last_game_id = None
         for row in self.session.execute(StatsGen.user_games_sql, {"user_id": user_id}):
             if row.game_id != last_game_id:
                 games.append([row.game_mode_id, row.end_time, []])
-            games[-1][2].append([row.name.decode(), row.score])
+            games[-1][2].append([decode_database_text(row.name), row.score])
             last_game_id = row.game_id
 
         for record_key in ratings:
@@ -448,6 +455,25 @@ class StatsGen:
         """
         with open(os.path.join(self.output_dir, filename_prefix + ".json"), "w") as f:
             f.write(ujson.dumps(contents))
+
+
+def decode_database_text(value: bytes | str) -> str:
+    """Return text from legacy byte rows or modern string rows.
+
+    Raw SQL result rows may contain `bytes` with the legacy connector and `str`
+    with modern mysql-connector-python. Stats generation uses this helper at
+    the database/output boundary so JSON serialization receives plain strings
+    regardless of which connector produced the row.
+
+    Args:
+        value: Database text value returned as `bytes` or `str`.
+
+    Returns:
+        Decoded string value.
+    """
+    if isinstance(value, bytes):
+        return value.decode()
+    return value
 
 
 record_key_to_record_index: dict[str, int] = {

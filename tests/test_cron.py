@@ -559,6 +559,23 @@ def test_statsgen_get_users_with_completed_games_decodes_records(cron_module):
     ]
 
 
+def test_statsgen_get_users_with_completed_games_accepts_string_names(cron_module):
+    statsgen = cron_module.StatsGen(
+        StatsSession(
+            {
+                cron_module.StatsGen.users_with_completed_games_sql: [
+                    Row(user_id=1, name="alice", encoded=None),
+                ]
+            }
+        ),
+        "unused",
+    )
+
+    assert statsgen.get_users_with_completed_games() == [
+        [1, "alice", cron_module.get_empty_records()],
+    ]
+
+
 def test_statsgen_output_ratings_groups_rows(cron_module, monkeypatch):
     session = StatsSession(
         {
@@ -585,8 +602,38 @@ def test_statsgen_output_ratings_groups_rows(cron_module, monkeypatch):
 
     assert written == {
         "ratings": {
-            "Singles2": [[b"alice", 100, 25.0, 8.0, 3]],
-            "Teams": [[b"bob", 200, 27.0, 7.5, 5]],
+            "Singles2": [["alice", 100, 25.0, 8.0, 3]],
+            "Teams": [["bob", 200, 27.0, 7.5, 5]],
+        }
+    }
+
+
+def test_statsgen_output_ratings_accepts_string_rows(cron_module, monkeypatch):
+    session = StatsSession(
+        {
+            cron_module.StatsGen.ratings_sql: [
+                Row(
+                    name="alice",
+                    rating_type="Singles2",
+                    time=100,
+                    mu=25.0,
+                    sigma=8.0,
+                    num_games=3,
+                ),
+            ]
+        }
+    )
+    statsgen = cron_module.StatsGen(session, "unused")
+    written = {}
+    monkeypatch.setattr(
+        statsgen, "write_file", lambda name, contents: written.update({name: contents})
+    )
+
+    statsgen.output_ratings()
+
+    assert written == {
+        "ratings": {
+            "Singles2": [["alice", 100, 25.0, 8.0, 3]],
         }
     }
 
@@ -640,6 +687,44 @@ def test_statsgen_output_user_writes_encoded_user_payload(cron_module, monkeypat
         (cron_module.StatsGen.user_ratings_sql, {"user_id": 123}),
         (cron_module.StatsGen.user_games_sql, {"user_id": 123}),
     ]
+
+
+def test_statsgen_output_user_accepts_string_rows(cron_module, monkeypatch):
+    session = StatsSession(
+        {
+            cron_module.StatsGen.user_ratings_sql: [
+                Row(name="Singles2", time=100, mu=25.0, sigma=8.0),
+            ],
+            cron_module.StatsGen.user_games_sql: [
+                Row(
+                    game_id=10,
+                    end_time=500,
+                    game_mode_id=1,
+                    player_index=0,
+                    name="alice",
+                    score=90,
+                ),
+            ],
+        }
+    )
+    statsgen = cron_module.StatsGen(session, "unused")
+    written = {}
+    monkeypatch.setattr(
+        statsgen, "write_file", lambda name, contents: written.update({name: contents})
+    )
+
+    statsgen.output_user(123, "alice", [[1, 2], [0, 0, 0], [0, 0, 0, 0], [3, 4]])
+
+    assert written == {
+        "users/YWxpY2U": {
+            "ratings": {
+                "Singles2": [100, 25.0, 8.0, [1, 2]],
+            },
+            "games": [
+                [1, 500, [["alice", 90]]],
+            ],
+        }
+    }
 
 
 def test_statsgen_write_file_outputs_json(cron_module, tmp_path):
