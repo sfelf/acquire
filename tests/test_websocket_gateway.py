@@ -28,7 +28,7 @@ def test_sockjs_gateway_ignores_unmapped_transport_lines():
     gateway = websocket_gateway.SockJSGateway()
     connection = gateway.new_connection("socket-1", object())
 
-    gateway.receive_client_payload(connection, "[6, \"ignored before login\"]")
+    assert gateway.receive_client_payload(connection, '[6, "ignored before login"]') is False
     gateway.write_from_game_server(
         b'\nconnect ["missing-socket",1]\ndisconnect 2\n1 [[21,1,"hello"]]\n'
     )

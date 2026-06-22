@@ -57,9 +57,24 @@ def encode_sockjs_message(message):
     return http_server.ujson.dumps([http_server.ujson.dumps(message)])
 
 
+def receive_next_sockjs_message_frame(websocket):
+    while True:
+        frame = websocket.receive_text()
+        if frame != "h":
+            return frame
+
+
 @contextmanager
 def fake_session_scope(session):
     yield session
+
+
+class RollbackTrackingSession:
+    def __init__(self):
+        self.rolled_back = False
+
+    def rollback(self):
+        self.rolled_back = True
 
 
 def test_python_http_server_serves_main_static_assets(tmp_path):
@@ -509,10 +524,48 @@ def test_python_http_server_sockjs_websocket_drops_frames_before_login_maps(
                 ]
             )
         )
+        assert websocket.receive_text() == "h"
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(receive_next_sockjs_message_frame(websocket))
+        )
+
+
+def test_python_http_server_sockjs_websocket_stops_batch_after_disconnect(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    gateway = http_server.websocket_gateway.SockJSGateway()
+    client, _main_root, _stats_root = make_client(tmp_path, realtime_gateway=gateway)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
+    ):
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
         assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
             decode_sockjs_messages(websocket.receive_text())
         )
-        assert websocket.receive_text() == "h"
+        websocket.send_text(
+            http_server.ujson.dumps(
+                [
+                    "not json",
+                    http_server.ujson.dumps(
+                        [
+                            http_server.enums.CommandsToServer.CreateGame.value,
+                            http_server.enums.GameModes.Singles.value,
+                            2,
+                        ]
+                    ),
+                ]
+            )
+        )
+        websocket.receive_text()
+
+    assert gateway.game_server.game_id_to_game == {}
 
 
 def test_python_http_server_sockjs_websocket_forwards_authenticated_messages(
@@ -591,6 +644,27 @@ def test_python_http_server_set_password_persists_valid_password(tmp_path, monke
             },
         )
     ]
+
+
+def test_check_login_in_session_rolls_back_generic_login_errors(monkeypatch):
+    session = RollbackTrackingSession()
+
+    def check_login(session_arg, **kwargs):
+        assert session_arg is session
+        return http_server.auth.LoginResult(http_server.enums.Errors.GenericError)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+
+    result = http_server.check_login_in_session(
+        session_scope=lambda: fake_session_scope(session),
+        version="VERSION",
+        username="alice",
+        password="",
+        accepted_client_version="VERSION",
+    )
+
+    assert result.error is http_server.enums.Errors.GenericError
+    assert session.rolled_back is True
 
 
 def test_python_http_server_set_password_runs_database_work_in_threadpool(tmp_path, monkeypatch):

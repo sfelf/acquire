@@ -238,16 +238,24 @@ class SockJSGateway:
             connection.client.disconnect()
         self.remove_connection(connection)
 
-    def receive_client_payload(self, connection: GatewayConnection, payload: str) -> None:
+    def receive_client_payload(self, connection: GatewayConnection, payload: str) -> bool:
         """Forward one authenticated client payload to the game server.
 
         Args:
             connection: Authenticated websocket connection.
             payload: Application payload string from the client.
+
+        Returns:
+            `True` when the connection remains active after dispatch, otherwise
+            `False`.
         """
         if connection.client is None:
-            return
+            return False
         connection.client.on_message(normalize_client_payload(payload).encode())
+        return (
+            connection.client_id is not None
+            and connection.client_id in self.game_server.client_id_to_client
+        )
 
     def write_from_game_server(self, data: bytes) -> None:
         """Handle newline-delimited writes emitted by `server.Server`.

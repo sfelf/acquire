@@ -215,13 +215,16 @@ def check_login_in_session(
         TypeError: If any login tuple field is not a string.
     """
     with session_scope() as session:
-        return auth.check_login(
+        result = auth.check_login(
             session,
             version=version,
             username=username,
             password=password,
             server_version=accepted_client_version,
         )
+        if result.error is enums.Errors.GenericError:
+            session.rollback()
+        return result
 
 
 def decode_login_payload(payload: str) -> tuple[object, object, object]:
@@ -472,6 +475,7 @@ def create_app(
                 return
             version, username, password = decode_login_payload(login_messages[0])
             receiver_task = asyncio.create_task(receive_mapped_payloads())
+            sender_task = asyncio.create_task(send_queued_frames())
             try:
                 login_result = await run_in_threadpool(
                     check_login_in_session,
@@ -490,7 +494,6 @@ def create_app(
                 await websocket.close()
                 return
 
-            sender_task = asyncio.create_task(send_queued_frames())
             async with gateway.lock:
                 gateway.login(
                     connection,
@@ -508,7 +511,8 @@ def create_app(
                     raise payloads_or_error
                 async with gateway.lock:
                     for payload in payloads_or_error:
-                        gateway.receive_client_payload(connection, payload)
+                        if not gateway.receive_client_payload(connection, payload):
+                            break
         except ValueError:
             with suppress(RuntimeError):
                 await websocket.close()
