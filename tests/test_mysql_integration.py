@@ -2,13 +2,17 @@ import importlib
 import io
 import sys
 import time
+from pathlib import Path
 
 import pytest
 import sqlalchemy
 import ujson
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.mysql
+REPO_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -86,6 +90,16 @@ def _table_names(mysql_engine):
     return set(sqlalchemy.inspect(mysql_engine).get_table_names())
 
 
+def _app_table_names(mysql_engine):
+    return _table_names(mysql_engine) - {"alembic_version"}
+
+
+def _alembic_config(connection):
+    config = Config(str(REPO_DIR / "alembic.ini"))
+    config.attributes["connection"] = connection
+    return config
+
+
 def make_mysql_session(mysql_engine):
     return sessionmaker(bind=mysql_engine, autoflush=False)()
 
@@ -122,6 +136,152 @@ def test_orm_metadata_creates_expected_mysql_tables(
     assert ("rating_type_id", "user_id") in {
         tuple(sorted(index["column_names"])) for index in inspector.get_indexes("rating")
     }
+
+
+def test_alembic_baseline_matches_current_orm_schema_against_mysql(
+    mysql_engine,
+    real_orm_module,
+    empty_mysql_schema,
+):
+    with mysql_engine.begin() as connection:
+        command.upgrade(_alembic_config(connection), "head")
+
+    inspector = sqlalchemy.inspect(mysql_engine)
+    assert _app_table_names(mysql_engine) == {
+        "game",
+        "game_mode",
+        "game_player",
+        "game_state",
+        "key_value",
+        "rating",
+        "rating_type",
+        "record",
+        "user",
+    }
+    with mysql_engine.connect() as connection:
+        version = connection.execute(sqlalchemy.text("select version_num from alembic_version"))
+        assert version.scalar_one() == "20260622_0001"
+
+    assert _column_contract(inspector, "game") == [
+        ("game_id", False, True),
+        ("log_time", False, False),
+        ("number", False, False),
+        ("begin_time", True, False),
+        ("end_time", True, False),
+        ("game_state_id", False, False),
+        ("game_mode_id", False, False),
+    ]
+    assert _column_contract(inspector, "game_player") == [
+        ("game_player_id", False, True),
+        ("game_id", False, False),
+        ("player_index", False, False),
+        ("user_id", False, False),
+        ("score", True, False),
+    ]
+    assert _column_contract(inspector, "key_value") == [
+        ("key_value_id", False, True),
+        ("key", False, False),
+        ("value", False, False),
+    ]
+    assert _column_contract(inspector, "rating") == [
+        ("rating_id", False, True),
+        ("user_id", False, False),
+        ("rating_type_id", False, False),
+        ("time", False, False),
+        ("mu", False, False),
+        ("sigma", False, False),
+    ]
+    assert _column_contract(inspector, "record") == [
+        ("user_id", False, True),
+        ("encoded", False, False),
+    ]
+    assert _column_contract(inspector, "user") == [
+        ("user_id", False, True),
+        ("name", False, False),
+        ("password", True, False),
+    ]
+    assert _unique_contract(inspector) == {
+        "game": {("log_time", "number")},
+        "game_mode": {("name",)},
+        "game_player": {("game_id", "player_index")},
+        "game_state": {("name",)},
+        "key_value": {("key",)},
+        "rating_type": {("name",)},
+        "user": {("name",)},
+    }
+    assert _foreign_key_contract(inspector) == {
+        "game": {
+            (("game_mode_id",), "game_mode", ("game_mode_id",)),
+            (("game_state_id",), "game_state", ("game_state_id",)),
+        },
+        "game_player": {
+            (("game_id",), "game", ("game_id",)),
+            (("user_id",), "user", ("user_id",)),
+        },
+        "rating": {
+            (("rating_type_id",), "rating_type", ("rating_type_id",)),
+            (("user_id",), "user", ("user_id",)),
+        },
+        "record": {
+            (("user_id",), "user", ("user_id",)),
+        },
+    }
+    assert ("end_time",) in {
+        tuple(index["column_names"]) for index in inspector.get_indexes("game")
+    }
+    assert ("user_id", "rating_type_id") in {
+        tuple(index["column_names"]) for index in inspector.get_indexes("rating")
+    }
+
+    session = make_mysql_session(mysql_engine)
+    try:
+        seed_lookup_rows(session, real_orm_module)
+        session.add(real_orm_module.User(name="migration-user", password=None))
+        session.commit()
+        assert session.query(real_orm_module.GameMode).filter_by(name="Singles").one().game_mode_id
+        assert session.query(real_orm_module.User).filter_by(name="migration-user").one().user_id
+    finally:
+        session.close()
+
+    with mysql_engine.begin() as connection:
+        command.downgrade(_alembic_config(connection), "base")
+    assert not _app_table_names(mysql_engine)
+
+
+def _column_contract(inspector, table_name):
+    primary_key_columns = set(inspector.get_pk_constraint(table_name)["constrained_columns"])
+    return [
+        (column["name"], column["nullable"], column["name"] in primary_key_columns)
+        for column in inspector.get_columns(table_name)
+    ]
+
+
+def _unique_contract(inspector):
+    contract = {}
+    for table_name in _app_table_names(inspector.bind):
+        unique_columns = {
+            tuple(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints(table_name)
+        }
+        if unique_columns:
+            contract[table_name] = unique_columns
+    return contract
+
+
+def _foreign_key_contract(inspector):
+    contract = {}
+    for table_name in _app_table_names(inspector.bind):
+        foreign_keys = {
+            (
+                tuple(foreign_key["constrained_columns"]),
+                foreign_key["referred_table"],
+                tuple(foreign_key["referred_columns"]),
+            )
+            for foreign_key in inspector.get_foreign_keys(table_name)
+        }
+        if foreign_keys:
+            contract[table_name] = foreign_keys
+    return contract
 
 
 def test_initialize_database_seeds_lookup_rows_in_mysql(

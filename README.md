@@ -62,6 +62,19 @@ HTTP and SockJS runtime is Python-owned.
 
 See [docs/local-development.md](docs/local-development.md) for UI access, database initialization, and teardown.
 
+## Database migrations
+
+Alembic tracks schema migrations for the Python database runtime:
+
+```bash
+uv run alembic upgrade head
+uv run alembic current
+```
+
+The initial migration is a baseline for the current MySQL schema. Local reset
+and seed workflows still use `initialize_database.py`; future schema changes
+should be added as Alembic revisions before the MySQL-to-Postgres migration.
+
 ## Install dependencies
 
 Install nodejs. I followed the [official instructions](https://nodejs.org/en/download/package-manager/#debian-and-ubuntu-based-linux-distributions):

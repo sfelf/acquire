@@ -122,9 +122,9 @@ independently.
 1. Upgrade Python runtime dependencies in controlled groups, starting with
    compatibility patches needed for supported Python versions. Complete.
 2. Upgrade SQLAlchemy and add focused ORM/session regression coverage for any
-   behavior that changes during the upgrade. In progress.
+   behavior that changes during the upgrade. Complete.
 3. Add Alembic migrations for the current MySQL schema before changing database
-   engines.
+   engines. In progress.
 4. Plan and execute the MySQL-to-Postgres migration after migrations and
    persistence tests are in place.
 5. Modernize frontend tooling so client asset generation no longer depends on
