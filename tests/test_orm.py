@@ -34,21 +34,58 @@ class FakeURL:
         return cls(drivername, **kwargs)
 
 
+class FakeType:
+    def __init__(self, name, args=(), kwargs=None):
+        self.name = name
+        self.args = args
+        self.kwargs = kwargs or {}
+        self.variants = {}
+
+    def with_variant(self, variant, dialect_name):
+        self.variants[dialect_name] = variant
+        return self
+
+
+class FakeConstraint:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.ddl_if_args = None
+        self.ddl_if_kwargs = None
+
+    def ddl_if(self, *args, **kwargs):
+        self.ddl_if_args = args
+        self.ddl_if_kwargs = kwargs
+        return self
+
+
 def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
+    fake_sqlalchemy.BigInteger = lambda *args, **kwargs: FakeType(
+        "big-integer", args, kwargs
+    )
+    fake_sqlalchemy.CheckConstraint = FakeConstraint
     fake_sqlalchemy.create_engine = lambda *args, **kwargs: ("engine", args, kwargs)
     fake_sqlalchemy.Column = FakeColumn
+    fake_sqlalchemy.Float = lambda *args, **kwargs: FakeType("float", args, kwargs)
     fake_sqlalchemy.Index = lambda *args, **kwargs: ("index", args, kwargs)
+    fake_sqlalchemy.Integer = lambda *args, **kwargs: FakeType("integer", args, kwargs)
     fake_sqlalchemy.ForeignKey = lambda *args, **kwargs: ("foreign-key", args, kwargs)
+    fake_sqlalchemy.SmallInteger = lambda *args, **kwargs: FakeType(
+        "small-integer", args, kwargs
+    )
     fake_sqlalchemy.String = lambda *args, **kwargs: ("string", args, kwargs)
     fake_sqlalchemy.Text = lambda *args, **kwargs: ("text", args, kwargs)
     fake_sqlalchemy.UniqueConstraint = lambda *args, **kwargs: ("unique", args, kwargs)
 
     fake_mysql = types.ModuleType("sqlalchemy.dialects.mysql")
-    fake_mysql.FLOAT = lambda *args, **kwargs: ("float", args, kwargs)
-    fake_mysql.INTEGER = lambda *args, **kwargs: ("integer", args, kwargs)
-    fake_mysql.SMALLINT = lambda *args, **kwargs: ("smallint", args, kwargs)
-    fake_mysql.TINYINT = lambda *args, **kwargs: ("tinyint", args, kwargs)
+    fake_mysql.FLOAT = lambda *args, **kwargs: FakeType("mysql-float", args, kwargs)
+    fake_mysql.INTEGER = lambda *args, **kwargs: FakeType("mysql-integer", args, kwargs)
+    fake_mysql.SMALLINT = lambda *args, **kwargs: FakeType("mysql-smallint", args, kwargs)
+    fake_mysql.TINYINT = lambda *args, **kwargs: FakeType("mysql-tinyint", args, kwargs)
+
+    fake_postgresql = types.ModuleType("sqlalchemy.dialects.postgresql")
+    fake_postgresql.REAL = lambda *args, **kwargs: FakeType("postgres-real", args, kwargs)
 
     fake_engine = types.ModuleType("sqlalchemy.engine")
     fake_engine_url = types.ModuleType("sqlalchemy.engine.url")
@@ -59,13 +96,16 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_orm.relationship = lambda *args, **kwargs: ("relationship", args, kwargs)
     fake_orm.sessionmaker = lambda bind=None: lambda autoflush=False: None
 
-    fake_sqlalchemy.dialects = types.SimpleNamespace(mysql=fake_mysql)
+    fake_sqlalchemy.dialects = types.SimpleNamespace(
+        mysql=fake_mysql, postgresql=fake_postgresql
+    )
     fake_sqlalchemy.engine = types.SimpleNamespace(url=fake_engine_url)
     fake_sqlalchemy.orm = fake_orm
 
     monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects", fake_sqlalchemy.dialects)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
+    monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.postgresql", fake_postgresql)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine", fake_engine)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine.url", fake_engine_url)
     monkeypatch.setitem(sys.modules, "sqlalchemy.orm", fake_orm)
@@ -74,6 +114,7 @@ def install_fake_sqlalchemy(monkeypatch):
 @pytest.fixture
 def orm_module(monkeypatch):
     monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
     monkeypatch.delenv("MYSQL_DATABASE", raising=False)
     monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
     monkeypatch.delenv("MYSQL_SOCKET", raising=False)
@@ -135,6 +176,7 @@ def test_engine_uses_default_mysql_settings(orm_module):
 
 def test_engine_uses_mysql_environment(monkeypatch):
     monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
     monkeypatch.setenv("MYSQL_DATABASE", "custom db")
     monkeypatch.setenv("MYSQL_PASSWORD", "custom password")
     monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
@@ -158,6 +200,25 @@ def test_engine_uses_mysql_environment(monkeypatch):
             "engine",
             (url,),
             {"connect_args": {}},
+        )
+    finally:
+        sys.modules.pop("orm", None)
+
+
+def test_engine_uses_explicit_database_url(monkeypatch):
+    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.setenv("ACQUIRE_DATABASE_URL", "postgresql+psycopg://u:p@localhost/acquire")
+    monkeypatch.setenv("MYSQL_DATABASE", "ignored")
+    monkeypatch.setenv("MYSQL_AUTH_PLUGIN", "ignored")
+    install_fake_sqlalchemy(monkeypatch)
+
+    try:
+        orm = importlib.import_module("orm")
+
+        assert orm.engine == (
+            "engine",
+            ("postgresql+psycopg://u:p@localhost/acquire",),
+            {},
         )
     finally:
         sys.modules.pop("orm", None)

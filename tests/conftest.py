@@ -61,8 +61,20 @@ def _cleanup_docker_compose(project_name, *args, include_test_override=False):
 
 
 def _get_available_local_port():
+    """Return an available loopback port for disposable Docker marker services.
+
+    Some restricted local environments permit Docker but block direct socket
+    binding from the pytest process. In that case, use the documented Postgres
+    test override port and let Docker report any real bind conflict.
+
+    Returns:
+        Available local port, or the documented Postgres test port fallback.
+    """
     with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
+        try:
+            sock.bind(("127.0.0.1", 0))
+        except OSError:
+            return "35432"
         return str(sock.getsockname()[1])
 
 
@@ -114,7 +126,9 @@ def postgres_test_url(pytestconfig):
         pytest.skip("postgres marker was not selected")
 
     project_name = f"acquire-pytest-postgres-{os.getpid()}"
-    postgres_port = os.environ.get("ACQUIRE_POSTGRES_TEST_PORT", _get_available_local_port())
+    postgres_port = os.environ.get("ACQUIRE_POSTGRES_TEST_PORT")
+    if postgres_port is None:
+        postgres_port = _get_available_local_port()
     compose_env = {
         "ACQUIRE_POSTGRES_TEST_PORT": postgres_port,
         "POSTGRES_DB": os.environ.get("POSTGRES_DB", "acquire"),

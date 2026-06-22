@@ -9,38 +9,102 @@ from contextlib import contextmanager
 from typing import cast
 
 from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
     Column,
+    Float,
     ForeignKey,
     Index,
+    Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
     create_engine,
 )
-from sqlalchemy.dialects.mysql import FLOAT, INTEGER, SMALLINT, TINYINT
+from sqlalchemy.dialects import mysql, postgresql
 from sqlalchemy.engine.url import URL
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 Base = declarative_base()
-mysql_user = os.environ.get("MYSQL_USER", "acquire")
-mysql_password = os.environ.get("MYSQL_PASSWORD", "acquire")
-mysql_database = os.environ.get("MYSQL_DATABASE", "acquire")
-mysql_socket = os.environ.get("MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock")
-mysql_auth_plugin = os.environ.get("MYSQL_AUTH_PLUGIN", "mysql_native_password")
-connect_args = {}
-if mysql_auth_plugin:
-    connect_args["auth_plugin"] = mysql_auth_plugin
-engine = create_engine(
-    URL.create(
-        "mysql+mysqlconnector",
-        username=mysql_user,
-        password=mysql_password,
-        host="localhost",
-        database=mysql_database,
-        query={"unix_socket": mysql_socket},
-    ),
-    connect_args=connect_args,
+
+UNSIGNED_INTEGER_MAX = 4_294_967_295
+UNSIGNED_SMALL_INTEGER_MAX = 65_535
+UNSIGNED_TINY_INTEGER_MAX = 255
+
+UnsignedInteger = BigInteger().with_variant(mysql.INTEGER(unsigned=True), "mysql")
+UnsignedSmallInteger = Integer().with_variant(mysql.SMALLINT(unsigned=True), "mysql")
+UnsignedTinyInteger = SmallInteger().with_variant(mysql.TINYINT(unsigned=True), "mysql")
+LegacyFloat = Float().with_variant(mysql.FLOAT(), "mysql").with_variant(
+    postgresql.REAL(), "postgresql"
 )
+
+
+def _unsigned_range_constraint(
+    table_name: str,
+    column_name: str,
+    max_value: int,
+) -> CheckConstraint:
+    """Return a database-level range check for a MySQL unsigned column.
+
+    Postgres does not have unsigned integer column types, so these constraints
+    preserve the value ranges accepted by the current MySQL schema when ORM
+    metadata is created against Postgres. MySQL keeps its native unsigned types
+    and cannot attach check constraints to auto-increment columns, so the
+    constraint is emitted only for Postgres.
+
+    Args:
+        table_name: Table that owns the constrained column.
+        column_name: Unsigned column name.
+        max_value: Highest value accepted by the matching MySQL unsigned type.
+
+    Returns:
+        SQLAlchemy check constraint for the unsigned range.
+    """
+    return CheckConstraint(
+        f"{column_name} >= 0 and {column_name} <= {max_value}",
+        name=f"ck_{table_name}_{column_name}_unsigned",
+    ).ddl_if(dialect="postgresql")
+
+
+def _build_engine_config() -> tuple[str | URL, dict[str, dict[str, str]]]:
+    """Return the configured SQLAlchemy engine URL and connection arguments.
+
+    `ACQUIRE_DATABASE_URL` is the explicit escape hatch for migration and
+    Postgres testing. When it is absent, the legacy MySQL environment-variable
+    behavior remains the default runtime path.
+
+    Returns:
+        Tuple of database URL or SQLAlchemy `URL` plus keyword arguments for
+        `create_engine`.
+    """
+    configured_url = os.environ.get("ACQUIRE_DATABASE_URL")
+    if configured_url:
+        return configured_url, {}
+
+    mysql_user = os.environ.get("MYSQL_USER", "acquire")
+    mysql_password = os.environ.get("MYSQL_PASSWORD", "acquire")
+    mysql_database = os.environ.get("MYSQL_DATABASE", "acquire")
+    mysql_socket = os.environ.get("MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock")
+    mysql_auth_plugin = os.environ.get("MYSQL_AUTH_PLUGIN", "mysql_native_password")
+    connect_args: dict[str, str] = {}
+    if mysql_auth_plugin:
+        connect_args["auth_plugin"] = mysql_auth_plugin
+    return (
+        URL.create(
+            "mysql+mysqlconnector",
+            username=mysql_user,
+            password=mysql_password,
+            host="localhost",
+            database=mysql_database,
+            query={"unix_socket": mysql_socket},
+        ),
+        {"connect_args": connect_args},
+    )
+
+
+engine_url, engine_kwargs = _build_engine_config()
+engine = create_engine(engine_url, **engine_kwargs)
 Session = sessionmaker(bind=engine)
 
 
@@ -70,18 +134,25 @@ class Game(Base):
     """Hold reconstructed game state while replaying logs."""
 
     __tablename__ = "game"
-    game_id = Column(INTEGER(unsigned=True), primary_key=True, nullable=False)
-    log_time = Column(INTEGER(unsigned=True), nullable=False)
-    number = Column(INTEGER(unsigned=True), nullable=False)
-    begin_time = Column(INTEGER(unsigned=True))
-    end_time = Column(INTEGER(unsigned=True))
+    game_id = Column(UnsignedInteger, primary_key=True, nullable=False)
+    log_time = Column(UnsignedInteger, nullable=False)
+    number = Column(UnsignedInteger, nullable=False)
+    begin_time = Column(UnsignedInteger)
+    end_time = Column(UnsignedInteger)
     game_state_id = Column(
-        TINYINT(unsigned=True), ForeignKey("game_state.game_state_id"), nullable=False
+        UnsignedTinyInteger, ForeignKey("game_state.game_state_id"), nullable=False
     )
     game_mode_id = Column(
-        TINYINT(unsigned=True), ForeignKey("game_mode.game_mode_id"), nullable=False
+        UnsignedTinyInteger, ForeignKey("game_mode.game_mode_id"), nullable=False
     )
     __table_args__ = (
+        _unsigned_range_constraint("game", "game_id", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game", "log_time", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game", "number", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game", "begin_time", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game", "end_time", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game", "game_state_id", UNSIGNED_TINY_INTEGER_MAX),
+        _unsigned_range_constraint("game", "game_mode_id", UNSIGNED_TINY_INTEGER_MAX),
         UniqueConstraint("log_time", "number"),
         Index("end_time", "end_time"),
     )
@@ -114,9 +185,12 @@ class GameMode(Base):
     """Represent a game mode lookup row."""
 
     __tablename__ = "game_mode"
-    game_mode_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
+    game_mode_id = Column(UnsignedTinyInteger, primary_key=True, nullable=False)
     name = Column(String(8), nullable=False)
-    __table_args__ = (UniqueConstraint("name"),)
+    __table_args__ = (
+        _unsigned_range_constraint("game_mode", "game_mode_id", UNSIGNED_TINY_INTEGER_MAX),
+        UniqueConstraint("name"),
+    )
 
     def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
@@ -132,12 +206,19 @@ class GamePlayer(Base):
     """Represent a player entry for a persisted game."""
 
     __tablename__ = "game_player"
-    game_player_id = Column(INTEGER(unsigned=True), primary_key=True, nullable=False)
-    game_id = Column(INTEGER(unsigned=True), ForeignKey("game.game_id"), nullable=False)
-    player_index = Column(TINYINT(unsigned=True), nullable=False)
-    user_id = Column(INTEGER(unsigned=True), ForeignKey("user.user_id"), nullable=False)
-    score = Column(SMALLINT(unsigned=True))
-    __table_args__ = (UniqueConstraint("game_id", "player_index"),)
+    game_player_id = Column(UnsignedInteger, primary_key=True, nullable=False)
+    game_id = Column(UnsignedInteger, ForeignKey("game.game_id"), nullable=False)
+    player_index = Column(UnsignedTinyInteger, nullable=False)
+    user_id = Column(UnsignedInteger, ForeignKey("user.user_id"), nullable=False)
+    score = Column(UnsignedSmallInteger)
+    __table_args__ = (
+        _unsigned_range_constraint("game_player", "game_player_id", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game_player", "game_id", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game_player", "player_index", UNSIGNED_TINY_INTEGER_MAX),
+        _unsigned_range_constraint("game_player", "user_id", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("game_player", "score", UNSIGNED_SMALL_INTEGER_MAX),
+        UniqueConstraint("game_id", "player_index"),
+    )
 
     game = relationship("Game")
     user = relationship("User")
@@ -165,9 +246,12 @@ class GameState(Base):
     """Represent a game state lookup row."""
 
     __tablename__ = "game_state"
-    game_state_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
+    game_state_id = Column(UnsignedTinyInteger, primary_key=True, nullable=False)
     name = Column(String(16), nullable=False)
-    __table_args__ = (UniqueConstraint("name"),)
+    __table_args__ = (
+        _unsigned_range_constraint("game_state", "game_state_id", UNSIGNED_TINY_INTEGER_MAX),
+        UniqueConstraint("name"),
+    )
 
     def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
@@ -183,10 +267,13 @@ class KeyValue(Base):
     """Represent a persisted string key/value pair."""
 
     __tablename__ = "key_value"
-    key_value_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
+    key_value_id = Column(UnsignedTinyInteger, primary_key=True, nullable=False)
     key = Column(String(32), nullable=False)
     value = Column(Text, nullable=False)
-    __table_args__ = (UniqueConstraint("key"),)
+    __table_args__ = (
+        _unsigned_range_constraint("key_value", "key_value_id", UNSIGNED_TINY_INTEGER_MAX),
+        UniqueConstraint("key"),
+    )
 
     def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
@@ -202,15 +289,21 @@ class Rating(Base):
     """Represent one user rating at a point in time."""
 
     __tablename__ = "rating"
-    rating_id = Column(INTEGER(unsigned=True), primary_key=True, nullable=False)
-    user_id = Column(INTEGER(unsigned=True), ForeignKey("user.user_id"), nullable=False)
+    rating_id = Column(UnsignedInteger, primary_key=True, nullable=False)
+    user_id = Column(UnsignedInteger, ForeignKey("user.user_id"), nullable=False)
     rating_type_id = Column(
-        TINYINT(unsigned=True), ForeignKey("rating_type.rating_type_id"), nullable=False
+        UnsignedTinyInteger, ForeignKey("rating_type.rating_type_id"), nullable=False
     )
-    time = Column(INTEGER(unsigned=True), nullable=False)
-    mu = Column(FLOAT(), nullable=False)
-    sigma = Column(FLOAT(), nullable=False)
-    __table_args__ = (Index("user_id_rating_type_id", "user_id", "rating_type_id"),)
+    time = Column(UnsignedInteger, nullable=False)
+    mu = Column(LegacyFloat, nullable=False)
+    sigma = Column(LegacyFloat, nullable=False)
+    __table_args__ = (
+        _unsigned_range_constraint("rating", "rating_id", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("rating", "user_id", UNSIGNED_INTEGER_MAX),
+        _unsigned_range_constraint("rating", "rating_type_id", UNSIGNED_TINY_INTEGER_MAX),
+        _unsigned_range_constraint("rating", "time", UNSIGNED_INTEGER_MAX),
+        Index("user_id_rating_type_id", "user_id", "rating_type_id"),
+    )
 
     user = relationship("User")
     rating_type = relationship("RatingType")
@@ -240,9 +333,14 @@ class RatingType(Base):
     """Represent a rating category lookup row."""
 
     __tablename__ = "rating_type"
-    rating_type_id = Column(TINYINT(unsigned=True), primary_key=True, nullable=False)
+    rating_type_id = Column(UnsignedTinyInteger, primary_key=True, nullable=False)
     name = Column(String(8), nullable=False)
-    __table_args__ = (UniqueConstraint("name"),)
+    __table_args__ = (
+        _unsigned_range_constraint(
+            "rating_type", "rating_type_id", UNSIGNED_TINY_INTEGER_MAX
+        ),
+        UniqueConstraint("name"),
+    )
 
     def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
@@ -259,12 +357,15 @@ class Record(Base):
 
     __tablename__ = "record"
     user_id = Column(
-        INTEGER(unsigned=True),
+        UnsignedInteger,
         ForeignKey("user.user_id"),
         primary_key=True,
         nullable=False,
     )
     encoded = Column(String(255), nullable=False)
+    __table_args__ = (
+        _unsigned_range_constraint("record", "user_id", UNSIGNED_INTEGER_MAX),
+    )
 
     user = relationship("User")
 
@@ -285,10 +386,13 @@ class User(Base):
     """Represent a persisted player account."""
 
     __tablename__ = "user"
-    user_id = Column(INTEGER(unsigned=True), primary_key=True, nullable=False)
+    user_id = Column(UnsignedInteger, primary_key=True, nullable=False)
     name = Column(String(32), nullable=False)
     password = Column(String(64))
-    __table_args__ = (UniqueConstraint("name"),)
+    __table_args__ = (
+        _unsigned_range_constraint("user", "user_id", UNSIGNED_INTEGER_MAX),
+        UniqueConstraint("name"),
+    )
 
     def __repr__(self) -> str:
         """Return a stable developer representation for debugging.
