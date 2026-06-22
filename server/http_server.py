@@ -490,9 +490,6 @@ def create_app(
                 login_messages = decode_frame(login_frame)
                 if login_messages:
                     break
-            if len(login_messages) != 1:
-                await websocket.close()
-                return
             version, username, password = decode_login_payload(login_messages[0])
             receiver_task = asyncio.create_task(receive_mapped_payloads())
             sender_task = asyncio.create_task(send_queued_frames())

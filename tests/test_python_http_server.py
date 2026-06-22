@@ -465,23 +465,40 @@ def test_decode_login_payload_rejects_invalid_json():
         http_server.decode_login_payload("not json")
 
 
-def test_python_http_server_sockjs_websocket_closes_multiple_login_messages(tmp_path):
-    client, _main_root, _stats_root = make_client(tmp_path)
+def test_python_http_server_sockjs_websocket_drops_extra_first_frame_messages(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
 
-    with (
-        pytest.raises(WebSocketDisconnect),
-        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
-    ):
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path, sockjs_heartbeat_interval=0.01)
+
+    with client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket:
         assert websocket.receive_text() == "o"
         websocket.send_text(
             http_server.ujson.dumps(
                 [
                     http_server.ujson.dumps(["VERSION", "alice", ""]),
-                    http_server.ujson.dumps(["VERSION", "bob", ""]),
+                    http_server.ujson.dumps(
+                        [
+                            http_server.enums.CommandsToServer.SendGlobalChatMessage.value,
+                            "sent before mapping",
+                        ]
+                    ),
                 ]
             )
         )
-        websocket.receive_text()
+        messages = decode_sockjs_messages(websocket.receive_text())
+        heartbeat = websocket.receive_text()
+
+    assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in messages
+    assert [
+        http_server.enums.CommandsToClient.AddGlobalChatMessage.value,
+        1,
+        "sent before mapping",
+    ] not in messages
+    assert heartbeat == "h"
 
 
 def test_python_http_server_sockjs_websocket_closes_non_string_login_fields(
