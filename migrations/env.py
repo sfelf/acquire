@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import cast
 
 from alembic import context
-from sqlalchemy import Connection, Engine, create_engine, pool
+from sqlalchemy import create_engine, pool
+from sqlalchemy.engine import Connection, Engine
 
 SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
 if str(SERVER_DIR) not in sys.path:
