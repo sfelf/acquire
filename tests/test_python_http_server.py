@@ -318,6 +318,25 @@ def test_python_http_server_sockjs_websocket_logs_in_and_receives_initial_state(
     ] in messages
 
 
+def test_python_http_server_sockjs_websocket_ignores_empty_frames_before_login(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    client, _main_root, _stats_root = make_client(tmp_path)
+
+    with client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket:
+        assert websocket.receive_text() == "o"
+        websocket.send_text("")
+        websocket.send_text("h")
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        messages = decode_sockjs_messages(websocket.receive_text())
+
+    assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in messages
+
+
 def test_python_http_server_sockjs_websocket_sends_idle_heartbeats(tmp_path, monkeypatch):
     def check_login(session_arg, **kwargs):
         return http_server.auth.LoginResult(None, "alice", "", False)
@@ -560,6 +579,40 @@ def test_python_http_server_sockjs_websocket_stops_batch_after_disconnect(
                             2,
                         ]
                     ),
+                ]
+            )
+        )
+        websocket.receive_text()
+
+    assert gateway.game_server.game_id_to_game == {}
+
+
+def test_python_http_server_sockjs_websocket_stops_queued_frames_after_disconnect(
+    tmp_path, monkeypatch
+):
+    def check_login(session_arg, **kwargs):
+        return http_server.auth.LoginResult(None, "alice", "", False)
+
+    monkeypatch.setattr(http_server.auth, "check_login", check_login)
+    gateway = http_server.websocket_gateway.SockJSGateway()
+    client, _main_root, _stats_root = make_client(tmp_path, realtime_gateway=gateway)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/sockjs/000/socket-alice/websocket") as websocket,
+    ):
+        assert websocket.receive_text() == "o"
+        websocket.send_text(encode_sockjs_message(["VERSION", "alice", ""]))
+        assert [http_server.enums.CommandsToClient.SetClientId.value, 1] in (
+            decode_sockjs_messages(websocket.receive_text())
+        )
+        websocket.send_text("not json")
+        websocket.send_text(
+            encode_sockjs_message(
+                [
+                    http_server.enums.CommandsToServer.CreateGame.value,
+                    http_server.enums.GameModes.Singles.value,
+                    2,
                 ]
             )
         )

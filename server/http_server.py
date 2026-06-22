@@ -448,7 +448,8 @@ def create_app(
                     await websocket.send_text(websocket_gateway.SOCKJS_HEARTBEAT_FRAME)
                     continue
                 if frame is None:
-                    await websocket.close()
+                    with suppress(RuntimeError):
+                        await websocket.close()
                     return
                 await websocket.send_text(frame)
 
@@ -468,8 +469,11 @@ def create_app(
         sender_task: asyncio.Task[None] | None = None
         receiver_task: asyncio.Task[None] | None = None
         try:
-            login_frame = await websocket.receive_text()
-            login_messages = websocket_gateway.decode_sockjs_frame(login_frame)
+            while True:
+                login_frame = await websocket.receive_text()
+                login_messages = websocket_gateway.decode_sockjs_frame(login_frame)
+                if login_messages:
+                    break
             if len(login_messages) != 1:
                 await websocket.close()
                 return
@@ -509,10 +513,16 @@ def create_app(
                     return
                 if isinstance(payloads_or_error, Exception):
                     raise payloads_or_error
+                connection_active = True
                 async with gateway.lock:
                     for payload in payloads_or_error:
                         if not gateway.receive_client_payload(connection, payload):
+                            connection_active = False
                             break
+                if not connection_active:
+                    with suppress(RuntimeError):
+                        await websocket.close()
+                    return
         except ValueError:
             with suppress(RuntimeError):
                 await websocket.close()

@@ -27,6 +27,7 @@ This repository is in a modernization and refactor effort. Tooling, documentatio
 - When reviewing docstrings, classify each reviewed docstring as `Summary only is sufficient`, `Longer description recommended`, or `Longer description required`, with a brief reason or the specific missing caller-relevant context.
 - In PR descriptions, list validation using canonical project commands such as `uv run pytest`; do not include local cache paths, virtualenv paths, or machine-specific environment overrides unless they are required for reviewers to reproduce the check.
 - Before opening or updating a PR, review coverage for newly changed code and add targeted tests for new branches, error paths, and cleanup paths so Codecov patch coverage does not fail even when total project coverage remains high.
+- Before opening a PR or pushing new changes to an existing PR, do a local review of the diff to look for behavior regressions, missing edge-case coverage, stale documentation, and PR-description accuracy.
 - If the agent created a PR, the agent may update that PR's branch or description without asking for additional permission unless the change is destructive or changes the requested scope.
 
 ## Setup
