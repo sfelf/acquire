@@ -232,14 +232,27 @@ def test_alembic_baseline_matches_current_orm_schema_against_mysql(
     assert ("user_id", "rating_type_id") in {
         tuple(index["column_names"]) for index in inspector.get_indexes("rating")
     }
+    assert _table_collation_contract(inspector) == {
+        "game": "utf8mb4_bin",
+        "game_mode": "utf8mb4_bin",
+        "game_player": "utf8mb4_bin",
+        "game_state": "utf8mb4_bin",
+        "key_value": "utf8mb4_bin",
+        "rating": "utf8mb4_bin",
+        "rating_type": "utf8mb4_bin",
+        "record": "utf8mb4_bin",
+        "user": "utf8mb4_bin",
+    }
 
     session = make_mysql_session(mysql_engine)
     try:
         seed_lookup_rows(session, real_orm_module)
-        session.add(real_orm_module.User(name="migration-user", password=None))
+        session.add(real_orm_module.User(name="Alice", password=None))
+        session.add(real_orm_module.User(name="alice", password=None))
         session.commit()
         assert session.query(real_orm_module.GameMode).filter_by(name="Singles").one().game_mode_id
-        assert session.query(real_orm_module.User).filter_by(name="migration-user").one().user_id
+        assert session.query(real_orm_module.User).filter_by(name="Alice").one().user_id
+        assert session.query(real_orm_module.User).filter_by(name="alice").one().user_id
     finally:
         session.close()
 
@@ -282,6 +295,13 @@ def _foreign_key_contract(inspector):
         if foreign_keys:
             contract[table_name] = foreign_keys
     return contract
+
+
+def _table_collation_contract(inspector):
+    return {
+        table_name: inspector.get_table_options(table_name)["mysql_collate"]
+        for table_name in _app_table_names(inspector.bind)
+    }
 
 
 def test_initialize_database_seeds_lookup_rows_in_mysql(

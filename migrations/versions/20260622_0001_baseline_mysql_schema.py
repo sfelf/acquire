@@ -16,6 +16,11 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+MYSQL_TABLE_OPTIONS = {
+    "mysql_charset": "utf8mb4",
+    "mysql_collate": "utf8mb4_bin",
+}
+
 
 def upgrade() -> None:
     """Create the existing Acquire MySQL schema."""
@@ -25,6 +30,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=8), nullable=False),
         sa.PrimaryKeyConstraint("game_mode_id"),
         sa.UniqueConstraint("name"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_table(
         "game_state",
@@ -32,6 +38,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=16), nullable=False),
         sa.PrimaryKeyConstraint("game_state_id"),
         sa.UniqueConstraint("name"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_table(
         "key_value",
@@ -40,6 +47,7 @@ def upgrade() -> None:
         sa.Column("value", sa.Text(), nullable=False),
         sa.PrimaryKeyConstraint("key_value_id"),
         sa.UniqueConstraint("key"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_table(
         "rating_type",
@@ -47,6 +55,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=8), nullable=False),
         sa.PrimaryKeyConstraint("rating_type_id"),
         sa.UniqueConstraint("name"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_table(
         "user",
@@ -55,6 +64,7 @@ def upgrade() -> None:
         sa.Column("password", sa.String(length=64), nullable=True),
         sa.PrimaryKeyConstraint("user_id"),
         sa.UniqueConstraint("name"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_table(
         "game",
@@ -69,6 +79,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["game_state_id"], ["game_state.game_state_id"]),
         sa.PrimaryKeyConstraint("game_id"),
         sa.UniqueConstraint("log_time", "number"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_index("end_time", "game", ["end_time"], unique=False)
     op.create_table(
@@ -82,6 +93,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["rating_type_id"], ["rating_type.rating_type_id"]),
         sa.ForeignKeyConstraint(["user_id"], ["user.user_id"]),
         sa.PrimaryKeyConstraint("rating_id"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_index(
         "user_id_rating_type_id",
@@ -95,6 +107,7 @@ def upgrade() -> None:
         sa.Column("encoded", sa.String(length=255), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["user.user_id"]),
         sa.PrimaryKeyConstraint("user_id"),
+        **MYSQL_TABLE_OPTIONS,
     )
     op.create_table(
         "game_player",
@@ -107,6 +120,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["user.user_id"]),
         sa.PrimaryKeyConstraint("game_player_id"),
         sa.UniqueConstraint("game_id", "player_index"),
+        **MYSQL_TABLE_OPTIONS,
     )
 
 
