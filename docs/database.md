@@ -32,10 +32,10 @@ persistence coverage that protects the refactor.
 
 ## Postgres Migration Sequence
 
-1. Add Postgres dev/runtime dependencies and Docker Compose services while
-   leaving MySQL as the default runtime.
+1. Add Postgres test dependencies and Docker Compose services while leaving
+   MySQL as the default runtime. In progress.
 2. Add a `postgres` pytest marker and Docker-backed fixture that can create a
-   disposable Postgres schema for integration tests.
+   disposable Postgres schema for integration tests. In progress.
 3. Make ORM URL construction engine-neutral, using explicit database URLs for
    tests and local services while preserving the existing MySQL environment
    behavior during the transition.

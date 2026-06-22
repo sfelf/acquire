@@ -128,9 +128,9 @@ independently.
 4. Plan and execute the MySQL-to-Postgres migration after migrations and
    persistence tests are in place. In progress.
    - Document the current MySQL-specific surface area and migration sequence.
-     In progress.
+     Complete.
    - Add Postgres dependencies and Docker-backed `postgres` marker fixtures
-     alongside existing MySQL tests.
+     alongside existing MySQL tests. In progress.
    - Make ORM models, migrations, and raw SQL portable while keeping MySQL
      tests green.
    - Run the persistence suite against both MySQL and Postgres during the

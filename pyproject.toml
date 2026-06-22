@@ -17,6 +17,7 @@ dev = [
     "mypy>=1.18,<2",
     "mysql-connector-python>=9.3,<10",
     "pre-commit>=4,<5",
+    "psycopg[binary]>=3.2,<4",
     "pytest>=8.4,<9",
     "pytest-cov>=7,<8",
     "ruff>=0.14,<0.15",
@@ -39,6 +40,7 @@ markers = [
     "integration: tests that exercise service boundaries",
     "golden: replay or fixture-based regression tests",
     "mysql: tests that require MySQL",
+    "postgres: tests that require Postgres",
     "e2e: end-to-end smoke tests",
 ]
 

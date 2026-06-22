@@ -16,5 +16,7 @@ def test_phase_6_tracks_postgres_migration_sequence() -> None:
     assert "MySQL-to-Postgres migration" in plans
     assert "In progress." in plans
     assert "Postgres Migration Sequence" in database_notes
+    assert "Add Postgres test dependencies" in database_notes
+    assert "Add a `postgres` pytest marker" in database_notes
     assert "Run schema, lookup, auth, session, and log-import persistence tests" in database_notes
     assert "Switch local development defaults from MySQL to Postgres" in database_notes

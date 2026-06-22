@@ -8,6 +8,8 @@ Testing is the main safety mechanism for the planned refactor.
 - Protocol tests cover the Python server input and output message format.
 - Golden replay tests use historical game logs to protect current gameplay behavior.
 - MySQL integration tests cover schema and persistence behavior.
+- Postgres smoke tests cover the Docker-backed Postgres fixture that will be
+  expanded during the database migration.
 - End-to-end smoke tests cover the default Python gateway stack.
 
 ## Pytest Markers
@@ -16,6 +18,7 @@ Testing is the main safety mechanism for the planned refactor.
 - `integration`: tests that exercise service boundaries.
 - `golden`: replay or fixture-based regression tests.
 - `mysql`: tests that require MySQL.
+- `postgres`: tests that require Postgres.
 - `e2e`: end-to-end smoke tests.
 
 ## Coverage Policy
@@ -46,10 +49,11 @@ uv run pytest -m unit
 uv run pytest -m golden
 uv run pytest -m integration
 uv run pytest -m mysql
+uv run pytest -m postgres
 uv run pytest -m e2e
 ```
 
-The `mysql` marker starts a disposable Docker Compose MySQL service when `ACQUIRE_MYSQL_TEST_URL` is not set. Set `ACQUIRE_MYSQL_TEST_URL` only when you want the tests to use an existing disposable test schema; MySQL integration tests may create and drop ORM tables. The `e2e` marker generates client assets with the opt-in client build helper, then starts the local Compose stack with the Python gateway when `ACQUIRE_E2E_URL` is not set. Set `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack.
+The `mysql` marker starts a disposable Docker Compose MySQL service when `ACQUIRE_MYSQL_TEST_URL` is not set. Set `ACQUIRE_MYSQL_TEST_URL` only when you want the tests to use an existing disposable test schema; MySQL integration tests may create and drop ORM tables. The `postgres` marker starts a disposable Docker Compose Postgres service when `ACQUIRE_POSTGRES_TEST_URL` is not set. Set `ACQUIRE_POSTGRES_TEST_URL` only when you want the tests to use an existing disposable test schema. The `e2e` marker generates client assets with the opt-in client build helper, then starts the local Compose stack with the Python gateway when `ACQUIRE_E2E_URL` is not set. Set `ACQUIRE_E2E_URL` only when you want the tests to use an existing local stack.
 
 GitHub Actions runs the fast Python matrix on Python 3.12, 3.13, and 3.14.
 The Docker-backed `mysql` and `e2e` marker suites run in a separate Python 3.13
