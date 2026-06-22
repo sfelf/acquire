@@ -100,14 +100,15 @@ change can be reviewed and validated independently.
    Introduce FastAPI as the Python HTTP framework first, then preserve the
    existing client protocol, keep the Node gateway available as the known-good
    comparison path, and add parity tests for representative workflows.
-5. Switch local development and e2e tests to the Python gateway by default. In
-   progress in `codex/phase-5-python-gateway-default`.
+5. Switch local development and e2e tests to the Python gateway by default.
+   Complete.
    Update Docker Compose, local development docs, and e2e defaults while keeping
    the legacy Node gateway behind an explicit compatibility profile.
-6. Remove Node.js from the main runtime path. Remove the Node gateway from the
-   default local runtime, remove runtime dependency on Node-generated artifacts
-   where only the gateway needed them, and update agent/project docs to reflect
-   Python as the primary backend.
+6. Remove Node.js from the main runtime path. In progress in
+   `codex/phase-5-remove-node-main-runtime`.
+   Remove the Node gateway from the default local runtime, separate legacy
+   client asset generation from the running Python gateway stack, and update
+   agent/project docs to reflect Python as the primary backend.
 7. Cleanup follow-up. Delete dead Node server code only after the Python path is
    proven stable, remove obsolete tests, docs, scripts, and dependency
    references, and tighten CI around the Python-only runtime path.

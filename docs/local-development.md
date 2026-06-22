@@ -19,13 +19,26 @@ Copy the example environment file if you want to customize local credentials:
 cp .env.example .env
 ```
 
+Generate the gitignored browser assets:
+
+```bash
+docker compose --profile client-build up --build client-assets
+```
+
+This one-time setup helper uses the legacy Node.js toolchain to compile
+`client/main/css/main.css`, `client/stats/css/stats.css`,
+`client/main/js/enums.js`, and `client/main/js/main.js` into the bind-mounted
+checkout. It exits after the files are written and is not part of the default
+running stack.
+
 Start MySQL and the Python gateway:
 
 ```bash
 docker compose up --build mysql python-gateway
 ```
 
-The default gateway listens on port `9000`, serves the generated client files, and handles SockJS traffic through the same origin at `/sockjs`.
+The default gateway listens on port `9000`, serves the generated client files,
+and handles SockJS traffic through the same origin at `/sockjs`.
 
 Open the local UI:
 
@@ -47,8 +60,6 @@ docker compose run --rm python-gateway python initialize_database.py
 
 The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, the Python gateway, and the legacy Node gateway.
 
-The default profile generates the gitignored client assets before starting FastAPI: `client/main/css/main.css`, `client/stats/css/stats.css`, `client/main/js/enums.js`, and `client/main/js/main.js`.
-
 ## Legacy Node Gateway
 
 The Node.js gateway is available as an opt-in profile for local parity checks:
@@ -69,7 +80,7 @@ Then open the legacy local UI:
 http://localhost:9001/
 ```
 
-The profile generates the gitignored client assets before starting `server/server.js`: `client/main/css/main.css`, `client/stats/css/stats.css`, `client/main/js/enums.js`, and `client/main/js/main.js`.
+The legacy profile includes the same client asset build helpers before starting `server/server.js`.
 In Docker, the gateway listens on container port `9000`, publishes host port `9001` by default, serves the generated client files, and proxies SockJS traffic through the same origin at `/sockjs`.
 Outside Docker, the gateway keeps the legacy default of listening on `javascript.sock`.
 The gateway still removes any stale `javascript.sock` before starting so interrupted local runs do not block the next startup.
