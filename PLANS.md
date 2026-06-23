@@ -142,6 +142,9 @@ independently.
      Complete.
    - Document the production deployment and rollback gate for removing
      MySQL-only runtime paths. Complete.
+   - Add tested MySQL-to-Postgres import tooling for cutover rehearsals.
+     Complete for table-copy and count-validation coverage against synthetic
+     schemas; real backup rehearsal remains pending.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
 5. Modernize frontend tooling so client asset generation no longer depends on

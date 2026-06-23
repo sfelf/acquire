@@ -1,0 +1,310 @@
+"""Copy Acquire application tables from MySQL into an empty Postgres database."""
+
+from __future__ import annotations
+
+import argparse
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+import orm
+import sqlalchemy
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.sql.schema import Table
+
+TABLE_ORDER = (
+    "game_mode",
+    "game_state",
+    "rating_type",
+    "user",
+    "game",
+    "game_player",
+    "key_value",
+    "rating",
+    "record",
+)
+BASELINE_LOOKUP_TABLES = frozenset({"game_mode", "game_state", "rating_type"})
+
+
+@dataclass(frozen=True)
+class TableImportResult:
+    """Describe import counts for one application table."""
+
+    table_name: str
+    source_count: int
+    target_count: int
+
+
+@dataclass(frozen=True)
+class ImportReport:
+    """Describe the result of a MySQL-to-Postgres import rehearsal."""
+
+    dry_run: bool
+    tables: tuple[TableImportResult, ...]
+
+    @property
+    def total_rows(self) -> int:
+        """Return the total number of source rows covered by the report."""
+        return sum(table.source_count for table in self.tables)
+
+
+class TargetNotEmptyError(RuntimeError):
+    """Raised when the target database already contains application data."""
+
+
+class ImportValidationError(RuntimeError):
+    """Raised when source and target counts do not match after import."""
+
+
+def import_database(source_url: str, target_url: str, *, dry_run: bool = False) -> ImportReport:
+    """Copy application tables from a source database to an empty target database.
+
+    The target database must already have the current Alembic schema applied.
+    Non-lookup application tables must be empty. Baseline lookup tables may
+    already contain Alembic-seeded rows when those rows exactly match the
+    source. This protects cutover rehearsals from accidentally merging data into
+    an existing Postgres database while still supporting the normal migrated
+    target shape. Rows are copied with explicit primary keys so historical game,
+    user, rating, and foreign-key identities remain stable.
+
+    Args:
+        source_url: SQLAlchemy URL for the source MySQL-compatible database.
+        target_url: SQLAlchemy URL for the target Postgres-compatible database.
+        dry_run: When `True`, validate the target and report source counts
+            without inserting rows.
+
+    Returns:
+        Import report containing per-table counts.
+
+    Raises:
+        TargetNotEmptyError: If any target application table already has rows.
+        ImportValidationError: If post-import target counts differ from source
+            counts.
+    """
+    source_engine = sqlalchemy.create_engine(source_url)
+    target_engine = sqlalchemy.create_engine(target_url)
+    try:
+        return import_engines(source_engine, target_engine, dry_run=dry_run)
+    finally:
+        source_engine.dispose()
+        target_engine.dispose()
+
+
+def import_engines(
+    source_engine: Engine,
+    target_engine: Engine,
+    *,
+    dry_run: bool = False,
+) -> ImportReport:
+    """Copy application tables between already-created SQLAlchemy engines.
+
+    This lower-level entry point is used by tests and cutover tooling that
+    already manages engine lifetimes. The copy runs in one target transaction,
+    so an insert or validation failure leaves the target unchanged. Existing
+    Alembic-seeded lookup rows are accepted only when they exactly match the
+    source lookup rows.
+
+    Args:
+        source_engine: SQLAlchemy engine bound to the source database.
+        target_engine: SQLAlchemy engine bound to the target database.
+        dry_run: When `True`, report source counts without inserting rows.
+
+    Returns:
+        Import report containing per-table counts.
+
+    Raises:
+        TargetNotEmptyError: If any target application table already has rows.
+        ImportValidationError: If post-import target counts differ from source
+            counts.
+    """
+    results: list[TableImportResult] = []
+    tables = _ordered_tables(TABLE_ORDER)
+
+    with source_engine.connect() as source_connection, target_engine.begin() as target_connection:
+        for table in tables:
+            rows = _read_rows(source_connection, table)
+            target_rows = _read_rows(target_connection, table)
+            _validate_target_table(table, rows, target_rows)
+            if not dry_run and rows and not target_rows:
+                target_connection.execute(table.insert(), rows)
+
+            target_count = _count_rows(target_connection, table)
+            source_count = len(rows)
+            if not dry_run and target_count != source_count:
+                raise ImportValidationError(
+                    f"{table.name} imported {target_count} rows; expected {source_count}"
+                )
+            if not dry_run:
+                _reset_postgres_sequence(target_connection, table)
+            results.append(
+                TableImportResult(
+                    table_name=table.name,
+                    source_count=source_count,
+                    target_count=target_count,
+                )
+            )
+
+    return ImportReport(dry_run=dry_run, tables=tuple(results))
+
+
+def _ordered_tables(table_names: Sequence[str]) -> tuple[Table, ...]:
+    """Return ORM tables in the requested copy order.
+
+    Args:
+        table_names: Application table names in foreign-key-safe copy order.
+
+    Returns:
+        Tuple of SQLAlchemy table objects.
+    """
+    return tuple(orm.Base.metadata.tables[table_name] for table_name in table_names)
+
+
+def _validate_target_table(
+    table: Table,
+    source_rows: list[dict[str, object]],
+    target_rows: list[dict[str, object]],
+) -> None:
+    """Raise when a target table is not safe to import into.
+
+    Args:
+        table: Application table being imported.
+        source_rows: Rows read from the source database.
+        target_rows: Rows already present in the target database.
+
+    Raises:
+        TargetNotEmptyError: If a mutable table already contains rows.
+        ImportValidationError: If a baseline lookup table has unexpected rows.
+    """
+    if not target_rows:
+        return
+    if table.name not in BASELINE_LOOKUP_TABLES:
+        raise TargetNotEmptyError(f"target table must be empty before import: {table.name}")
+    if target_rows != source_rows:
+        raise ImportValidationError(
+            f"target lookup table {table.name} does not match source rows"
+        )
+
+
+def _read_rows(connection: Connection, table: Table) -> list[dict[str, object]]:
+    """Return all rows for a table as dictionaries keyed by column name.
+
+    Args:
+        connection: SQLAlchemy connection bound to the source database.
+        table: SQLAlchemy table to read.
+
+    Returns:
+        List of row dictionaries in primary-key order when the table has a
+        primary key, otherwise database order.
+    """
+    statement = sqlalchemy.select(table)
+    primary_key_columns = list(table.primary_key.columns)
+    if primary_key_columns:
+        statement = statement.order_by(*primary_key_columns)
+    rows = connection.execute(statement)
+    return [dict(row._mapping) for row in rows]
+
+
+def _count_rows(connection: Connection, table: Table) -> int:
+    """Return the number of rows in a table.
+
+    Args:
+        connection: SQLAlchemy connection bound to a database.
+        table: SQLAlchemy table to count.
+
+    Returns:
+        Number of rows currently present in the table.
+    """
+    statement = sqlalchemy.select(sqlalchemy.func.count()).select_from(table)
+    return int(connection.execute(statement).scalar_one())
+
+
+def _reset_postgres_sequence(connection: Connection, table: Table) -> None:
+    """Advance a Postgres primary-key sequence after explicit id inserts.
+
+    The import preserves MySQL primary keys so historical foreign keys stay
+    stable. On Postgres, inserting explicit ids does not necessarily advance the
+    backing sequence used for future inserts. This helper uses Postgres'
+    `pg_get_serial_sequence` so tables without a sequence are ignored.
+
+    Args:
+        connection: SQLAlchemy connection bound to the target database.
+        table: Imported SQLAlchemy table whose primary key may have a sequence.
+    """
+    if connection.dialect.name != "postgresql":
+        return
+
+    primary_key_columns = list(table.primary_key.columns)
+    if len(primary_key_columns) != 1:
+        return
+
+    primary_key_column = primary_key_columns[0]
+    preparer = connection.dialect.identifier_preparer
+    quoted_table = preparer.quote(table.name)
+    quoted_column = preparer.quote(primary_key_column.name)
+    sequence_name = connection.execute(
+        sqlalchemy.text("select pg_get_serial_sequence(:table_name, :column_name)"),
+        {"table_name": quoted_table, "column_name": primary_key_column.name},
+    ).scalar_one()
+    if sequence_name is None:
+        return
+
+    connection.execute(
+        sqlalchemy.text(
+            f"""
+            select setval(
+                :sequence_name,
+                coalesce(max({quoted_column}), 1),
+                max({quoted_column}) is not null
+            )
+            from {quoted_table}
+            """
+        ),
+        {"sequence_name": sequence_name},
+    )
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for the import tool.
+
+    Args:
+        argv: Optional argument list for tests. Defaults to process arguments.
+
+    Returns:
+        Parsed command-line namespace.
+    """
+    parser = argparse.ArgumentParser(
+        description="Copy Acquire application rows from MySQL into an empty Postgres database."
+    )
+    parser.add_argument("--source-url", required=True, help="SQLAlchemy URL for the MySQL source")
+    parser.add_argument(
+        "--target-url",
+        required=True,
+        help="SQLAlchemy URL for the Postgres target",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate the target and report counts without inserting rows",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the import command-line interface.
+
+    Args:
+        argv: Optional argument list for tests. Defaults to process arguments.
+
+    Returns:
+        Process exit code.
+    """
+    args = parse_args(argv)
+    report = import_database(args.source_url, args.target_url, dry_run=args.dry_run)
+    mode = "dry run" if report.dry_run else "import"
+    print(f"{mode} covered {report.total_rows} rows")
+    for table in report.tables:
+        print(f"{table.table_name}: source={table.source_count} target={table.target_count}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -21,6 +21,7 @@ def test_phase_6_tracks_postgres_migration_sequence() -> None:
     assert "Run schema, lookup, auth, session, and log-import persistence tests" in database_notes
     assert "Switch local development defaults from MySQL to Postgres" in database_notes
     assert "Document the production deployment and rollback gate" in database_notes
+    assert "Add tested MySQL-to-Postgres import tooling" in database_notes
     assert "Remove MySQL-only dependencies" in database_notes
 
 
@@ -43,6 +44,19 @@ def test_postgres_cutover_docs_define_rollback_gate() -> None:
     assert "Runtime Cleanup Rules" in database_notes
     assert "dual-write" in database_notes
     assert "Remove the legacy `MYSQL_*` ORM fallback only after" in database_notes
+
+
+def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
+    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
+
+    assert "import tooling for cutover rehearsals" in plans
+    assert "real backup rehearsal remains pending" in plans
+    assert "server/import_mysql_to_postgres.py" in database_notes
+    assert "Import Rehearsal Command" in database_notes
+    assert "--dry-run" in database_notes
+    assert "preserves primary keys" in database_notes
+    assert "Other target tables must be empty" in database_notes
 
 
 def test_local_database_setup_docs_use_alembic_command() -> None:

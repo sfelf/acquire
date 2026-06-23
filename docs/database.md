@@ -13,6 +13,11 @@ losing the MySQL persistence coverage that protects the refactor.
 - `server/setup_database.py` applies Alembic migrations for local Docker and
   e2e setup without dropping data. Local Docker now runs this against
   Postgres by default.
+- `server/import_mysql_to_postgres.py` copies known application tables from a
+  MySQL-compatible source into a migrated Postgres-compatible target for
+  cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses
+  to merge user, game, rating, record, or key/value data into non-empty target
+  tables.
 - `server/initialize_database.py` remains as a legacy local reset path until
   MySQL rollback and reset workflows are replaced.
 - MySQL integration tests cover schema creation, migrations, runtime
@@ -66,9 +71,31 @@ losing the MySQL persistence coverage that protects the refactor.
    database test suite is green. Complete.
 8. Document the production deployment and rollback gate before removing MySQL
    runtime paths. Complete.
-9. Remove MySQL-only dependencies, Compose services, environment variables, and
+9. Add tested MySQL-to-Postgres import tooling for cutover rehearsals.
+   Complete for table-copy and count-validation coverage against synthetic
+   schemas; real backup rehearsal remains pending.
+10. Remove MySQL-only dependencies, Compose services, environment variables, and
    documentation after the production cutover work has an approved execution
    plan and rollback owner.
+
+## Import Rehearsal Command
+
+Use `server/import_mysql_to_postgres.py` only with disposable rehearsal
+databases until the production runbook has owners and a tested backup restore.
+The target database must already have the current Alembic schema applied:
+
+```bash
+uv run python server/import_mysql_to_postgres.py \
+  --source-url mysql+mysqlconnector://user:password@host/source_db \
+  --target-url postgresql+psycopg://user:password@host/target_db \
+  --dry-run
+```
+
+Remove `--dry-run` only after the count report and target validation look
+correct. The command copies the known application tables in foreign-key-safe
+order, preserves primary keys, and reports source and target row counts for
+each table. Baseline lookup tables may already contain Alembic-seeded rows when
+they exactly match the source. Other target tables must be empty.
 
 ## Production Cutover And Rollback Gate
 
@@ -131,6 +158,6 @@ reviewed script or deliberately discarded by the rollback owner.
 - Postgres driver selection is complete for the current migration baseline:
   `psycopg` 3 is used for Docker-backed marker tests.
 - The production import command still needs to be implemented and dry-run
-  validated before any production cutover.
+  validated against a real backup before any production cutover.
 - The rollback owner and maintenance window must be selected before production
   deployment.
