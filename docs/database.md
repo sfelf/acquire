@@ -106,6 +106,12 @@ primary-key sequences advance after explicit id imports. The same rehearsal
 also verifies the imported Postgres rows through the Python auth rules and ORM
 lookup helpers.
 
+Use `docs/postgres-backup-rehearsal.md` when a sanitized or staging MySQL backup
+is available for the real backup rehearsal. The runbook keeps backup files,
+credentials, generated reports, host-specific paths, and private data out of the
+repository and defines the pass/fail criteria for counting the rehearsal as
+complete.
+
 ## Production Cutover And Rollback Gate
 
 Postgres is the default local Docker database, but production migration remains
@@ -168,5 +174,8 @@ reviewed script or deliberately discarded by the rollback owner.
   `psycopg` 3 is used for Docker-backed marker tests.
 - The production import command still needs to be implemented and dry-run
   validated against a real backup before any production cutover.
+- The backup rehearsal runbook is documented in
+  `docs/postgres-backup-rehearsal.md`; the actual sanitized or staging backup
+  rehearsal still needs to be performed.
 - The rollback owner and maintenance window must be selected before production
   deployment.

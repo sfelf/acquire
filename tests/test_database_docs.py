@@ -49,11 +49,17 @@ def test_postgres_cutover_docs_define_rollback_gate() -> None:
 def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
+    backup_runbook = (
+        REPOSITORY_ROOT / "docs" / "postgres-backup-rehearsal.md"
+    ).read_text()
 
     assert "import tooling for cutover rehearsals" in plans
     assert "real backup rehearsal remains pending" in plans
+    assert "sanitized or staging backup rehearsal runbook. Complete." in plans
+    assert "sanitized or staging MySQL backup.\n     Pending." in plans
     assert "Docker-backed MySQL-to-Postgres" in plans
     assert "server/import_mysql_to_postgres.py" in database_notes
+    assert "docs/postgres-backup-rehearsal.md" in database_notes
     assert "Import Rehearsal Command" in database_notes
     assert "--dry-run" in database_notes
     assert "preserves primary keys" in database_notes
@@ -62,6 +68,39 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "primary-key sequences advance" in database_notes
     assert "Python auth rules" in database_notes
     assert "ORM\nlookup helpers" in database_notes
+    assert "keep backup files outside the repository" in backup_runbook
+    assert "Do not commit dumps" in backup_runbook
+    assert "ACQUIRE_DATABASE_URL=postgresql+psycopg://user:password@host:5432" in (
+        backup_runbook
+    )
+    assert "--source-url mysql+mysqlconnector://user:password@host:3306" in (
+        backup_runbook
+    )
+    assert "mysql+pymysql" not in backup_runbook
+    assert "--target-url postgresql+psycopg://user:password@host:5432" in (
+        backup_runbook
+    )
+    assert "dry run reports source row counts that match expectations" in backup_runbook
+    assert "separate\n   disposable test databases" in backup_runbook
+    assert "Do not point marker test URLs at the restored\n   MySQL source" in (
+        backup_runbook
+    )
+    assert "docker compose --profile client-build run --rm client-assets" in (
+        backup_runbook
+    )
+    assert "gateway.override.yml" in backup_runbook
+    assert "host.docker.internal:host-gateway" in backup_runbook
+    assert "docker compose -f docker-compose.yml" in backup_runbook
+    assert "run --rm --service-ports --no-deps" in backup_runbook
+    assert "host.docker.internal:5432/acquire_rehearsal" in backup_runbook
+    assert "reachable from\n   inside the gateway container" in backup_runbook
+    assert "Docker Desktop users may omit the temporary\n   override" in backup_runbook
+    assert "`ACQUIRE_E2E_URL` is unset, the default Docker-backed e2e fixture" in (
+        backup_runbook.replace("\n   ", " ")
+    )
+    assert "ACQUIRE_E2E_URL" in backup_runbook
+    assert "Pass Criteria" in backup_runbook
+    assert "Failure Handling" in backup_runbook
 
 
 def test_local_database_setup_docs_use_alembic_command() -> None:

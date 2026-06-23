@@ -145,6 +145,9 @@ independently.
    - Add tested MySQL-to-Postgres import tooling for cutover rehearsals.
      Complete for synthetic unit coverage and Docker-backed MySQL-to-Postgres
      rehearsal coverage; real backup rehearsal remains pending.
+   - Document the sanitized or staging backup rehearsal runbook. Complete.
+   - Run the import rehearsal against a sanitized or staging MySQL backup.
+     Pending.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
 5. Modernize frontend tooling so client asset generation no longer depends on
