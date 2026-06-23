@@ -21,6 +21,8 @@ import enums
 import ujson
 
 BoardCoordinate = tuple[int, int]
+ClientMessage = list[object]
+PendingMessageGroup = list[object]
 
 
 class ServerProtocol(asyncio.Protocol):
@@ -205,7 +207,7 @@ class Server:
         self.next_game_id_manager: ReuseIdManager = ReuseIdManager(60)
         self.next_internal_game_id_manager: IncrementIdManager = IncrementIdManager()
         self.game_id_to_game: dict[int, Game] = {}
-        self.client_ids_and_messages = []
+        self.client_ids_and_messages: list[PendingMessageGroup] = []
 
         self.transport_write: Callable[[bytes], None] = dummy_transport_write
 
@@ -224,8 +226,10 @@ class Server:
         if client_ids is None:
             client_ids = self.client_ids
         client_ids = client_ids.copy()
-        new_list = []
-        for client_ids2, messages2 in self.client_ids_and_messages:
+        new_list: list[PendingMessageGroup] = []
+        for pending_message_group in self.client_ids_and_messages:
+            client_ids2 = cast(set[int], pending_message_group[0])
+            messages2 = cast(list[ClientMessage], pending_message_group[1])
             client_ids_in_group = client_ids2 & client_ids
             if len(client_ids_in_group) == len(client_ids2):
                 messages2.extend(messages)
@@ -244,7 +248,9 @@ class Server:
     def flush_pending_messages(self) -> None:
         """Serialize queued command batches to the gateway transport."""
         outgoing = []
-        for client_ids, messages in self.client_ids_and_messages:
+        for pending_message_group in self.client_ids_and_messages:
+            client_ids = cast(set[int], pending_message_group[0])
+            messages = cast(list[ClientMessage], pending_message_group[1])
             client_ids_string = ",".join(str(x) for x in sorted(client_ids))
             messages_json = ujson.dumps(messages)
             print(client_ids_string, "<-", messages_json)
@@ -423,13 +429,13 @@ class Client:
                     )
                 else:
                     username = player_datum[enums.ScoreSheetIndexes.Username.value]
-                    client = self._server.username_to_client.get(username)
+                    missing_client = self._server.username_to_client.get(username)
                     messages_client.append(
                         [
                             enums.CommandsToClient.SetGamePlayerJoinMissing.value,
                             game_id,
                             player_id,
-                            client.client_id if client else username,
+                            missing_client.client_id if missing_client else username,
                         ]
                     )
             for client_id in game.watcher_client_ids:
@@ -630,7 +636,9 @@ class GameBoard:
             board = [[enums.GameBoardTypes.Nothing.value for y in range(9)] for x in range(12)]
         self.x_to_y_to_board_type = board
 
-        self.board_type_to_coordinates = [set() for t in range(enums.GameBoardTypes.Max.value)]
+        self.board_type_to_coordinates: list[set[BoardCoordinate]] = [
+            set() for t in range(enums.GameBoardTypes.Max.value)
+        ]
         for x in range(12):
             for y in range(9):
                 self.board_type_to_coordinates[board[x][y]].add((x, y))
@@ -764,7 +772,7 @@ class ScoreSheet:
                 username = player_datum[enums.ScoreSheetIndexes.Username.value]
                 self.username_to_player_id[username] = player_id
                 if self.game.logging_enabled:
-                    log = collections.OrderedDict()
+                    log: collections.OrderedDict[str, object] = collections.OrderedDict()
                     log["_"] = "game-player"
                     log["game-id"] = self.game.internal_game_id
                     log["external-game-id"] = self.game.game_id
@@ -1358,7 +1366,7 @@ class ActionPlayTile(Action):
             return
 
         tile, game_board_type_id, borders = tile_data
-        retval = True
+        retval: bool | list[Action] = True
 
         if game_board_type_id <= enums.GameBoardTypes.Imperial.value:
             self.game.game_board.fill_cells(tile, game_board_type_id)
@@ -1563,7 +1571,7 @@ class ActionSelectMergerSurvivor(Action):
                     player_id, enums.ScoreSheetIndexes.Cash.value, bonus
                 )
 
-        actions = []
+        actions: list[Action] = []
         for type_id_set in self.type_id_sets:
             if type_id_set:
                 actions.append(
@@ -1631,7 +1639,7 @@ class ActionSelectChainToDisposeOfNext(Action):
         """
         self.defunct_type_ids.discard(next_type_id)
 
-        actions = []
+        actions: list[Action] = []
         player_ids = list(range(self.player_id, self.game.num_players)) + list(
             range(self.player_id)
         )
@@ -1773,7 +1781,7 @@ class ActionPurchaseShares(Action):
                     if price <= cash:
                         can_purchase_shares = True
         self.can_not_afford_any_shares = shares_available and not can_purchase_shares
-        self.can_end_game = existing_chain_sizes and (
+        self.can_end_game = bool(existing_chain_sizes) and (
             min(existing_chain_sizes) >= 11 or max(existing_chain_sizes) >= 41
         )
 
@@ -1799,7 +1807,9 @@ class ActionPurchaseShares(Action):
             return
         if not isinstance(game_board_type_ids, list) or len(game_board_type_ids) > 3:
             return
-        game_board_type_id_to_count = collections.defaultdict(int)
+        game_board_type_id_to_count: collections.defaultdict[int, int] = (
+            collections.defaultdict(int)
+        )
         for game_board_type_id in game_board_type_ids:
             if isinstance(game_board_type_id, int) and 0 <= game_board_type_id < 7:
                 game_board_type_id_to_count[game_board_type_id] += 1
@@ -2120,7 +2130,7 @@ class Game:
             mode: Build mode or game mode, depending on context.
             max_players: Maximum number of players for a game.
         """
-        log = collections.OrderedDict()
+        log: collections.OrderedDict[str, object] = collections.OrderedDict()
         log["_"] = "game"
         log["game-id"] = self.internal_game_id
         log["external-game-id"] = self.game_id
@@ -2141,7 +2151,7 @@ class Game:
         if state == enums.GameStates.Completed.value:
             log["end"] = int(time.time())
             self.score_sheet.update_net_worths()
-            score = [
+            score: list[int] | None = [
                 player_datum[enums.ScoreSheetIndexes.Net.value]
                 for player_datum in self.score_sheet.player_data
             ]
@@ -2157,7 +2167,11 @@ class Game:
                     log[key] = value
             log["used-log-data-overrides"] = True
 
-        message = [enums.CommandsToClient.SetGameState.value, self.game_id, self.state]
+        message: ClientMessage = [
+            enums.CommandsToClient.SetGameState.value,
+            self.game_id,
+            self.state,
+        ]
         if mode is not None or max_players or score:
             message.append(self.mode)
         if max_players or score:
@@ -2180,19 +2194,19 @@ class Game:
             *data: Additional positional arguments.
             player_id: Player seat index within the game.
         """
-        data = list(data)
+        history_payload: list[object] = list(data)
 
-        self.history_messages.append([player_id, data])
+        self.history_messages.append([player_id, history_payload])
 
         if player_id is None:
-            client_ids = self.client_ids
+            client_ids: set[int] | None = self.client_ids
         else:
             client = self.score_sheet.player_data[player_id][enums.ScoreSheetIndexes.Client.value]
             client_ids = {client.client_id} if client else None
 
         if client_ids:
-            message = [enums.CommandsToClient.AddGameHistoryMessage.value]
-            message.extend(data)
+            message: ClientMessage = [enums.CommandsToClient.AddGameHistoryMessage.value]
+            message.extend(history_payload)
             if isinstance(message[2], str):
                 message[2] = self.score_sheet.username_to_player_id[message[2]]
             self.add_pending_messages([message], client_ids)
@@ -2204,7 +2218,7 @@ class Game:
             client: Client object affected by the operation.
         """
         player_id = client.player_id
-        messages = []
+        messages: list[ClientMessage] = []
         for target_player_id, message in self.history_messages:
             if target_player_id is None or target_player_id == player_id:
                 if isinstance(message[1], str):

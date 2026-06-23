@@ -95,7 +95,6 @@ no_implicit_optional = true
 strict_optional = true
 check_untyped_defs = true
 disallow_incomplete_defs = true
-
 [[tool.mypy.overrides]]
 module = [
     "orm",
@@ -103,17 +102,4 @@ module = [
 disable_error_code = [
     "misc",
     "valid-type",
-]
-
-[[tool.mypy.overrides]]
-module = [
-    "server",
-]
-disable_error_code = [
-    "arg-type",
-    "assignment",
-    "misc",
-    "operator",
-    "union-attr",
-    "var-annotated",
 ]
