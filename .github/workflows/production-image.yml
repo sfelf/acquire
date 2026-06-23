@@ -1,0 +1,64 @@
+name: Production Image
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/modernization-refactor
+      - main
+
+jobs:
+  build:
+    name: Build production image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build -t acquire:production-test .
+
+      - name: Smoke test production image
+        run: |
+          docker run --rm acquire:production-test python -c "from pathlib import Path; import http_server; assert Path('/app/client/main/js/main.js').is_file(); assert Path('/app/client/main/css/main.css').is_file(); assert Path('/app/client/stats/css/stats.css').is_file(); print('production image smoke ok')"
+
+  publish-ecr:
+    name: Publish production image to ECR
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    if: >-
+      github.event_name == 'push'
+      && vars.AWS_REGION != ''
+      && vars.AWS_ROLE_TO_ASSUME != ''
+      && vars.AWS_ECR_REPOSITORY != ''
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push production image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPOSITORY: ${{ vars.AWS_ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker run --rm "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" python -c "from pathlib import Path; import http_server; assert Path('/app/client/main/js/main.js').is_file(); assert Path('/app/client/main/css/main.css').is_file(); assert Path('/app/client/stats/css/stats.css').is_file(); print('production image smoke ok')"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"

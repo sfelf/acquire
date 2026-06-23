@@ -59,6 +59,17 @@ healthcheck used by local Docker.
 ## AWS Path
 
 The image can be pushed to Amazon ECR and run on ECS Fargate, App Runner, or
-another container service. Before production traffic moves to Postgres, complete
-the backup rehearsal and rollback gates in `docs/database.md` and
-`docs/postgres-backup-rehearsal.md`.
+another container service. The `Production Image` GitHub Actions workflow always
+builds and smoke-tests the production image. On pushes to `main` or
+`feature/modernization-refactor`, it can also publish the image to ECR when the
+repository has these GitHub Actions variables configured:
+
+- `AWS_REGION`: AWS region that contains the target ECR repository.
+- `AWS_ROLE_TO_ASSUME`: IAM role ARN trusted by GitHub Actions OIDC.
+- `AWS_ECR_REPOSITORY`: ECR repository name for the production image.
+
+The pushed image tag is the commit SHA. Deployment systems should promote an
+explicit SHA tag rather than relying on mutable local image names.
+
+Before production traffic moves to Postgres, complete the backup rehearsal and
+rollback gates in `docs/database.md` and `docs/postgres-backup-rehearsal.md`.
