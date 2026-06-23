@@ -431,6 +431,8 @@ def test_chat_and_username_database_tools_print_expected_output(
     assert 'update "user" set name = \'Jos-dma\' where user_id = 1;' in output
     assert 'update "user" set name = \'O\'\'Jos-fsa\' where user_id = 2;' in output
     assert all('"user"' in query for query in fake_session_scope.session.queries)
+    assert logs_to_games.sql_string_literal("A\\Jos-fsa", "mysql") == "'A\\\\Jos-fsa'"
+    assert logs_to_games.sql_string_literal("A\\Jos-fsa", "postgresql") == "'A\\Jos-fsa'"
 
 
 def test_log_file_size_and_username_id_tools_print_generated_data(

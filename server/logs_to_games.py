@@ -3182,6 +3182,20 @@ def output_chat_messages(log_timestamp: int) -> None:
             chat_message_processor.go()
 
 
+def database_dialect_name(session: DatabaseSession) -> str | None:
+    """Return the active database dialect name for a session.
+
+    Args:
+        session: SQLAlchemy session or compatible test double.
+
+    Returns:
+        SQLAlchemy dialect name, or `None` when no dialect is available.
+    """
+    bind = session.get_bind()
+    dialect = getattr(bind, "dialect", None)
+    return getattr(dialect, "name", None)
+
+
 def user_table_for_session(session: DatabaseSession) -> str:
     """Return the account table reference for the active database dialect.
 
@@ -3195,9 +3209,7 @@ def user_table_for_session(session: DatabaseSession) -> str:
     Returns:
         SQL table reference for the legacy account table.
     """
-    bind = session.get_bind()
-    dialect = getattr(bind, "dialect", None)
-    return '"user"' if getattr(dialect, "name", None) == "postgresql" else "user"
+    return '"user"' if database_dialect_name(session) == "postgresql" else "user"
 
 
 def decode_database_text(value: bytes | str) -> str:
@@ -3219,20 +3231,25 @@ def decode_database_text(value: bytes | str) -> str:
     return value
 
 
-def sql_string_literal(value: str) -> str:
+def sql_string_literal(value: str, dialect_name: str | None) -> str:
     """Render a SQL string literal for generated manual update statements.
 
     The username maintenance helper prints SQL for a human to run later rather
     than executing it through SQLAlchemy binds. Use standard single-quote
     escaping so usernames containing apostrophes remain valid SQL string
-    literals on both MySQL and Postgres.
+    literals on both MySQL and Postgres. MySQL also treats backslashes as
+    escapes by default, so backslashes are doubled only for that dialect.
 
     Args:
         value: Text value to render as a SQL string literal.
+        dialect_name: SQLAlchemy dialect name for the generated statement.
 
     Returns:
-        SQL string literal with embedded apostrophes escaped.
+        SQL string literal with embedded apostrophes and dialect-specific
+        backslashes escaped.
     """
+    if dialect_name == "mysql":
+        value = value.replace("\\", "\\\\")
     return "'" + value.replace("'", "''") + "'"
 
 
@@ -3418,6 +3435,7 @@ def punycode_non_ascii_usernames_in_the_database() -> None:
         """
 
     with orm.session_scope() as session:
+        dialect_name = database_dialect_name(session)
         user_table = user_table_for_session(session)
         query_for_user_names = sqlalchemy.sql.text(
             query_for_user_names_template.format(user_table=user_table)
@@ -3430,7 +3448,9 @@ def punycode_non_ascii_usernames_in_the_database() -> None:
                     "update "
                     + user_table
                     + " set name = "
-                    + sql_string_literal(username.encode("punycode").decode().strip())
+                    + sql_string_literal(
+                        username.encode("punycode").decode().strip(), dialect_name
+                    )
                     + " where user_id = "
                     + str(user_id)
                     + ";"
