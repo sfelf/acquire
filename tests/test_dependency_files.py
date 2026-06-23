@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -53,3 +54,20 @@ def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
     assert "trueskill==0.4.4" in local_docker_requirements
     assert not any(requirement.startswith("openskill") for requirement in requirements)
     assert not any(requirement.startswith("openskill") for requirement in local_docker_requirements)
+
+
+def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
+    package = json.loads((REPOSITORY_ROOT / "package.json").read_text())
+    dev_dependencies = package["devDependencies"]
+    engines = package["engines"]
+    scripts = package["scripts"]
+
+    assert engines == {"node": ">=22", "npm": ">=10"}
+    assert "sass" in dev_dependencies
+    assert "node-sass" not in dev_dependencies
+    assert "build:css" in scripts
+    assert "build:enums" in scripts
+    assert "build:js" in scripts
+    assert scripts["build:client"] == (
+        "npm run build:css && npm run build:enums && npm run build:js"
+    )

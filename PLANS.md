@@ -151,7 +151,13 @@ independently.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
 5. Modernize frontend tooling so client asset generation no longer depends on
-   the legacy Node.js 6-era toolchain.
+   the legacy Node.js 6-era toolchain. In progress.
+   - Replace Node 6 and `node-sass` with a modern npm/Dart Sass client asset
+     build helper. In progress.
+   - Migrate the remaining webpack 1 JavaScript bundling path to maintained
+     tooling. Pending.
+   - Decide whether generated client assets should stay gitignored build
+     outputs or move to a reproducible release artifact workflow. Pending.
 6. Tighten `ruff` and `mypy` incrementally once dependency upgrades reduce
    legacy typing friction.
 7. Add production Docker and AWS deployment paths after the local Python
