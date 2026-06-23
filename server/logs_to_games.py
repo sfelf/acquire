@@ -33,7 +33,11 @@ class DatabaseSession(Protocol):
     """Represent the session surface needed for dialect-specific SQL."""
 
     def get_bind(self) -> object:
-        """Return the current SQLAlchemy bind."""
+        """Return the current SQLAlchemy bind.
+
+        Returns:
+            Active SQLAlchemy bind for the session.
+        """
 
 
 class Enums:
@@ -3215,6 +3219,23 @@ def decode_database_text(value: bytes | str) -> str:
     return value
 
 
+def sql_string_literal(value: str) -> str:
+    """Render a SQL string literal for generated manual update statements.
+
+    The username maintenance helper prints SQL for a human to run later rather
+    than executing it through SQLAlchemy binds. Use standard single-quote
+    escaping so usernames containing apostrophes remain valid SQL string
+    literals on both MySQL and Postgres.
+
+    Args:
+        value: Text value to render as a SQL string literal.
+
+    Returns:
+        SQL string literal with embedded apostrophes escaped.
+    """
+    return "'" + value.replace("'", "''") + "'"
+
+
 def compare_log_usernames_with_database_usernames(log_timestamp: int) -> None:
     """Compare log usernames with database usernames.
 
@@ -3409,7 +3430,7 @@ def punycode_non_ascii_usernames_in_the_database() -> None:
                     "update "
                     + user_table
                     + " set name = "
-                    + repr(username.encode("punycode").decode().strip())
+                    + sql_string_literal(username.encode("punycode").decode().strip())
                     + " where user_id = "
                     + str(user_id)
                     + ";"

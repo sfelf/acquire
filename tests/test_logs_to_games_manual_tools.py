@@ -395,7 +395,8 @@ def test_chat_and_username_database_tools_print_expected_output(
                 return [types.SimpleNamespace(player_id=0, username="Alicia")]
             return [
                 types.SimpleNamespace(user_id=1, name="José"),
-                types.SimpleNamespace(user_id=2, name=b"Alice"),
+                types.SimpleNamespace(user_id=2, name="O'José"),
+                types.SimpleNamespace(user_id=3, name=b"Alice"),
             ]
 
     class FakeSessionScope:
@@ -428,6 +429,7 @@ def test_chat_and_username_database_tools_print_expected_output(
     assert "1700000000 GLOBAL alice -> hello" in output
     assert '[1700000000,77,"alice","Alicia"]' in output
     assert 'update "user" set name = \'Jos-dma\' where user_id = 1;' in output
+    assert 'update "user" set name = \'O\'\'Jos-fsa\' where user_id = 2;' in output
     assert all('"user"' in query for query in fake_session_scope.session.queries)
 
 
