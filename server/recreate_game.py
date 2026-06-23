@@ -10,7 +10,6 @@ import re
 from typing import cast
 
 import orm
-import sqlalchemy.sql
 
 import server
 
@@ -88,8 +87,8 @@ def recreate_some_games(server_: server.Server) -> None:
     """Recreate up to five recent snapshot games missing from the database.
 
     This maintenance helper scans a legacy snapshot directory, removes games
-    that are already persisted in MySQL, and restores the highest-tile-count
-    remaining games into the provided server.
+    that are already persisted, and restores the highest-tile-count remaining
+    games into the provided server.
 
     Args:
         server_: Server instance that will own recreated games.
@@ -111,16 +110,8 @@ def recreate_some_games(server_: server.Server) -> None:
                 filename,
             )
 
-    sql = sqlalchemy.sql.text(
-        """
-        select
-            log_time,
-            number
-        from game
-        """
-    )
     with orm.session_scope() as session:
-        for row in session.execute(sql):
+        for row in session.query(orm.Game.log_time, orm.Game.number).all():
             key = (row.log_time, row.number)
             if key in in_progress_game_files:
                 del in_progress_game_files[key]

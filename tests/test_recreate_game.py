@@ -14,6 +14,7 @@ pytestmark = pytest.mark.unit
 class SessionScope:
     def __init__(self, rows):
         self.rows = rows
+        self.query_args = None
 
     def __enter__(self):
         return self
@@ -21,7 +22,11 @@ class SessionScope:
     def __exit__(self, exc_type, exc, traceback):
         return False
 
-    def execute(self, _sql):
+    def query(self, *args):
+        self.query_args = args
+        return self
+
+    def all(self):
         return self.rows
 
 
@@ -30,13 +35,16 @@ def recreate_game_without_database(monkeypatch):
     monkeypatch.delitem(sys.modules, "recreate_game", raising=False)
 
     orm = types.ModuleType("orm")
+    orm.Game = types.SimpleNamespace(log_time="log_time_column", number="number_column")
     orm.rows = []
-    orm.session_scope = lambda: SessionScope(orm.rows)
-    sqlalchemy = types.ModuleType("sqlalchemy")
-    sqlalchemy.sql = types.SimpleNamespace(text=lambda query: query)
+    orm.session = None
+
+    def session_scope():
+        orm.session = SessionScope(orm.rows)
+        return orm.session
+
+    orm.session_scope = session_scope
     monkeypatch.setitem(sys.modules, "orm", orm)
-    monkeypatch.setitem(sys.modules, "sqlalchemy", sqlalchemy)
-    monkeypatch.setitem(sys.modules, "sqlalchemy.sql", sqlalchemy.sql)
 
     try:
         yield importlib.import_module("recreate_game")
@@ -179,6 +187,10 @@ def test_recreate_some_games_recreates_top_five_unrecreated_snapshots(
 
     recreate_game_without_database.recreate_some_games(game_server)
 
+    assert recreate_game_without_database.orm.session.query_args == (
+        "log_time_column",
+        "number_column",
+    )
     assert recreated_filenames == [
         "/opt/data/tim/1700000004_00008_030.bin",
         "/opt/data/tim/1700000002_00006_025.bin",
