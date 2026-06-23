@@ -34,6 +34,9 @@ This one-time setup helper uses the npm client build scripts to compile
 checkout. It exits after the files are written and is not part of the default
 running stack.
 
+See `docs/client-assets.md` for the source/build-output boundary and deployment
+packaging follow-up.
+
 Start Postgres and the Python gateway:
 
 ```bash

@@ -10,7 +10,8 @@ tooling.
 - Postgres is the default local Docker database; MySQL remains covered for
   parity and rollback testing.
 - Client assets are built from files under `client/` using npm scripts or the
-  opt-in `client-build` Docker Compose profile.
+  opt-in `client-build` Docker Compose profile. Generated asset files remain
+  gitignored build outputs; see `docs/client-assets.md`.
 
 ## Modernization Direction
 

@@ -76,3 +76,39 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
         "npm run build:css && npm run build:enums && npm run build:js"
     )
     assert "node_modules/webpack" not in package_lock["packages"]
+
+
+def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
+    gitignore = (REPOSITORY_ROOT / ".gitignore").read_text()
+    dockerignore = (REPOSITORY_ROOT / ".dockerignore").read_text()
+    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    architecture_notes = (REPOSITORY_ROOT / "docs" / "architecture.md").read_text()
+    local_development_notes = (
+        REPOSITORY_ROOT / "docs" / "local-development.md"
+    ).read_text()
+    asset_workflow = (REPOSITORY_ROOT / "docs" / "client-assets.md").read_text()
+
+    generated_assets = {
+        "client/main/css/main.css",
+        "client/main/js/enums.js",
+        "client/main/js/main.js",
+        "client/stats/css/stats.css",
+    }
+
+    for asset in generated_assets:
+        assert f"/{asset}" in gitignore
+        assert asset in dockerignore
+
+    assert "Client Asset Workflow" in asset_workflow
+    assert "Do not commit generated client assets" in asset_workflow
+    assert "npm run build:client" in asset_workflow
+    assert "docker compose --profile client-build run --rm client-assets" in (
+        asset_workflow
+    )
+    assert "Production Docker and AWS packaging should build client assets" in (
+        asset_workflow
+    )
+    assert "docs/client-assets.md" in architecture_notes
+    assert "docs/client-assets.md" in local_development_notes
+    assert "legacy Node.js 6-era toolchain. Complete." in plans
+    assert "build production assets in the\n     production Docker" in plans
