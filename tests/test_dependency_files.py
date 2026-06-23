@@ -122,7 +122,16 @@ def test_python_quality_config_scopes_type_checker_exceptions() -> None:
     ruff_rules = pyproject["tool"]["ruff"]["lint"]["select"]
 
     assert "disable_error_code" not in mypy_config
-    assert "RUF021" in ruff_rules
+    assert {
+        "A",
+        "COM818",
+        "COM819",
+        "ICN",
+        "ISC",
+        "PIE",
+        "RSE",
+        "RUF021",
+    }.issubset(ruff_rules)
 
     override_by_module = {
         tuple(override["module"]): set(override["disable_error_code"])

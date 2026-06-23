@@ -1477,7 +1477,6 @@ class Game:
             messages: Command messages to append or send.
             client_ids: Client ids that receive or are associated with the command.
         """
-        pass
 
 
 class Client:

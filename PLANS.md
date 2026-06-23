@@ -161,11 +161,11 @@ independently.
      keep local generated assets gitignored; build production assets in the
      production Docker or release artifact workflow.
 6. Tighten `ruff` and `mypy` incrementally once dependency upgrades reduce
-   legacy typing friction. In progress.
+   legacy typing friction. Complete.
    - Scope existing mypy disabled error codes to the modules that still need
      them instead of applying them globally. Complete.
    - Add focused ruff rules that pass cleanly and catch real ambiguity.
-     In progress.
+     Complete.
    - Remove `logs_to_games.py` mypy exceptions after focused type cleanup.
      Complete.
    - Remove remaining `server.py` mypy exceptions after focused type cleanup.
