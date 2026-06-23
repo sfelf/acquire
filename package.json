@@ -5,16 +5,16 @@
   },
   "devDependencies": {
     "clean-css": "^3.4.23",
+    "esbuild": "^0.25.12",
     "html-minifier": "^3.2.3",
     "prettier": "^2.1.2",
     "sass": "^1.89.0",
-    "uglify-js": "^2.7.5",
-    "webpack": "^1.14.0"
+    "uglify-js": "^2.7.5"
   },
   "scripts": {
     "build:css": "sass --style=expanded --no-source-map client/main/css/main.scss client/main/css/main.css && sass --style=expanded --no-source-map client/stats/css/stats.scss client/stats/css/stats.css",
     "build:enums": "python server/enumsgen.py js development > client/main/js/enums.js",
-    "build:js": "webpack -d client/main/js/app.js client/main/js/main.js",
+    "build:js": "esbuild client/main/js/app.js --bundle --format=iife --platform=browser --sourcemap --outfile=client/main/js/main.js",
     "build:client": "npm run build:css && npm run build:enums && npm run build:js",
     "format": "prettier --write '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,scss}' --loglevel warn"
   },

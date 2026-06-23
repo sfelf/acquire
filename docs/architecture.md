@@ -15,7 +15,7 @@ tooling.
 ## Modernization Direction
 
 The backend runtime is now Python-owned. The remaining Node.js usage is limited
-to frontend asset generation; webpack modernization remains a Phase 6 follow-up.
+to frontend asset generation through the npm client build scripts.
 
 ## Current Risk Areas
 
