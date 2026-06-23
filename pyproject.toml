@@ -79,6 +79,7 @@ select = [
     "B",
     "C4",
     "SIM",
+    "RUF021",
 ]
 
 [tool.mypy]
@@ -94,10 +95,14 @@ no_implicit_optional = true
 strict_optional = true
 check_untyped_defs = true
 disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "orm",
+]
 disable_error_code = [
     "misc",
     "valid-type",
-    "var-annotated",
 ]
 
 [[tool.mypy.overrides]]
@@ -108,6 +113,8 @@ module = [
 disable_error_code = [
     "arg-type",
     "assignment",
+    "misc",
     "operator",
     "union-attr",
+    "var-annotated",
 ]
