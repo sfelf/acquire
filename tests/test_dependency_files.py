@@ -1,4 +1,5 @@
 import json
+import tomllib
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -112,3 +113,28 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
     assert "docs/client-assets.md" in local_development_notes
     assert "legacy Node.js 6-era toolchain. Complete." in plans
     assert "build production assets in the\n     production Docker" in plans
+
+
+def test_python_quality_config_scopes_type_checker_exceptions() -> None:
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+    mypy_config = pyproject["tool"]["mypy"]
+    mypy_overrides = pyproject["tool"]["mypy"]["overrides"]
+    ruff_rules = pyproject["tool"]["ruff"]["lint"]["select"]
+
+    assert "disable_error_code" not in mypy_config
+    assert "RUF021" in ruff_rules
+
+    override_by_module = {
+        tuple(override["module"]): set(override["disable_error_code"])
+        for override in mypy_overrides
+    }
+
+    assert override_by_module[("orm",)] == {"misc", "valid-type"}
+    assert override_by_module[("logs_to_games", "server")] == {
+        "arg-type",
+        "assignment",
+        "misc",
+        "operator",
+        "union-attr",
+        "var-annotated",
+    }

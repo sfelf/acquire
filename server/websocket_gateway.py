@@ -201,8 +201,7 @@ class SockJSGateway:
         """
         if (
             not self.owns_game_server
-            or self.cleanup_task is not None
-            and not self.cleanup_task.done()
+            or (self.cleanup_task is not None and not self.cleanup_task.done())
         ):
             return
         self.cleanup_task = asyncio.create_task(
