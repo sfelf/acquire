@@ -17,6 +17,7 @@ import string
 import sys
 import traceback
 from collections.abc import Sequence
+from typing import Protocol
 
 import enums
 import orm
@@ -26,6 +27,17 @@ import util
 from username_to_user_id import username_to_user_id
 
 import server
+
+
+class DatabaseSession(Protocol):
+    """Represent the session surface needed for dialect-specific SQL."""
+
+    def get_bind(self) -> object:
+        """Return the current SQLAlchemy bind.
+
+        Returns:
+            Active SQLAlchemy bind for the session.
+        """
 
 
 class Enums:
@@ -3170,24 +3182,96 @@ def output_chat_messages(log_timestamp: int) -> None:
             chat_message_processor.go()
 
 
+def database_dialect_name(session: DatabaseSession) -> str | None:
+    """Return the active database dialect name for a session.
+
+    Args:
+        session: SQLAlchemy session or compatible test double.
+
+    Returns:
+        SQLAlchemy dialect name, or `None` when no dialect is available.
+    """
+    bind = session.get_bind()
+    dialect = getattr(bind, "dialect", None)
+    return getattr(dialect, "name", None)
+
+
+def user_table_for_session(session: DatabaseSession) -> str:
+    """Return the account table reference for the active database dialect.
+
+    Postgres reserves `user`, while the legacy MySQL schema uses it as the
+    account table name. The table reference is selected from the current
+    SQLAlchemy session bind and is not influenced by caller input.
+
+    Args:
+        session: SQLAlchemy session or compatible test double.
+
+    Returns:
+        SQL table reference for the legacy account table.
+    """
+    return '"user"' if database_dialect_name(session) == "postgresql" else "user"
+
+
+def decode_database_text(value: bytes | str) -> str:
+    """Return database text from MySQL bytes or Postgres strings.
+
+    Legacy MySQL queries commonly return bytes for text columns, while the
+    modern Postgres driver returns Python strings. Manual log tools compare or
+    print those values, so they should normalize the value before applying log
+    username rules.
+
+    Args:
+        value: Database text value returned by SQLAlchemy.
+
+    Returns:
+        Decoded text value.
+    """
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return value
+
+
+def sql_string_literal(value: str, dialect_name: str | None) -> str:
+    """Render a SQL string literal for generated manual update statements.
+
+    The username maintenance helper prints SQL for a human to run later rather
+    than executing it through SQLAlchemy binds. Use standard single-quote
+    escaping so usernames containing apostrophes remain valid SQL string
+    literals on both MySQL and Postgres. MySQL also treats backslashes as
+    escapes by default, so backslashes are doubled only for that dialect.
+
+    Args:
+        value: Text value to render as a SQL string literal.
+        dialect_name: SQLAlchemy dialect name for the generated statement.
+
+    Returns:
+        SQL string literal with embedded apostrophes and dialect-specific
+        backslashes escaped.
+    """
+    if dialect_name == "mysql":
+        value = value.replace("\\", "\\\\")
+    return "'" + value.replace("'", "''") + "'"
+
+
 def compare_log_usernames_with_database_usernames(log_timestamp: int) -> None:
     """Compare log usernames with database usernames.
 
     Args:
         log_timestamp: Timestamp identifying the source log file.
     """
-    query_for_game_players = sqlalchemy.sql.text(
-        """
-        select game_player.player_index as player_id, user.name as username
+    query_for_game_players_template = """
+        select game_player.player_index as player_id, {user_table}.name as username
         from game
         join game_player on game_player.game_id = game.game_id
-        join user on user.user_id = game_player.user_id
+        join {user_table} on {user_table}.user_id = game_player.user_id
         where game.log_time = :log_timestamp and game.number = :internal_game_id
         order by game_player.player_index
         """
-    )
 
     with orm.session_scope() as session:
+        query_for_game_players = sqlalchemy.sql.text(
+            query_for_game_players_template.format(user_table=user_table_for_session(session))
+        )
         for _, filename in util.get_log_file_filenames(
             "py", begin=log_timestamp, end=log_timestamp
         ):
@@ -3203,7 +3287,7 @@ def compare_log_usernames_with_database_usernames(log_timestamp: int) -> None:
                         },
                     ):
                         log_username = game.player_id_to_username[row.player_id]
-                        database_username = row.username.decode("utf-8")
+                        database_username = decode_database_text(row.username)
 
                         if log_username != database_username:
                             print(
@@ -3345,21 +3429,28 @@ def get_actual_username(log_timestamp: int, username: str) -> str:
 
 def punycode_non_ascii_usernames_in_the_database() -> None:
     """Punycode non ascii usernames in the database."""
-    query_for_user_names = sqlalchemy.sql.text(
-        """
+    query_for_user_names_template = """
         select user_id, name
-        from user
+        from {user_table}
         """
-    )
 
     with orm.session_scope() as session:
+        dialect_name = database_dialect_name(session)
+        user_table = user_table_for_session(session)
+        query_for_user_names = sqlalchemy.sql.text(
+            query_for_user_names_template.format(user_table=user_table)
+        )
         for row in session.execute(query_for_user_names):
             user_id = row.user_id
-            username = row.name.decode()
+            username = decode_database_text(row.name)
             if not is_ascii(username):
                 print(
-                    "update user set name = "
-                    + repr(username.encode("punycode").decode().strip())
+                    "update "
+                    + user_table
+                    + " set name = "
+                    + sql_string_literal(
+                        username.encode("punycode").decode().strip(), dialect_name
+                    )
                     + " where user_id = "
                     + str(user_id)
                     + ";"
