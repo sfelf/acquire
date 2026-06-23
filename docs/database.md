@@ -36,8 +36,8 @@ persistence coverage that protects the refactor.
   Python so the stats query no longer depends on MySQL timestamp functions.
 - `server/logs_to_games.py` uses dialect-aware SQL rendering for manual
   database comparison tools that reference the legacy `user` table.
-- Remaining raw SQL in `server/recreate_game.py` must still be reviewed for
-  cross-database behavior before the runtime switches engines.
+- `server/recreate_game.py` uses ORM lookups for persisted-game checks instead
+  of raw SQL.
 - Docker Compose, test fixtures, and local-development docs currently start
   MySQL services and expose MySQL-specific test URLs.
 
@@ -49,10 +49,11 @@ persistence coverage that protects the refactor.
    disposable Postgres schema for integration tests. Complete.
 3. Make ORM URL construction engine-neutral, using explicit database URLs for
    tests and local services while preserving the existing MySQL environment
-   behavior during the transition. In progress.
+   behavior during the transition. Complete for the current migration baseline.
 4. Add a Postgres baseline migration path or revise the baseline to use
    portable SQLAlchemy types where possible, with explicit treatment for
-   binary/case-sensitive username semantics. In progress.
+   binary/case-sensitive username semantics. Complete for the current
+   migration baseline.
 5. Run schema, lookup, auth, session, and log-import persistence tests against
    both MySQL and Postgres until parity is proven. Complete for the current
    migration baseline.
@@ -66,8 +67,8 @@ persistence coverage that protects the refactor.
 
 ## Open Decisions
 
-- Choose the Postgres driver. `psycopg` 3 is the preferred modern default
-  unless compatibility testing shows a reason to use `psycopg2`.
+- Postgres driver selection is complete for the current migration baseline:
+  `psycopg` 3 is used for Docker-backed marker tests.
 - Decide whether production migration starts from an empty Postgres schema plus
   imported data or from a direct MySQL-to-Postgres data transfer.
 - Define the production rollback strategy before making Postgres the default

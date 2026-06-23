@@ -132,7 +132,7 @@ independently.
    - Add Postgres dependencies and Docker-backed `postgres` marker fixtures
      alongside existing MySQL tests. Complete.
    - Make ORM models, migrations, and raw SQL portable while keeping MySQL
-     tests green. In progress.
+     tests green. Complete for the current migration baseline.
    - Run the persistence suite against both MySQL and Postgres during the
      transition. Complete for schema, session, auth, constraints, lookup, and
      completed-game log import coverage.
