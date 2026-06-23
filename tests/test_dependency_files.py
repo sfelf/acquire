@@ -58,16 +58,21 @@ def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
 
 def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
     package = json.loads((REPOSITORY_ROOT / "package.json").read_text())
+    package_lock = json.loads((REPOSITORY_ROOT / "package-lock.json").read_text())
     dev_dependencies = package["devDependencies"]
     engines = package["engines"]
     scripts = package["scripts"]
 
     assert engines == {"node": ">=22", "npm": ">=10"}
+    assert "esbuild" in dev_dependencies
     assert "sass" in dev_dependencies
     assert "node-sass" not in dev_dependencies
+    assert "webpack" not in dev_dependencies
     assert "build:css" in scripts
     assert "build:enums" in scripts
     assert "build:js" in scripts
+    assert scripts["build:js"].startswith("esbuild client/main/js/app.js --bundle")
     assert scripts["build:client"] == (
         "npm run build:css && npm run build:enums && npm run build:js"
     )
+    assert "node_modules/webpack" not in package_lock["packages"]

@@ -52,6 +52,7 @@ def test_client_asset_helper_uses_modern_node_and_npm_scripts():
     assert "npm run build:css" in command
     assert "npm run build:js" in command
     assert "node-sass" not in command
+    assert "webpack" not in command
 
 
 def test_e2e_fixture_uses_alembic_database_setup():
