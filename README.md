@@ -63,6 +63,19 @@ runtime is Python-owned.
 
 See [docs/local-development.md](docs/local-development.md) for UI access, database initialization, and teardown.
 
+## Deployment
+
+Build the production Docker image with:
+
+```bash
+docker build -t acquire:production .
+```
+
+The production image builds generated client assets in a Node stage and runs
+the Python FastAPI gateway from a slim Python runtime. See
+[docs/deployment.md](docs/deployment.md) for migration, runtime, and AWS
+deployment notes.
+
 ## Database migrations
 
 Alembic tracks schema migrations for the Python database runtime:

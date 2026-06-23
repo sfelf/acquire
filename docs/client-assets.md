@@ -48,9 +48,9 @@ missing. Docker Compose bind-mounts the checkout in local development, so the
 helper can generate assets once without making the running gateway depend on the
 Node container.
 
-## Deployment Follow-Up
+## Deployment Packaging
 
-Production Docker and AWS packaging should build client assets in a dedicated
-image stage or release artifact workflow before starting the Python gateway.
-That packaging decision belongs with the production deployment work rather than
-the local development helper.
+The production Dockerfile builds client assets in a dedicated Node 22 image
+stage, then copies the generated files into the Python runtime image before
+starting the gateway. See `docs/deployment.md` for the production image build
+and runtime commands.

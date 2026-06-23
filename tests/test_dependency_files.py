@@ -106,13 +106,33 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
     assert "docker compose --profile client-build run --rm client-assets" in (
         asset_workflow
     )
-    assert "Production Docker and AWS packaging should build client assets" in (
-        asset_workflow
-    )
+    assert "The production Dockerfile builds client assets" in asset_workflow
+    assert "docs/deployment.md" in asset_workflow
     assert "docs/client-assets.md" in architecture_notes
     assert "docs/client-assets.md" in local_development_notes
     assert "legacy Node.js 6-era toolchain. Complete." in plans
     assert "build production assets in the\n     production Docker" in plans
+
+
+def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() -> None:
+    dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text()
+    readme = (REPOSITORY_ROOT / "README.md").read_text()
+    deployment_notes = (REPOSITORY_ROOT / "docs" / "deployment.md").read_text()
+
+    assert "FROM node:22-bookworm-slim AS client-assets" in dockerfile
+    assert "RUN npm ci" in dockerfile
+    assert "RUN npm run build:client" in dockerfile
+    assert "FROM python:3.12-slim AS runtime" in dockerfile
+    assert "COPY requirements.local-docker.txt ." in dockerfile
+    assert "client/main/js/main.js" in dockerfile
+    assert "client/stats/css/stats.css" in dockerfile
+    assert 'CMD ["python", "http_server.py", "--host", "0.0.0.0", "--port", "9000"]' in (
+        dockerfile
+    )
+    assert "docker build -t acquire:production ." in readme
+    assert "docker build -t acquire:production ." in deployment_notes
+    assert "python setup_database.py" in deployment_notes
+    assert "AWS" in deployment_notes
 
 
 def test_python_quality_config_scopes_type_checker_exceptions() -> None:
