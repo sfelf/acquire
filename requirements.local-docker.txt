@@ -1,6 +1,7 @@
 # Keep this Docker-only dependency set separate from requirements.txt.
 # Keep this Docker-only dependency set separate from requirements.txt while
 # runtime dependencies are modernized in controlled groups.
+alembic>=1.17,<2
 fastapi>=0.115,<1
 mysql-connector-python>=9.3,<10
 pytz==2016.10

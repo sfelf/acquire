@@ -207,7 +207,7 @@ def e2e_base_url(pytestconfig):
             "sh",
             "-c",
             "for i in $(seq 1 30); do "
-            "test -S /var/run/mysqld/mysqld.sock && exec python initialize_database.py; "
+            "test -S /var/run/mysqld/mysqld.sock && exec python setup_database.py; "
             "sleep 1; "
             "done; "
             "echo 'MySQL socket was not ready at /var/run/mysqld/mysqld.sock' >&2; "

@@ -136,6 +136,8 @@ independently.
    - Run the persistence suite against both MySQL and Postgres during the
      transition. Complete for schema, session, auth, constraints, lookup, and
      completed-game log import coverage.
+   - Replace `initialize_database.py` with Alembic upgrade plus seed data in
+     local Docker and e2e setup. In progress.
    - Switch local development defaults to Postgres after parity is proven.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented.
