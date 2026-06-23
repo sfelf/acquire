@@ -21,6 +21,8 @@ import trueskill
 import ujson
 import util
 
+RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
+
 
 class MutableKeyValue(Protocol):
     """Represent the mutable value field on the legacy key/value ORM row."""
@@ -323,9 +325,8 @@ class StatsGen:
         order by user.user_id asc
         """
     )
-    ratings_sql = sqlalchemy.sql.text(
-        """
-        select user.name,
+    ratings_sql_template = """
+        select {user_table}.name,
             rating_type.name as rating_type,
             rating.time,
             rating.mu,
@@ -339,12 +340,12 @@ class StatsGen:
             group by user_id, rating_type_id
         ) rating_summary on rating.rating_id = rating_summary.rating_id
         join rating_type on rating.rating_type_id = rating_type.rating_type_id
-        join user on rating.user_id = user.user_id
-        where rating.time >= unix_timestamp() - 30 * 24 * 60 * 60
+        join {user_table} on rating.user_id = {user_table}.user_id
+        where rating.time >= :minimum_rating_time
         order by rating.mu - rating.sigma * 3 desc,
             rating.mu desc, rating.time asc, rating.user_id asc
         """
-    )
+    ratings_sql = sqlalchemy.sql.text(ratings_sql_template.format(user_table="user"))
     user_ratings_sql = sqlalchemy.sql.text(
         """
         select rating_type.name,
@@ -410,10 +411,37 @@ class StatsGen:
             )
         return users_with_completed_games
 
+    def ratings_sql_for_session(self):
+        """Return the ratings summary SQL for the active database dialect.
+
+        Postgres reserves `user`, while the legacy MySQL schema uses it as the
+        account table name. The table name comes from a closed dialect check so
+        the rest of the raw SQL can keep its historical shape without exposing
+        an interpolation surface to callers.
+
+        Returns:
+            SQLAlchemy text query for the current session bind.
+        """
+        get_bind = getattr(self.session, "get_bind", None)
+        bind = get_bind() if get_bind else None
+        dialect = getattr(bind, "dialect", None)
+        user_table = '"user"' if getattr(dialect, "name", None) == "postgresql" else "user"
+        return sqlalchemy.sql.text(StatsGen.ratings_sql_template.format(user_table=user_table))
+
     def output_ratings(self):
-        """Output ratings."""
+        """Write the public ratings summary for recently active players.
+
+        The cutoff is computed in Python instead of the database so this query
+        remains portable across MySQL and Postgres. The published ratings file
+        still includes only latest ratings with activity in the rolling
+        30-day window used by the legacy cron job.
+        """
         rating_type_to_ratings = collections.defaultdict(list)
-        for row in self.session.execute(StatsGen.ratings_sql):
+        minimum_rating_time = int(time.time()) - RECENT_RATINGS_WINDOW_SECONDS
+        for row in self.session.execute(
+            self.ratings_sql_for_session(),
+            {"minimum_rating_time": minimum_rating_time},
+        ):
             rating_type_to_ratings[decode_database_text(row.rating_type)].append(
                 [decode_database_text(row.name), row.time, row.mu, row.sigma, row.num_games]
             )

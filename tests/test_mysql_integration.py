@@ -574,6 +574,7 @@ def test_logs2db_persists_completed_game_ratings_and_records_against_mysql(
     real_orm_module,
     real_cron_module,
     empty_mysql_schema,
+    monkeypatch,
 ):
     real_orm_module.Base.metadata.create_all(mysql_engine)
     session = make_mysql_session(mysql_engine)
@@ -635,5 +636,19 @@ def test_logs2db_persists_completed_game_ratings_and_records_against_mysql(
             "alice": [[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]],
             "bob": [[0, 1], [0, 0, 0], [0, 0, 0, 0], [0, 0]],
         }
+
+        written = {}
+        statsgen = real_cron_module.StatsGen(session, "unused")
+        monkeypatch.setattr(real_cron_module.time, "time", lambda: 1200)
+        monkeypatch.setattr(
+            statsgen,
+            "write_file",
+            lambda name, contents: written.update({name: contents}),
+        )
+
+        statsgen.output_ratings()
+
+        assert written["ratings"].keys() == {"Singles2"}
+        assert [rating[0] for rating in written["ratings"]["Singles2"]] == ["alice", "bob"]
     finally:
         session.close()
