@@ -11,8 +11,9 @@ from alembic import command
 from alembic.config import Config
 from conftest import _cleanup_docker_compose, _get_available_local_port, _run_docker_compose
 
-pytestmark = pytest.mark.postgres
+pytestmark = [pytest.mark.mysql, pytest.mark.postgres]
 REPO_DIR = Path(__file__).resolve().parents[1]
+FALLBACK_POSTGRES_REHEARSAL_PORT = "35433"
 
 
 @pytest.fixture
@@ -42,14 +43,15 @@ def mysql_postgres_rehearsal_urls(pytestconfig):
         return
     if configured_mysql_url or configured_postgres_url:
         pytest.skip("set both ACQUIRE_MYSQL_TEST_URL and ACQUIRE_POSTGRES_TEST_URL")
-    if "postgres" not in pytestconfig.option.markexpr:
-        pytest.skip("postgres marker was not selected")
+    if (
+        "mysql" not in pytestconfig.option.markexpr
+        and "postgres" not in pytestconfig.option.markexpr
+    ):
+        pytest.skip("mysql or postgres marker was not selected")
 
     project_name = f"acquire-pytest-import-{os.getpid()}"
     mysql_port = _get_available_local_port()
-    postgres_port = _get_available_local_port()
-    while postgres_port == mysql_port:
-        postgres_port = _get_available_local_port()
+    postgres_port = _distinct_postgres_port(mysql_port, _get_available_local_port())
     compose_env = {
         "ACQUIRE_MYSQL_TEST_PORT": mysql_port,
         "ACQUIRE_POSTGRES_TEST_PORT": postgres_port,
@@ -100,6 +102,12 @@ def mysql_postgres_rehearsal_urls(pytestconfig):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+def _distinct_postgres_port(mysql_port, postgres_port):
+    if postgres_port != mysql_port:
+        return postgres_port
+    return FALLBACK_POSTGRES_REHEARSAL_PORT
 
 
 def _wait_for_database(database_url):
