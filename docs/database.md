@@ -17,7 +17,9 @@ losing the MySQL persistence coverage that protects the refactor.
   MySQL-compatible source into a migrated Postgres-compatible target for
   cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses
   to merge user, game, rating, record, or key/value data into non-empty target
-  tables.
+  tables. Unit tests cover command behavior against synthetic schemas, and the
+  Postgres marker suite runs a Docker-backed rehearsal from MySQL into
+  Postgres.
 - `server/initialize_database.py` remains as a legacy local reset path until
   MySQL rollback and reset workflows are replaced.
 - MySQL integration tests cover schema creation, migrations, runtime
@@ -72,8 +74,8 @@ losing the MySQL persistence coverage that protects the refactor.
 8. Document the production deployment and rollback gate before removing MySQL
    runtime paths. Complete.
 9. Add tested MySQL-to-Postgres import tooling for cutover rehearsals.
-   Complete for table-copy and count-validation coverage against synthetic
-   schemas; real backup rehearsal remains pending.
+   Complete for synthetic unit coverage and Docker-backed MySQL-to-Postgres
+   rehearsal coverage; real backup rehearsal remains pending.
 10. Remove MySQL-only dependencies, Compose services, environment variables, and
    documentation after the production cutover work has an approved execution
    plan and rollback owner.
@@ -96,6 +98,11 @@ correct. The command copies the known application tables in foreign-key-safe
 order, preserves primary keys, and reports source and target row counts for
 each table. Baseline lookup tables may already contain Alembic-seeded rows when
 they exactly match the source. Other target tables must be empty.
+
+The `postgres` marker suite includes a Docker-backed rehearsal that creates
+matching MySQL and Postgres schemas with Alembic, seeds representative MySQL
+rows, imports them into Postgres, verifies key rows, and confirms Postgres
+primary-key sequences advance after explicit id imports.
 
 ## Production Cutover And Rollback Gate
 
