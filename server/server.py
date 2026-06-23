@@ -176,7 +176,6 @@ class IncrementIdManager:
         Args:
             returned_id: Id being returned to the manager.
         """
-        pass
 
 
 def dummy_transport_write(data: bytes) -> None:
@@ -185,7 +184,6 @@ def dummy_transport_write(data: bytes) -> None:
     Args:
         data: Raw or action-specific payload data.
     """
-    pass
 
 
 class Server:
@@ -1246,7 +1244,6 @@ class Action:
 
     def prepare(self):
         """Prepare the action before it is offered to clients."""
-        pass
 
     def send_message(self, client_ids: set[int]) -> None:
         """Queue the SetGameAction command for selected clients.

@@ -79,6 +79,13 @@ select = [
     "B",
     "C4",
     "SIM",
+    "A",
+    "PIE",
+    "RSE",
+    "ISC",
+    "ICN",
+    "COM818",
+    "COM819",
     "RUF021",
 ]
 
