@@ -650,5 +650,21 @@ def test_logs2db_persists_completed_game_ratings_and_records_against_mysql(
 
         assert written["ratings"].keys() == {"Singles2"}
         assert [rating[0] for rating in written["ratings"]["Singles2"]] == ["alice", "bob"]
+
+        assert statsgen.get_users_with_completed_games() == [
+            [1, "alice", [[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]]],
+            [2, "bob", [[0, 1], [0, 0, 0], [0, 0, 0, 0], [0, 0]]],
+        ]
+
+        statsgen.output_user(
+            1,
+            "alice",
+            [[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]],
+        )
+
+        assert "users/YWxpY2U" in written
+        assert written["users/YWxpY2U"]["games"] == [
+            [1, 1100, [["alice", 90], ["bob", 70]]]
+        ]
     finally:
         session.close()
