@@ -52,11 +52,14 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
 
     assert "import tooling for cutover rehearsals" in plans
     assert "real backup rehearsal remains pending" in plans
+    assert "Docker-backed MySQL-to-Postgres" in plans
     assert "server/import_mysql_to_postgres.py" in database_notes
     assert "Import Rehearsal Command" in database_notes
     assert "--dry-run" in database_notes
     assert "preserves primary keys" in database_notes
     assert "Other target tables must be empty" in database_notes
+    assert "Postgres marker suite runs a Docker-backed rehearsal" in database_notes
+    assert "primary-key sequences advance" in database_notes
 
 
 def test_local_database_setup_docs_use_alembic_command() -> None:
