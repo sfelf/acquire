@@ -312,18 +312,19 @@ def get_empty_records() -> list[list[int]]:
 class StatsGen:
     """Generate JSON stats files from persisted game and rating data."""
 
-    users_with_completed_games_sql = sqlalchemy.sql.text(
-        """
-        select distinct user.user_id,
-            user.name,
+    users_with_completed_games_sql_template = """
+        select distinct {user_table}.user_id,
+            {user_table}.name,
             record.encoded
-        from user
-        join game_player on user.user_id = game_player.user_id
+        from {user_table}
+        join game_player on {user_table}.user_id = game_player.user_id
         join game on game_player.game_id = game.game_id
-        left join record on user.user_id = record.user_id
+        left join record on {user_table}.user_id = record.user_id
         where game.end_time is not null
-        order by user.user_id asc
+        order by {user_table}.user_id asc
         """
+    users_with_completed_games_sql = sqlalchemy.sql.text(
+        users_with_completed_games_sql_template.format(user_table="user")
     )
     ratings_sql_template = """
         select {user_table}.name,
@@ -363,13 +364,12 @@ class StatsGen:
         order by rating_type.name
         """
     )
-    user_games_sql = sqlalchemy.sql.text(
-        """
+    user_games_sql_template = """
         select game.game_id,
             game.end_time,
             game.game_mode_id,
             game_player.player_index,
-            user.name,
+            {user_table}.name,
             game_player.score
         from game
         join (
@@ -382,10 +382,29 @@ class StatsGen:
             limit 100
         ) game_ids on game.game_id = game_ids.game_id
         join game_player on game.game_id = game_player.game_id
-        join user on game_player.user_id = user.user_id
+        join {user_table} on game_player.user_id = {user_table}.user_id
         order by game.end_time desc, game.game_id desc, game_player.player_index asc
         """
-    )
+    user_games_sql = sqlalchemy.sql.text(user_games_sql_template.format(user_table="user"))
+
+    @staticmethod
+    def user_table_for_session(session):
+        """Return the account table reference for the active database dialect.
+
+        Postgres reserves `user`, while the legacy MySQL schema uses it as the
+        account table name. This method keeps that dialect choice centralized
+        and closed over known values before query templates are rendered.
+
+        Args:
+            session: SQLAlchemy session or compatible test double.
+
+        Returns:
+            SQL table reference for the legacy account table.
+        """
+        get_bind = getattr(session, "get_bind", None)
+        bind = get_bind() if get_bind else None
+        dialect = getattr(bind, "dialect", None)
+        return '"user"' if getattr(dialect, "name", None) == "postgresql" else "user"
 
     def __init__(self, session, output_dir):
         """Initialize stats generation state for one database session.
@@ -397,6 +416,18 @@ class StatsGen:
         self.session = session
         self.output_dir = output_dir
 
+    def users_with_completed_games_sql_for_session(self):
+        """Return the completed-game users query for the active database dialect.
+
+        Returns:
+            SQLAlchemy text query for the current session bind.
+        """
+        return sqlalchemy.sql.text(
+            StatsGen.users_with_completed_games_sql_template.format(
+                user_table=StatsGen.user_table_for_session(self.session)
+            )
+        )
+
     def get_users_with_completed_games(self):
         """Get users with completed games.
 
@@ -404,7 +435,7 @@ class StatsGen:
             Rows containing user id, username, and decoded records.
         """
         users_with_completed_games = []
-        for row in self.session.execute(StatsGen.users_with_completed_games_sql):
+        for row in self.session.execute(self.users_with_completed_games_sql_for_session()):
             decoded = ujson.decode(row.encoded) if row.encoded else get_empty_records()
             users_with_completed_games.append(
                 [row.user_id, decode_database_text(row.name), decoded]
@@ -422,11 +453,23 @@ class StatsGen:
         Returns:
             SQLAlchemy text query for the current session bind.
         """
-        get_bind = getattr(self.session, "get_bind", None)
-        bind = get_bind() if get_bind else None
-        dialect = getattr(bind, "dialect", None)
-        user_table = '"user"' if getattr(dialect, "name", None) == "postgresql" else "user"
-        return sqlalchemy.sql.text(StatsGen.ratings_sql_template.format(user_table=user_table))
+        return sqlalchemy.sql.text(
+            StatsGen.ratings_sql_template.format(
+                user_table=StatsGen.user_table_for_session(self.session)
+            )
+        )
+
+    def user_games_sql_for_session(self):
+        """Return the user game history SQL for the active database dialect.
+
+        Returns:
+            SQLAlchemy text query for the current session bind.
+        """
+        return sqlalchemy.sql.text(
+            StatsGen.user_games_sql_template.format(
+                user_table=StatsGen.user_table_for_session(self.session)
+            )
+        )
 
     def output_ratings(self):
         """Write the public ratings summary for recently active players.
@@ -462,7 +505,7 @@ class StatsGen:
 
         games = []
         last_game_id = None
-        for row in self.session.execute(StatsGen.user_games_sql, {"user_id": user_id}):
+        for row in self.session.execute(self.user_games_sql_for_session(), {"user_id": user_id}):
             if row.game_id != last_game_id:
                 games.append([row.game_mode_id, row.end_time, []])
             games[-1][2].append([decode_database_text(row.name), row.score])

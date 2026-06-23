@@ -31,9 +31,10 @@ persistence coverage that protects the refactor.
 - `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
   SQLAlchemy types with MySQL variants and applies MySQL table collation
   options only when running against MySQL.
-- `server/cron.py` computes the rolling ratings cutoff in Python so the stats
-  query no longer depends on MySQL timestamp functions. Remaining raw SQL in
-  `server/cron.py`, `server/recreate_game.py`, and `server/logs_to_games.py`
+- `server/cron.py` uses dialect-aware SQL rendering for stats queries that
+  reference the legacy `user` table, and computes the rolling ratings cutoff in
+  Python so the stats query no longer depends on MySQL timestamp functions.
+- Remaining raw SQL in `server/recreate_game.py` and `server/logs_to_games.py`
   must still be reviewed for cross-database behavior before the runtime
   switches engines.
 - Docker Compose, test fixtures, and local-development docs currently start
