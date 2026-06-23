@@ -34,9 +34,10 @@ persistence coverage that protects the refactor.
 - `server/cron.py` uses dialect-aware SQL rendering for stats queries that
   reference the legacy `user` table, and computes the rolling ratings cutoff in
   Python so the stats query no longer depends on MySQL timestamp functions.
-- Remaining raw SQL in `server/recreate_game.py` and `server/logs_to_games.py`
-  must still be reviewed for cross-database behavior before the runtime
-  switches engines.
+- `server/logs_to_games.py` uses dialect-aware SQL rendering for manual
+  database comparison tools that reference the legacy `user` table.
+- Remaining raw SQL in `server/recreate_game.py` must still be reviewed for
+  cross-database behavior before the runtime switches engines.
 - Docker Compose, test fixtures, and local-development docs currently start
   MySQL services and expose MySQL-specific test URLs.
 

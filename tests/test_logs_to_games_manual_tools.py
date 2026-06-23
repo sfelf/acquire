@@ -377,21 +377,37 @@ def test_chat_and_username_database_tools_print_expected_output(
             print(self.log_timestamp, "GLOBAL alice -> hello")
 
     class FakeSession:
+        class Bind:
+            class Dialect:
+                name = "postgresql"
+
+            dialect = Dialect()
+
+        def __init__(self):
+            self.queries = []
+
+        def get_bind(self):
+            return self.Bind()
+
         def execute(self, query, params=None):
+            self.queries.append(query)
             if params:
-                return [types.SimpleNamespace(player_id=0, username=b"Alicia")]
+                return [types.SimpleNamespace(player_id=0, username="Alicia")]
             return [
-                types.SimpleNamespace(user_id=1, name="José".encode()),
+                types.SimpleNamespace(user_id=1, name="José"),
                 types.SimpleNamespace(user_id=2, name=b"Alice"),
             ]
 
     class FakeSessionScope:
+        session = FakeSession()
+
         def __enter__(self):
-            return FakeSession()
+            return self.session
 
         def __exit__(self, exc_type, exc_value, traceback):
             return None
 
+    fake_session_scope = FakeSessionScope()
     game = make_replay_game(logs_to_games)
     game.player_id_to_username = {0: "alice"}
     FakeLogProcessor.games = [game]
@@ -400,7 +416,7 @@ def test_chat_and_username_database_tools_print_expected_output(
     monkeypatch.setattr(
         logs_to_games.orm,
         "session_scope",
-        lambda: FakeSessionScope(),
+        lambda: fake_session_scope,
         raising=False,
     )
 
@@ -411,7 +427,8 @@ def test_chat_and_username_database_tools_print_expected_output(
     output = capsys.readouterr().out
     assert "1700000000 GLOBAL alice -> hello" in output
     assert '[1700000000,77,"alice","Alicia"]' in output
-    assert "update user set name = 'Jos-dma' where user_id = 1;" in output
+    assert 'update "user" set name = \'Jos-dma\' where user_id = 1;' in output
+    assert all('"user"' in query for query in fake_session_scope.session.queries)
 
 
 def test_log_file_size_and_username_id_tools_print_generated_data(
