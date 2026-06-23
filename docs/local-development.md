@@ -2,7 +2,7 @@
 
 The local development stack now uses the Python gateway as the default runtime:
 
-- MySQL stores user and historical game data.
+- Postgres stores local user and historical game data for the default Docker stack.
 - `server/http_server.py` runs the default FastAPI HTTP and SockJS-compatible gateway.
 - `server/server.py` owns the Python game state and gameplay command handling.
 - Node.js is used only by the opt-in client asset build helper until the frontend toolchain is modernized.
@@ -34,10 +34,10 @@ This one-time setup helper uses the legacy Node.js toolchain to compile
 checkout. It exits after the files are written and is not part of the default
 running stack.
 
-Start MySQL and the Python gateway:
+Start Postgres and the Python gateway:
 
 ```bash
-docker compose up --build mysql python-gateway
+docker compose up --build postgres python-gateway
 ```
 
 The default gateway listens on port `9000`, serves the generated client files,
@@ -63,8 +63,8 @@ docker compose run --rm python-gateway python setup_database.py
 
 This applies Alembic migrations and required lookup data to the configured
 database without dropping existing data. The Compose services pass the same
-`MYSQL_*` values from `.env` to MySQL, Alembic, the Python ORM, and the Python
-gateway.
+`POSTGRES_*` values from `.env` to Postgres, Alembic, the Python ORM, and the
+Python gateway.
 
 ## Useful Commands
 
@@ -74,7 +74,7 @@ Stop containers:
 docker compose down
 ```
 
-Stop containers and remove the local MySQL data volume, MySQL socket volume, and container-side Node dependency cache used by the client build helper:
+Stop containers and remove the local Postgres data volume and container-side Node dependency cache used by the client build helper:
 
 ```bash
 docker compose down --volumes

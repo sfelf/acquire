@@ -1,8 +1,8 @@
 # Database Notes
 
-MySQL is the current database. Alembic now owns schema migrations, and the next
-database modernization goal is moving to Postgres without losing the MySQL
-persistence coverage that protects the refactor.
+Postgres is the default local Docker database. Alembic owns schema migrations,
+and the database modernization goal remains moving toward Postgres without
+losing the MySQL persistence coverage that protects the refactor.
 
 ## Current State
 
@@ -11,7 +11,8 @@ persistence coverage that protects the refactor.
 - The initial Alembic revision creates the current schema and required lookup
   rows against MySQL and Postgres.
 - `server/setup_database.py` applies Alembic migrations for local Docker and
-  e2e setup without dropping data.
+  e2e setup without dropping data. Local Docker now runs this against
+  Postgres by default.
 - `server/initialize_database.py` remains as a legacy local reset path until
   MySQL rollback and reset workflows are replaced.
 - MySQL integration tests cover schema creation, migrations, runtime
@@ -23,9 +24,9 @@ persistence coverage that protects the refactor.
 
 ## MySQL-Specific Surface Area
 
-- `server/orm.py` keeps MySQL as the default runtime URL from `MYSQL_*`
-  environment variables, but can use an explicit `ACQUIRE_DATABASE_URL` for
-  Postgres testing and migration work.
+- `server/orm.py` uses explicit `ACQUIRE_DATABASE_URL` when present, structured
+  `POSTGRES_*` environment variables for the local Docker Postgres path, and
+  keeps the legacy `MYSQL_*` fallback for MySQL parity and rollback work.
 - `server/initialize_database.py` shells out to the `mysql` CLI, recreates the
   schema with `utf8mb4_bin`, and seeds lookup rows for the legacy reset path.
 - `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
@@ -38,8 +39,9 @@ persistence coverage that protects the refactor.
   database comparison tools that reference the legacy `user` table.
 - `server/recreate_game.py` uses ORM lookups for persisted-game checks instead
   of raw SQL.
-- Docker Compose, test fixtures, and local-development docs currently start
-  MySQL services and expose MySQL-specific test URLs.
+- Docker Compose and local-development docs use Postgres for the default local
+  gateway stack. MySQL remains available as a Compose service for marker tests
+  and parity coverage.
 
 ## Postgres Migration Sequence
 
@@ -61,7 +63,7 @@ persistence coverage that protects the refactor.
    local Docker and e2e setup. Complete. Remove the legacy reset command after
    the MySQL rollback workflow is documented.
 7. Switch local development defaults from MySQL to Postgres after the dual
-   database test suite is green.
+   database test suite is green. Complete.
 8. Remove MySQL-only dependencies, Compose services, environment variables, and
    documentation after deployment and rollback plans are documented.
 

@@ -41,12 +41,12 @@ MySQL, Postgres, and e2e marker runs create isolated Docker Compose projects whe
 
 ## Local Docker Development
 
-Docker Compose support is available for local MySQL and the Python FastAPI gateway:
+Docker Compose support is available for local Postgres and the Python FastAPI gateway:
 
 ```bash
 cp .env.example .env
 docker compose --profile client-build run --rm client-assets
-docker compose up --build mysql python-gateway
+docker compose up --build postgres python-gateway
 ```
 
 Initialize the local database in another terminal:

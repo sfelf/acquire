@@ -139,6 +139,7 @@ independently.
    - Replace `initialize_database.py` with Alembic upgrade plus seed data in
      local Docker and e2e setup. Complete.
    - Switch local development defaults to Postgres after parity is proven.
+     Complete.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented.
 5. Modernize frontend tooling so client asset generation no longer depends on
@@ -150,7 +151,8 @@ independently.
 
 ## Open Notes
 
-- MySQL remains the database until test coverage is strong.
+- MySQL remains available for parity testing and rollback planning while
+  Postgres becomes the local Docker default.
 - Docker starts as local-development tooling only.
 - AWS is the preferred future cloud target.
 - README coverage badges should be added after the coverage reporting source is finalized.

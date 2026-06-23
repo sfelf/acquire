@@ -39,6 +39,12 @@ def test_local_docker_includes_alembic_for_database_setup() -> None:
     assert "alembic>=1.17,<2" in local_docker_requirements
 
 
+def test_local_docker_includes_postgres_driver_for_default_database() -> None:
+    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+
+    assert "psycopg[binary]>=3.2,<4" in local_docker_requirements
+
+
 def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
     requirements = _read_requirements("requirements.txt")
     local_docker_requirements = _read_requirements("requirements.local-docker.txt")

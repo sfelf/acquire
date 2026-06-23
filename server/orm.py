@@ -71,8 +71,10 @@ def _build_engine_config() -> tuple[str | URL, dict[str, dict[str, str]]]:
     """Return the configured SQLAlchemy engine URL and connection arguments.
 
     `ACQUIRE_DATABASE_URL` is the explicit escape hatch for migration and
-    Postgres testing. When it is absent, the legacy MySQL environment-variable
-    behavior remains the default runtime path.
+    database testing. When it is absent and `POSTGRES_HOST` is configured,
+    Postgres environment variables provide the local-development database
+    connection. Otherwise, the legacy MySQL environment-variable behavior
+    remains available as the fallback path.
 
     Returns:
         Tuple of database URL or SQLAlchemy `URL` plus keyword arguments for
@@ -81,6 +83,20 @@ def _build_engine_config() -> tuple[str | URL, dict[str, dict[str, str]]]:
     configured_url = os.environ.get("ACQUIRE_DATABASE_URL")
     if configured_url:
         return configured_url, {}
+
+    postgres_host = os.environ.get("POSTGRES_HOST")
+    if postgres_host:
+        return (
+            URL.create(
+                "postgresql+psycopg",
+                username=os.environ.get("POSTGRES_USER", "acquire"),
+                password=os.environ.get("POSTGRES_PASSWORD", "acquire"),
+                host=postgres_host,
+                port=int(os.environ.get("POSTGRES_PORT", "5432")),
+                database=os.environ.get("POSTGRES_DB", "acquire"),
+            ),
+            {},
+        )
 
     mysql_user = os.environ.get("MYSQL_USER", "acquire")
     mysql_password = os.environ.get("MYSQL_PASSWORD", "acquire")
