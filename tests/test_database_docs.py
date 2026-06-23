@@ -60,6 +60,8 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "Other target tables must be empty" in database_notes
     assert "Postgres marker suite runs a Docker-backed rehearsal" in database_notes
     assert "primary-key sequences advance" in database_notes
+    assert "Python auth rules" in database_notes
+    assert "ORM\nlookup helpers" in database_notes
 
 
 def test_local_database_setup_docs_use_alembic_command() -> None:
