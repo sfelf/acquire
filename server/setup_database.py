@@ -6,8 +6,10 @@ import orm
 import sqlalchemy
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.engine.reflection import Inspector
 
 REPO_DIR = Path(__file__).resolve().parents[1]
+BASELINE_REVISION = "20260622_0001"
 BASELINE_TABLES = {
     "game",
     "game_mode",
@@ -18,6 +20,36 @@ BASELINE_TABLES = {
     "rating_type",
     "record",
     "user",
+}
+BASELINE_COLUMNS = {
+    "game": {
+        "game_id",
+        "log_time",
+        "number",
+        "begin_time",
+        "end_time",
+        "game_state_id",
+        "game_mode_id",
+    },
+    "game_mode": {"game_mode_id", "name"},
+    "game_player": {
+        "game_player_id",
+        "game_id",
+        "player_index",
+        "user_id",
+        "score",
+    },
+    "game_state": {"game_state_id", "name"},
+    "key_value": {"key_value_id", "key", "value"},
+    "rating": {"rating_id", "user_id", "rating_type_id", "time", "mu", "sigma"},
+    "rating_type": {"rating_type_id", "name"},
+    "record": {"user_id", "encoded"},
+    "user": {"user_id", "name", "password"},
+}
+BASELINE_LOOKUP_ROWS = {
+    "game_mode": {"Singles", "Teams"},
+    "game_state": {"Starting", "StartingFull", "InProgress", "Completed"},
+    "rating_type": {"Singles2", "Singles3", "Singles4", "Teams"},
 }
 
 
@@ -46,12 +78,48 @@ def is_unstamped_legacy_schema() -> bool:
     move onto the migration path without dropping local data.
 
     Returns:
-        `True` when all baseline application tables exist and `alembic_version`
-        is absent.
+        `True` when the baseline application tables, expected columns, and
+        required lookup rows exist and `alembic_version` is absent.
     """
     inspector = sqlalchemy.inspect(orm.engine)
     table_names = set(inspector.get_table_names())
-    return "alembic_version" not in table_names and table_names >= BASELINE_TABLES
+    return (
+        "alembic_version" not in table_names
+        and table_names == BASELINE_TABLES
+        and has_baseline_columns(inspector)
+        and has_baseline_lookup_rows()
+    )
+
+
+def has_baseline_columns(inspector: Inspector) -> bool:
+    """Return whether all baseline tables have the expected column names.
+
+    Args:
+        inspector: SQLAlchemy inspector for the configured database.
+
+    Returns:
+        `True` when each baseline table has exactly the expected columns.
+    """
+    return all(
+        {column["name"] for column in inspector.get_columns(table_name)}
+        == expected_columns
+        for table_name, expected_columns in BASELINE_COLUMNS.items()
+    )
+
+
+def has_baseline_lookup_rows() -> bool:
+    """Return whether required baseline lookup rows are present.
+
+    Returns:
+        `True` when the legacy schema contains exactly the lookup rows inserted
+        by the baseline migration.
+    """
+    with orm.engine.connect() as connection:
+        for table_name, expected_names in BASELINE_LOOKUP_ROWS.items():
+            rows = connection.execute(sqlalchemy.text(f"select name from {table_name}"))
+            if {row[0] for row in rows} != expected_names:
+                return False
+    return True
 
 
 def stamp_legacy_schema(config: Config) -> None:
@@ -61,7 +129,7 @@ def stamp_legacy_schema(config: Config) -> None:
         config: Alembic configuration for the repository migration environment.
     """
     if is_unstamped_legacy_schema():
-        command.stamp(config, "head")
+        command.stamp(config, BASELINE_REVISION)
 
 
 def main() -> None:
