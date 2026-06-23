@@ -10,6 +10,7 @@ import sqlalchemy
 from alembic import command
 from alembic.config import Config
 from conftest import _cleanup_docker_compose, _get_available_local_port, _run_docker_compose
+from sqlalchemy.orm import sessionmaker
 
 pytestmark = [pytest.mark.mysql, pytest.mark.postgres]
 REPO_DIR = Path(__file__).resolve().parents[1]
@@ -32,6 +33,15 @@ def import_module(real_orm_module):
         yield importlib.import_module("import_mysql_to_postgres")
     finally:
         sys.modules.pop("import_mysql_to_postgres", None)
+
+
+@pytest.fixture
+def real_auth_module(real_orm_module):
+    sys.modules.pop("auth", None)
+    try:
+        yield importlib.import_module("auth")
+    finally:
+        sys.modules.pop("auth", None)
 
 
 @pytest.fixture
@@ -245,6 +255,7 @@ def _table_rows(engine, orm, table_name):
 def test_import_rehearsal_copies_mysql_rows_into_postgres(
     mysql_postgres_rehearsal_urls,
     real_orm_module,
+    real_auth_module,
     import_module,
 ):
     mysql_url, postgres_url = mysql_postgres_rehearsal_urls
@@ -312,6 +323,42 @@ def test_import_rehearsal_copies_mysql_rows_into_postgres(
                 .returning(real_orm_module.User.user_id)
             ).scalar_one()
         assert inserted_id > 101
+
+        session = sessionmaker(bind=postgres_engine, autoflush=False)()
+        try:
+            password_login = real_auth_module.check_login(
+                session,
+                version="VERSION",
+                username="Bob",
+                password="b" * 64,
+            )
+            assert password_login.error is None
+            assert password_login.replace_existing_user is True
+
+            wrong_password = real_auth_module.check_login(
+                session,
+                version="VERSION",
+                username="Bob",
+                password="wrong",
+            )
+            assert wrong_password.error is real_auth_module.enums.Errors.IncorrectPassword
+
+            passwordless_login = real_auth_module.check_login(
+                session,
+                version="VERSION",
+                username="Alice",
+                password="",
+            )
+            assert passwordless_login.error is None
+            assert passwordless_login.replace_existing_user is False
+
+            lookup = real_orm_module.Lookup(session)
+            imported_game = lookup.get_game(12345, 7)
+            assert imported_game.game_id == 200
+            assert lookup.get_key_value("cron last offset").value == "42"
+            assert lookup.get_record(lookup.get_user("Alice")).encoded == '{"wins": 1}'
+        finally:
+            session.close()
     finally:
         mysql_engine.dispose()
         postgres_engine.dispose()

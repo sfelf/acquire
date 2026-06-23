@@ -102,7 +102,9 @@ they exactly match the source. Other target tables must be empty.
 The `postgres` marker suite includes a Docker-backed rehearsal that creates
 matching MySQL and Postgres schemas with Alembic, seeds representative MySQL
 rows, imports them into Postgres, verifies key rows, and confirms Postgres
-primary-key sequences advance after explicit id imports.
+primary-key sequences advance after explicit id imports. The same rehearsal
+also verifies the imported Postgres rows through the Python auth rules and ORM
+lookup helpers.
 
 ## Production Cutover And Rollback Gate
 
