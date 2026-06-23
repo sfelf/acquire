@@ -172,7 +172,13 @@ independently.
      Complete.
 7. Add production Docker and AWS deployment paths after the local Python
    runtime image is stable, including the production client asset build stage or
-   release artifact workflow.
+   release artifact workflow. In progress.
+   - Add a production Dockerfile that builds generated client assets and runs
+     the Python FastAPI gateway from a slim runtime image. Complete.
+   - Document production image build, migration, runtime, and AWS deployment
+     notes. Complete.
+   - Add cloud-specific deployment configuration after the production container
+     contract is reviewed. Pending.
 
 ## Open Notes
 
