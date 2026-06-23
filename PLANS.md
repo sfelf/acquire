@@ -163,11 +163,13 @@ independently.
 6. Tighten `ruff` and `mypy` incrementally once dependency upgrades reduce
    legacy typing friction. In progress.
    - Scope existing mypy disabled error codes to the modules that still need
-     them instead of applying them globally. In progress.
+     them instead of applying them globally. Complete.
    - Add focused ruff rules that pass cleanly and catch real ambiguity.
      In progress.
-   - Remove remaining `logs_to_games.py` and `server.py` mypy exceptions after
-     focused type cleanup PRs. Pending.
+   - Remove `logs_to_games.py` mypy exceptions after focused type cleanup.
+     In progress.
+   - Remove remaining `server.py` mypy exceptions after focused type cleanup.
+     Pending.
 7. Add production Docker and AWS deployment paths after the local Python
    runtime image is stable, including the production client asset build stage or
    release artifact workflow.

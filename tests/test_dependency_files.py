@@ -130,7 +130,7 @@ def test_python_quality_config_scopes_type_checker_exceptions() -> None:
     }
 
     assert override_by_module[("orm",)] == {"misc", "valid-type"}
-    assert override_by_module[("logs_to_games", "server")] == {
+    assert override_by_module[("server",)] == {
         "arg-type",
         "assignment",
         "misc",

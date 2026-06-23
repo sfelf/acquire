@@ -107,7 +107,6 @@ disable_error_code = [
 
 [[tool.mypy.overrides]]
 module = [
-    "logs_to_games",
     "server",
 ]
 disable_error_code = [
