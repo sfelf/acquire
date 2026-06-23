@@ -577,6 +577,7 @@ def test_statsgen_get_users_with_completed_games_accepts_string_names(cron_modul
 
 
 def test_statsgen_output_ratings_groups_rows(cron_module, monkeypatch):
+    monkeypatch.setattr(cron_module.time, "time", lambda: 1_700_000_000)
     session = StatsSession(
         {
             cron_module.StatsGen.ratings_sql: [
@@ -606,9 +607,16 @@ def test_statsgen_output_ratings_groups_rows(cron_module, monkeypatch):
             "Teams": [["bob", 200, 27.0, 7.5, 5]],
         }
     }
+    assert session.executions == [
+        (
+            cron_module.StatsGen.ratings_sql,
+            {"minimum_rating_time": 1_700_000_000 - cron_module.RECENT_RATINGS_WINDOW_SECONDS},
+        )
+    ]
 
 
 def test_statsgen_output_ratings_accepts_string_rows(cron_module, monkeypatch):
+    monkeypatch.setattr(cron_module.time, "time", lambda: 1_700_000_000)
     session = StatsSession(
         {
             cron_module.StatsGen.ratings_sql: [
@@ -636,6 +644,12 @@ def test_statsgen_output_ratings_accepts_string_rows(cron_module, monkeypatch):
             "Singles2": [["alice", 100, 25.0, 8.0, 3]],
         }
     }
+    assert session.executions == [
+        (
+            cron_module.StatsGen.ratings_sql,
+            {"minimum_rating_time": 1_700_000_000 - cron_module.RECENT_RATINGS_WINDOW_SECONDS},
+        )
+    ]
 
 
 def test_statsgen_output_user_writes_encoded_user_payload(cron_module, monkeypatch):
