@@ -20,6 +20,29 @@ def test_phase_6_tracks_postgres_migration_sequence() -> None:
     assert "Add a `postgres` pytest marker" in database_notes
     assert "Run schema, lookup, auth, session, and log-import persistence tests" in database_notes
     assert "Switch local development defaults from MySQL to Postgres" in database_notes
+    assert "Document the production deployment and rollback gate" in database_notes
+    assert "Remove MySQL-only dependencies" in database_notes
+
+
+def test_postgres_cutover_docs_define_rollback_gate() -> None:
+    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
+    agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
+
+    assert "Postgres is the default local Docker database" in agent_notes
+    assert "rollback planning" in agent_notes
+    assert "deployment and rollback gate" in plans
+    assert (
+        "Remove MySQL-only runtime paths after deployment and rollback plans are\n"
+        "     documented. Pending."
+    ) in plans
+    assert "Production Cutover And Rollback Gate" in database_notes
+    assert "Cutover Preconditions" in database_notes
+    assert "Deployment Plan" in database_notes
+    assert "Rollback Plan" in database_notes
+    assert "Runtime Cleanup Rules" in database_notes
+    assert "dual-write" in database_notes
+    assert "Remove the legacy `MYSQL_*` ORM fallback only after" in database_notes
 
 
 def test_local_database_setup_docs_use_alembic_command() -> None:

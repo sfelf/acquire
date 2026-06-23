@@ -140,8 +140,10 @@ independently.
      local Docker and e2e setup. Complete.
    - Switch local development defaults to Postgres after parity is proven.
      Complete.
+   - Document the production deployment and rollback gate for removing
+     MySQL-only runtime paths. Complete.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
-     documented.
+     documented. Pending.
 5. Modernize frontend tooling so client asset generation no longer depends on
    the legacy Node.js 6-era toolchain.
 6. Tighten `ruff` and `mypy` incrementally once dependency upgrades reduce

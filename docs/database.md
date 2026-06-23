@@ -64,14 +64,73 @@ losing the MySQL persistence coverage that protects the refactor.
    the MySQL rollback workflow is documented.
 7. Switch local development defaults from MySQL to Postgres after the dual
    database test suite is green. Complete.
-8. Remove MySQL-only dependencies, Compose services, environment variables, and
-   documentation after deployment and rollback plans are documented.
+8. Document the production deployment and rollback gate before removing MySQL
+   runtime paths. Complete.
+9. Remove MySQL-only dependencies, Compose services, environment variables, and
+   documentation after the production cutover work has an approved execution
+   plan and rollback owner.
+
+## Production Cutover And Rollback Gate
+
+Postgres is the default local Docker database, but production migration remains
+gated on an explicit cutover runbook. Do not remove the MySQL rollback surface
+needed by production until the following items have owners and a tested dry run.
+
+### Cutover Preconditions
+
+- A fresh MySQL backup exists and restore has been tested outside production.
+- The target Postgres database starts from an empty schema created with
+  `alembic upgrade head`.
+- A repeatable export/import command exists for production data, including
+  users, games, actions, chat messages, and game-player rows.
+- The import dry run validates row counts, representative user login behavior,
+  completed-game ratings, and historical game replay checks against Postgres.
+- The MySQL and Postgres marker suites pass against disposable schemas, and the
+  e2e suite passes against the Postgres-backed local gateway.
+- The deployment owner has selected a maintenance window and a rollback owner.
+
+### Deployment Plan
+
+1. Put the production application in maintenance mode or otherwise stop writes.
+2. Take and verify a final MySQL backup.
+3. Provision Postgres and run Alembic migrations to the expected head revision.
+4. Import MySQL data into Postgres with the repeatable import command.
+5. Validate imported data with row-count checks, login checks, persisted-game
+   checks, and representative historical replay checks.
+6. Deploy the Python gateway configured with the Postgres connection.
+7. Run smoke checks for login, global chat, game creation, joining, starting,
+   tile play, and stats pages before reopening traffic.
+
+### Rollback Plan
+
+Rollback is only straightforward while production writes remain stopped or
+while the Postgres cutover is still inside the validation window. If validation
+fails before reopening traffic, point the application back at the verified
+MySQL backup or the untouched MySQL primary, redeploy the previous
+configuration, and rerun login plus gameplay smoke checks.
+
+If traffic has already been reopened and Postgres has accepted writes, rollback
+requires an explicit data-reconciliation decision before switching back to
+MySQL. The project does not currently dual-write to both databases, so any
+post-cutover Postgres writes must either be exported back to MySQL with a
+reviewed script or deliberately discarded by the rollback owner.
+
+### Runtime Cleanup Rules
+
+- Keep MySQL marker tests until production no longer needs database parity or
+  rollback confidence from the legacy engine.
+- Keep the MySQL Compose profile until production rollback no longer depends on
+  quickly starting a local MySQL parity stack.
+- Remove `server/initialize_database.py` only after the Alembic setup path and
+  rollback runbook cover local reset and production recovery workflows.
+- Remove the legacy `MYSQL_*` ORM fallback only after production deployment no
+  longer needs the application to connect to MySQL during rollback.
 
 ## Open Decisions
 
 - Postgres driver selection is complete for the current migration baseline:
   `psycopg` 3 is used for Docker-backed marker tests.
-- Decide whether production migration starts from an empty Postgres schema plus
-  imported data or from a direct MySQL-to-Postgres data transfer.
-- Define the production rollback strategy before making Postgres the default
-  deployment database.
+- The production import command still needs to be implemented and dry-run
+  validated before any production cutover.
+- The rollback owner and maintenance window must be selected before production
+  deployment.
