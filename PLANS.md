@@ -167,9 +167,9 @@ independently.
    - Add focused ruff rules that pass cleanly and catch real ambiguity.
      In progress.
    - Remove `logs_to_games.py` mypy exceptions after focused type cleanup.
-     In progress.
+     Complete.
    - Remove remaining `server.py` mypy exceptions after focused type cleanup.
-     Pending.
+     Complete.
 7. Add production Docker and AWS deployment paths after the local Python
    runtime image is stable, including the production client asset build stage or
    release artifact workflow.
