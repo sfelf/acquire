@@ -10,8 +10,10 @@ persistence coverage that protects the refactor.
 - Alembic migrations live in `migrations/`.
 - The initial Alembic revision creates the current schema and required lookup
   rows against MySQL and Postgres.
-- `server/initialize_database.py` still provides a local reset path while the
-  Compose workflows are migrated to Alembic-owned setup.
+- `server/setup_database.py` applies Alembic migrations for local Docker and
+  e2e setup without dropping data.
+- `server/initialize_database.py` remains as a legacy local reset path until
+  MySQL rollback and reset workflows are replaced.
 - MySQL integration tests cover schema creation, migrations, runtime
   constraints, auth persistence, lookup persistence, transaction behavior, and
   completed-game log import persistence. Postgres marker tests now cover
@@ -25,7 +27,7 @@ persistence coverage that protects the refactor.
   environment variables, but can use an explicit `ACQUIRE_DATABASE_URL` for
   Postgres testing and migration work.
 - `server/initialize_database.py` shells out to the `mysql` CLI, recreates the
-  schema with `utf8mb4_bin`, and seeds lookup rows.
+  schema with `utf8mb4_bin`, and seeds lookup rows for the legacy reset path.
 - `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
   SQLAlchemy types with MySQL variants and applies MySQL table collation
   options only when running against MySQL.
@@ -51,7 +53,8 @@ persistence coverage that protects the refactor.
    both MySQL and Postgres until parity is proven. Complete for the current
    migration baseline.
 6. Replace `initialize_database.py` with Alembic upgrade plus seed data in
-   local Docker and e2e setup, then remove the legacy reset command.
+   local Docker and e2e setup, then remove the legacy reset command. In
+   progress.
 7. Switch local development defaults from MySQL to Postgres after the dual
    database test suite is green.
 8. Remove MySQL-only dependencies, Compose services, environment variables, and

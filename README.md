@@ -52,7 +52,7 @@ docker compose up --build mysql python-gateway
 Initialize the local database in another terminal:
 
 ```bash
-docker compose run --rm python-gateway python initialize_database.py
+docker compose run --rm python-gateway python setup_database.py
 ```
 
 Then open [http://localhost:9000/](http://localhost:9000/).
@@ -74,16 +74,17 @@ uv run alembic current
 
 The initial migration is a baseline for the current MySQL schema and required
 lookup rows. Use `upgrade head` for an empty schema. For a database that was
-already created by `initialize_database.py` and matches the current schema and
-lookup rows, mark the baseline as already applied instead:
+already created by the legacy `initialize_database.py` reset command and
+matches the current schema and lookup rows, mark the baseline as already
+applied instead:
 
 ```bash
 uv run alembic stamp head
 ```
 
-Local reset workflows still use `initialize_database.py`; future schema or
-required lookup-data changes should be added as Alembic revisions before the
-MySQL-to-Postgres migration.
+Local Docker setup uses Alembic through `server/setup_database.py`; future
+schema or required lookup-data changes should be added as Alembic revisions
+before the MySQL-to-Postgres migration.
 
 ## Install dependencies
 

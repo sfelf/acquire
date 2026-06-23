@@ -33,6 +33,12 @@ def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> 
     assert compatibility_requirements <= local_docker_requirements
 
 
+def test_local_docker_includes_alembic_for_database_setup() -> None:
+    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+
+    assert "alembic>=1.17,<2" in local_docker_requirements
+
+
 def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
     requirements = _read_requirements("requirements.txt")
     local_docker_requirements = _read_requirements("requirements.local-docker.txt")

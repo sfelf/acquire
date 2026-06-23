@@ -58,10 +58,13 @@ ACQUIRE_UI_PORT=9002
 Initialize the local database in another terminal:
 
 ```bash
-docker compose run --rm python-gateway python initialize_database.py
+docker compose run --rm python-gateway python setup_database.py
 ```
 
-The Compose services pass the same `MYSQL_*` values from `.env` to MySQL, the Python ORM, the database initializer, and the Python gateway.
+This applies Alembic migrations and required lookup data to the configured
+database without dropping existing data. The Compose services pass the same
+`MYSQL_*` values from `.env` to MySQL, Alembic, the Python ORM, and the Python
+gateway.
 
 ## Useful Commands
 

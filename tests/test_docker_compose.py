@@ -39,6 +39,13 @@ def test_python_gateway_explains_missing_client_assets():
     assert "client-build" in services["python-gateway"]["command"]
 
 
+def test_e2e_fixture_uses_alembic_database_setup():
+    fixture_text = (REPO_DIR / "tests" / "conftest.py").read_text()
+
+    assert "python setup_database.py" in fixture_text
+    assert "python initialize_database.py" not in fixture_text
+
+
 def test_compose_defines_postgres_for_marker_tests():
     services = _load_compose_services()
 
