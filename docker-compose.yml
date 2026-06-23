@@ -1,6 +1,8 @@
 services:
   mysql:
     image: mysql:8.0
+    profiles:
+      - mysql
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_bin
@@ -21,8 +23,6 @@ services:
 
   postgres:
     image: postgres:17
-    profiles:
-      - postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-acquire}
       POSTGRES_USER: ${POSTGRES_USER:-acquire}
@@ -68,14 +68,12 @@ services:
       context: .
       dockerfile: Dockerfile.local
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-acquire}
-      MYSQL_USER: ${MYSQL_USER:-acquire}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-acquire}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      MYSQL_SOCKET: /var/run/mysqld/mysqld.sock
-      MYSQL_AUTH_PLUGIN: ""
+      POSTGRES_DB: ${POSTGRES_DB:-acquire}
+      POSTGRES_USER: ${POSTGRES_USER:-acquire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acquire}
+      POSTGRES_HOST: postgres
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9000/sockjs/info >/dev/null"]
@@ -86,7 +84,6 @@ services:
       - "${ACQUIRE_UI_PORT:-9000}:9000"
     volumes:
       - .:/app
-      - mysql-socket:/var/run/mysqld
     working_dir: /app/server
     command: >
       sh -c "test -f /app/client/main/js/main.js

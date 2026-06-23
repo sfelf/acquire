@@ -22,7 +22,7 @@ def _is_marker_selected(config, marker):
     return bool(markexpr and marker in markexpr)
 
 
-def _docker_compose_command(project_name, include_test_override=False):
+def _docker_compose_command(project_name, include_test_override=False, profiles=()):
     command = [
         "docker",
         "compose",
@@ -33,13 +33,19 @@ def _docker_compose_command(project_name, include_test_override=False):
     ]
     if include_test_override:
         command.extend(["-f", "docker-compose.test.yml"])
+    for profile in profiles:
+        command.extend(["--profile", profile])
     return command
 
 
-def _run_docker_compose(project_name, *args, include_test_override=False):
+def _run_docker_compose(project_name, *args, include_test_override=False, profiles=()):
     return subprocess.run(
         [
-            *_docker_compose_command(project_name, include_test_override=include_test_override),
+            *_docker_compose_command(
+                project_name,
+                include_test_override=include_test_override,
+                profiles=profiles,
+            ),
             *args,
         ],
         check=True,
@@ -48,10 +54,14 @@ def _run_docker_compose(project_name, *args, include_test_override=False):
     )
 
 
-def _cleanup_docker_compose(project_name, *args, include_test_override=False):
+def _cleanup_docker_compose(project_name, *args, include_test_override=False, profiles=()):
     subprocess.run(
         [
-            *_docker_compose_command(project_name, include_test_override=include_test_override),
+            *_docker_compose_command(
+                project_name,
+                include_test_override=include_test_override,
+                profiles=profiles,
+            ),
             *args,
         ],
         check=False,
@@ -98,7 +108,14 @@ def mysql_test_url(pytestconfig):
     previous_env = {key: os.environ.get(key) for key in compose_env}
     os.environ.update(compose_env)
     try:
-        _run_docker_compose(project_name, "up", "-d", "mysql", include_test_override=True)
+        _run_docker_compose(
+            project_name,
+            "up",
+            "-d",
+            "mysql",
+            include_test_override=True,
+            profiles=("mysql",),
+        )
         yield (
             "mysql+mysqlconnector://{}:{}@127.0.0.1:{}/{}".format(
                 quote(compose_env["MYSQL_USER"], safe=""),
@@ -108,7 +125,13 @@ def mysql_test_url(pytestconfig):
             )
         )
     finally:
-        _cleanup_docker_compose(project_name, "down", "--volumes", include_test_override=True)
+        _cleanup_docker_compose(
+            project_name,
+            "down",
+            "--volumes",
+            include_test_override=True,
+            profiles=("mysql",),
+        )
         for key, value in previous_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -196,7 +219,7 @@ def e2e_base_url(pytestconfig):
             "up",
             "--build",
             "-d",
-            "mysql",
+            "postgres",
             "python-gateway",
         )
         _run_docker_compose(
@@ -204,14 +227,8 @@ def e2e_base_url(pytestconfig):
             "run",
             "--rm",
             "python-gateway",
-            "sh",
-            "-c",
-            "for i in $(seq 1 30); do "
-            "test -S /var/run/mysqld/mysqld.sock && exec python setup_database.py; "
-            "sleep 1; "
-            "done; "
-            "echo 'MySQL socket was not ready at /var/run/mysqld/mysqld.sock' >&2; "
-            "exit 1",
+            "python",
+            "setup_database.py",
         )
         yield f"http://127.0.0.1:{ui_port}/"
     finally:

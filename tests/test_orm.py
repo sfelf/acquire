@@ -120,6 +120,11 @@ def orm_module(monkeypatch):
     monkeypatch.delenv("MYSQL_SOCKET", raising=False)
     monkeypatch.delenv("MYSQL_USER", raising=False)
     monkeypatch.delenv("MYSQL_AUTH_PLUGIN", raising=False)
+    monkeypatch.delenv("POSTGRES_DB", raising=False)
+    monkeypatch.delenv("POSTGRES_HOST", raising=False)
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.delenv("POSTGRES_PORT", raising=False)
+    monkeypatch.delenv("POSTGRES_USER", raising=False)
     install_fake_sqlalchemy(monkeypatch)
 
     try:
@@ -200,6 +205,38 @@ def test_engine_uses_mysql_environment(monkeypatch):
             "engine",
             (url,),
             {"connect_args": {}},
+        )
+    finally:
+        sys.modules.pop("orm", None)
+
+
+def test_engine_uses_postgres_environment(monkeypatch):
+    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
+    monkeypatch.setenv("MYSQL_DATABASE", "ignored")
+    monkeypatch.setenv("POSTGRES_DB", "custom db")
+    monkeypatch.setenv("POSTGRES_HOST", "postgres")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "custom password")
+    monkeypatch.setenv("POSTGRES_PORT", "55432")
+    monkeypatch.setenv("POSTGRES_USER", "custom_user")
+    install_fake_sqlalchemy(monkeypatch)
+
+    try:
+        orm = importlib.import_module("orm")
+        url = orm.engine[1][0]
+
+        assert url.drivername == "postgresql+psycopg"
+        assert url.kwargs == {
+            "username": "custom_user",
+            "password": "custom password",
+            "host": "postgres",
+            "port": 55432,
+            "database": "custom db",
+        }
+        assert orm.engine == (
+            "engine",
+            (url,),
+            {},
         )
     finally:
         sys.modules.pop("orm", None)
