@@ -1,13 +1,17 @@
 import importlib
 import io
 import sys
+from pathlib import Path
 
 import pytest
 import sqlalchemy
 import ujson
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.postgres
+REPO_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -47,46 +51,38 @@ def postgres_engine(postgres_test_url):
 
 
 @pytest.fixture
-def empty_postgres_schema(postgres_engine, real_orm_module):
-    drop_application_schema(postgres_engine, real_orm_module)
-    yield
-    drop_application_schema(postgres_engine, real_orm_module)
-
-
-def drop_application_schema(postgres_engine, orm):
-    orm.Base.metadata.drop_all(postgres_engine)
+def migrated_postgres_schema(postgres_engine):
+    drop_application_schema(postgres_engine)
     with postgres_engine.begin() as connection:
-        connection.execute(sqlalchemy.text("drop table if exists alembic_version"))
+        command.upgrade(_alembic_config(connection), "head")
+    yield
+    drop_application_schema(postgres_engine)
+
+
+def drop_application_schema(postgres_engine):
+    with postgres_engine.begin() as connection:
+        inspector = sqlalchemy.inspect(connection)
+        for table_name in reversed(inspector.get_table_names()):
+            connection.execute(
+                sqlalchemy.text(f'drop table if exists "{table_name}" cascade')
+            )
+
+
+def _alembic_config(connection):
+    config = Config(str(REPO_DIR / "alembic.ini"))
+    config.attributes["connection"] = connection
+    return config
 
 
 def make_postgres_session(postgres_engine):
     return sessionmaker(bind=postgres_engine, autoflush=False)()
 
 
-def seed_lookup_rows(session, orm):
-    session.add_all(
-        [
-            orm.GameMode(name="Singles"),
-            orm.GameMode(name="Teams"),
-            orm.GameState(name="Starting"),
-            orm.GameState(name="StartingFull"),
-            orm.GameState(name="InProgress"),
-            orm.GameState(name="Completed"),
-            orm.RatingType(name="Singles2"),
-            orm.RatingType(name="Singles3"),
-            orm.RatingType(name="Singles4"),
-            orm.RatingType(name="Teams"),
-        ]
-    )
-    session.flush()
-
-
 def test_session_scope_commits_and_rolls_back_against_postgres(
     postgres_engine,
     real_orm_module,
-    empty_postgres_schema,
+    migrated_postgres_schema,
 ):
-    real_orm_module.Base.metadata.create_all(postgres_engine)
     real_orm_module.Session.configure(bind=postgres_engine)
 
     with real_orm_module.session_scope() as session:
@@ -115,11 +111,10 @@ def test_auth_password_and_login_rules_against_postgres(
     postgres_engine,
     real_orm_module,
     real_auth_module,
-    empty_postgres_schema,
+    migrated_postgres_schema,
 ):
     password_hash = "a" * 64
     replacement_hash = "b" * 64
-    real_orm_module.Base.metadata.create_all(postgres_engine)
     session = make_postgres_session(postgres_engine)
     try:
         assert (
@@ -200,12 +195,10 @@ def test_auth_password_and_login_rules_against_postgres(
 def test_postgres_enforces_runtime_unique_constraints(
     postgres_engine,
     real_orm_module,
-    empty_postgres_schema,
+    migrated_postgres_schema,
 ):
-    real_orm_module.Base.metadata.create_all(postgres_engine)
     session = make_postgres_session(postgres_engine)
     try:
-        seed_lookup_rows(session, real_orm_module)
         session.add(real_orm_module.User(name="alice", password="secret"))
         session.commit()
 
@@ -237,12 +230,10 @@ def test_postgres_enforces_runtime_unique_constraints(
 def test_lookup_helpers_create_reuse_and_query_rows_against_postgres(
     postgres_engine,
     real_orm_module,
-    empty_postgres_schema,
+    migrated_postgres_schema,
 ):
-    real_orm_module.Base.metadata.create_all(postgres_engine)
     session = make_postgres_session(postgres_engine)
     try:
-        seed_lookup_rows(session, real_orm_module)
         lookup = real_orm_module.Lookup(session)
 
         with session.no_autoflush:
@@ -276,12 +267,10 @@ def test_logs2db_persists_completed_game_ratings_and_records_against_postgres(
     postgres_engine,
     real_orm_module,
     real_cron_module,
-    empty_postgres_schema,
+    migrated_postgres_schema,
 ):
-    real_orm_module.Base.metadata.create_all(postgres_engine)
     session = make_postgres_session(postgres_engine)
     try:
-        seed_lookup_rows(session, real_orm_module)
         lookup = real_orm_module.Lookup(session)
         logs2db = real_cron_module.Logs2DB(session, lookup)
         log = io.StringIO(
