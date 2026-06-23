@@ -9,7 +9,8 @@ Testing is the main safety mechanism for the planned refactor.
 - Golden replay tests use historical game logs to protect current gameplay behavior.
 - MySQL integration tests cover schema and persistence behavior.
 - Postgres marker tests cover the Docker-backed Postgres fixture, ORM metadata
-  creation, and the Alembic baseline.
+  creation, the Alembic baseline, session behavior, auth persistence, runtime
+  constraints, lookup persistence, and completed-game log import persistence.
 - End-to-end smoke tests cover the default Python gateway stack.
 
 ## Pytest Markers

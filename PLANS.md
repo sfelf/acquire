@@ -134,7 +134,8 @@ independently.
    - Make ORM models, migrations, and raw SQL portable while keeping MySQL
      tests green. In progress.
    - Run the persistence suite against both MySQL and Postgres during the
-     transition.
+     transition. Complete for schema, session, auth, constraints, lookup, and
+     completed-game log import coverage.
    - Switch local development defaults to Postgres after parity is proven.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented.
