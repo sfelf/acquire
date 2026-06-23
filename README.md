@@ -58,8 +58,8 @@ docker compose run --rm python-gateway python setup_database.py
 Then open [http://localhost:9000/](http://localhost:9000/).
 
 The first command generates the gitignored browser assets once for the Python
-gateway. Node.js is only used for that legacy client asset build step; the local
-HTTP and SockJS runtime is Python-owned.
+gateway with the modern npm client build helper; the local HTTP and SockJS
+runtime is Python-owned.
 
 See [docs/local-development.md](docs/local-development.md) for UI access, database initialization, and teardown.
 
@@ -88,20 +88,8 @@ before the MySQL-to-Postgres migration.
 
 ## Install dependencies
 
-Install nodejs. I followed the [official instructions](https://nodejs.org/en/download/package-manager/#debian-and-ubuntu-based-linux-distributions):
-
-```bash
-curl -sL https://deb.nodesource.com/setup_6.x | sudo -E bash -
-sudo apt-get install -y nodejs
-```
-
-Install yarn. I followed the [official instructions](https://yarnpkg.com/en/docs/cli/install):
-
-```bash
-curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update && sudo apt-get install yarn
-```
+Install Node.js 22 LTS or newer when you want to build client assets outside
+Docker.
 
 Install other dependencies.
 
@@ -112,7 +100,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip3 install -r requirements.txt
 
-yarn
+npm ci
+npm run build:client
 ```
 
 ## Download libraries for development use:

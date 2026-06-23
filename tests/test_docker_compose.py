@@ -42,6 +42,18 @@ def test_python_gateway_explains_missing_client_assets():
     assert "client-build" in services["python-gateway"]["command"]
 
 
+def test_client_asset_helper_uses_modern_node_and_npm_scripts():
+    services = _load_compose_services()
+    client_assets = services["client-assets"]
+    command = client_assets["command"]
+
+    assert client_assets["image"] == "node:22-bookworm-slim"
+    assert "npm ci" in command
+    assert "npm run build:css" in command
+    assert "npm run build:js" in command
+    assert "node-sass" not in command
+
+
 def test_e2e_fixture_uses_alembic_database_setup():
     fixture_text = (REPO_DIR / "tests" / "conftest.py").read_text()
 

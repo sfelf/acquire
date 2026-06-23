@@ -1,3 +1,5 @@
+@use 'sass:math';
+
 /* selected styles from normalize.css */
 
 html {
@@ -229,8 +231,8 @@ select {
   table-layout: fixed;
   td {
     border: 2px solid $color-table-border;
-    width: percentage(1 / 12);
-    height: percentage(1 / 9);
+    width: math.percentage(math.div(1, 12));
+    height: math.percentage(math.div(1, 9));
     overflow: hidden;
   }
 }
@@ -245,7 +247,7 @@ select {
     white-space: nowrap;
   }
   .name {
-    width: percentage(5 / 18);
+    width: math.percentage(math.div(5, 18));
     text-align: left;
     padding-left: 3px;
     &.missing {
@@ -269,13 +271,13 @@ select {
   .worldwide,
   .continental,
   .imperial {
-    width: percentage(1 / 18);
+    width: math.percentage(math.div(1, 18));
     text-align: center;
   }
   .cash,
   .net,
   .teams {
-    width: percentage(3 / 18);
+    width: math.percentage(math.div(3, 18));
     text-align: right;
     padding-right: 3px;
   }

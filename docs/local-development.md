@@ -5,7 +5,7 @@ The local development stack now uses the Python gateway as the default runtime:
 - Postgres stores local user and historical game data for the default Docker stack.
 - `server/http_server.py` runs the default FastAPI HTTP and SockJS-compatible gateway.
 - `server/server.py` owns the Python game state and gameplay command handling.
-- Node.js is used only by the opt-in client asset build helper until the frontend toolchain is modernized.
+- Node.js is used only by the opt-in client asset build helper.
 
 The Docker Compose setup is intended for local development only while deployment support matures.
 
@@ -28,7 +28,7 @@ Generate the gitignored browser assets:
 docker compose --profile client-build run --rm client-assets
 ```
 
-This one-time setup helper uses the legacy Node.js toolchain to compile
+This one-time setup helper uses the npm client build scripts to compile
 `client/main/css/main.css`, `client/stats/css/stats.css`,
 `client/main/js/enums.js`, and `client/main/js/main.js` into the bind-mounted
 checkout. It exits after the files are written and is not part of the default

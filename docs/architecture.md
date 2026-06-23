@@ -1,6 +1,6 @@
 # Architecture Notes
 
-Acquire currently runs as a Python backend with legacy client asset build
+Acquire currently runs as a Python backend with npm-based client asset build
 tooling.
 
 ## Runtime Components
@@ -9,13 +9,13 @@ tooling.
 - The Python server in `server/server.py` owns game state and the gameplay protocol.
 - Postgres is the default local Docker database; MySQL remains covered for
   parity and rollback testing.
-- Client assets are built from files under `client/` using the opt-in
-  `client-build` Docker Compose profile or the legacy shell scripts.
+- Client assets are built from files under `client/` using npm scripts or the
+  opt-in `client-build` Docker Compose profile.
 
 ## Modernization Direction
 
 The backend runtime is now Python-owned. The remaining Node.js usage is limited
-to the legacy frontend build toolchain until Phase 6 modernizes client assets.
+to frontend asset generation; webpack modernization remains a Phase 6 follow-up.
 
 ## Current Risk Areas
 
@@ -98,5 +98,4 @@ play, watching, leaving, disconnecting, and rejoining workflows.
    duplicate-session policy, and gameplay command delivery.
 4. E2E workflows run against the Python gateway by default.
 5. The Node gateway and distribution script have been removed. Remaining
-   Node.js usage is limited to the client asset build helper until the
-   frontend toolchain is modernized.
+   Node.js usage is limited to the npm client asset build helper.
