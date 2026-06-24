@@ -19,7 +19,8 @@ losing the MySQL persistence coverage that protects the refactor.
   to merge user, game, rating, record, or key/value data into non-empty target
   tables. Unit tests cover command behavior against synthetic schemas, and the
   Postgres marker suite runs a Docker-backed rehearsal from MySQL into
-  Postgres.
+  Postgres. The importer requires the derived `record` table because runtime
+  stats reads do not rebuild historical win/place records from imported games.
 - The legacy MySQL reset command has been removed. Alembic and
   `server/setup_database.py` are the supported schema setup paths.
 - MySQL integration tests cover schema creation, migrations, runtime
@@ -73,7 +74,11 @@ losing the MySQL persistence coverage that protects the refactor.
    runtime paths. Complete.
 9. Add tested MySQL-to-Postgres import tooling for cutover rehearsals.
    Complete for synthetic unit coverage and Docker-backed MySQL-to-Postgres
-   rehearsal coverage; real backup rehearsal remains pending.
+   rehearsal coverage. A partial staging backup rehearsal completed with
+   sanitized reports covering lookup, user, game, game-player, and key/value
+   rows from a legacy source that did not include rating rows or the derived
+   `record` table. Full persisted rating/record stats rehearsal remains
+   pending on a richer source dump.
 10. Remove MySQL-only dependencies, Compose services, environment variables, and
    documentation after the production cutover work has an approved execution
    plan and rollback owner.
@@ -104,11 +109,10 @@ primary-key sequences advance after explicit id imports. The same rehearsal
 also verifies the imported Postgres rows through the Python auth rules and ORM
 lookup helpers.
 
-Use `docs/postgres-backup-rehearsal.md` when a sanitized or staging MySQL backup
-is available for the real backup rehearsal. The runbook keeps backup files,
-credentials, generated reports, host-specific paths, and private data out of the
-repository and defines the pass/fail criteria for counting the rehearsal as
-complete.
+Use `docs/postgres-backup-rehearsal.md` when repeating the rehearsal with a new
+sanitized or staging MySQL backup. The runbook keeps backup files, credentials,
+generated reports, host-specific paths, and private data out of the repository
+and defines the pass/fail criteria for counting the rehearsal as complete.
 
 ## Production Cutover And Rollback Gate
 
@@ -169,10 +173,14 @@ reviewed script or deliberately discarded by the rollback owner.
 
 - Postgres driver selection is complete for the current migration baseline:
   `psycopg` 3 is used for Docker-backed marker tests.
-- The production import command still needs to be implemented and dry-run
-  validated against a real backup before any production cutover.
+- The production import command has been partially validated against a staging
+  backup rehearsal that covered game-history rows and stats read paths. The
+  staging source did not include rating rows or the derived `record` table, so
+  full persisted rating/record stats rehearsal remains pending on a richer
+  source dump. Production cutover still requires a fresh backup, a selected
+  maintenance window, and final pre-cutover validation.
 - The backup rehearsal runbook is documented in
-  `docs/postgres-backup-rehearsal.md`; the actual sanitized or staging backup
-  rehearsal still needs to be performed.
+  `docs/postgres-backup-rehearsal.md`; repeat it for any newer staging or
+  production-like backup before cutover.
 - The rollback owner and maintenance window must be selected before production
   deployment.

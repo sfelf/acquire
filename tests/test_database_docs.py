@@ -54,11 +54,14 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     ).read_text()
 
     assert "import tooling for cutover rehearsals" in plans
-    assert "real backup rehearsal remains pending" in plans
+    assert "61 sanitized\n     report rows" in plans
     assert "sanitized or staging backup rehearsal runbook. Complete." in plans
-    assert "sanitized or staging MySQL backup.\n     Pending." in plans
+    assert "Run the import rehearsal against a sanitized or staging MySQL backup." in plans
+    assert "In progress. The latest staging rehearsal proved" in plans
+    assert "full persisted rating/record stats rehearsal remains\n     pending" in plans
     assert "Docker-backed MySQL-to-Postgres" in plans
     assert "server/import_mysql_to_postgres.py" in database_notes
+    assert "requires the derived `record` table" in database_notes
     assert "docs/postgres-backup-rehearsal.md" in database_notes
     assert "Import Rehearsal Command" in database_notes
     assert "--dry-run" in database_notes
@@ -68,6 +71,9 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "primary-key sequences advance" in database_notes
     assert "Python auth rules" in database_notes
     assert "ORM\nlookup helpers" in database_notes
+    assert "partial staging backup rehearsal completed with\n   sanitized reports" in database_notes
+    assert "game-history rows and stats read paths" in database_notes
+    assert "full persisted rating/record stats rehearsal remains pending" in database_notes
     assert "keep backup files outside the repository" in backup_runbook
     assert "Do not commit dumps" in backup_runbook
     assert "ACQUIRE_DATABASE_URL=postgresql+psycopg://user:password@host:5432" in (

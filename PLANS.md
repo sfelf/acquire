@@ -146,15 +146,22 @@ independently.
      Complete for synthetic unit coverage and Docker-backed MySQL-to-Postgres
      rehearsal coverage. The Docker-backed rehearsal exercises sanitized JSON
      dry-run/import report generation and validation using the same workflow
-     documented for real backup rehearsal evidence; real backup rehearsal remains pending.
+     documented for real backup rehearsal evidence.
    - Document the sanitized or staging backup rehearsal runbook. Complete.
    - Run the import rehearsal against a sanitized or staging MySQL backup.
-     Pending.
+     In progress. The latest staging rehearsal proved lookup, user,
+     game-history, and key/value import/report validation for 61 sanitized
+     report rows, but the source dump still had no rating rows and no `record`
+     table. Because runtime stats reads do not rebuild historical `record` rows
+     from imported games, full persisted rating/record stats rehearsal remains
+     pending on a richer source dump before this gate can be marked complete.
+     The partial rehearsal also verified stats reads and the gateway e2e suite
+     against the imported Postgres target.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
      Legacy `initialize_database.py` reset command removal is complete;
      broader MySQL rollback-surface cleanup remains gated on production
-     cutover ownership and a real backup rehearsal.
+     cutover ownership.
 5. Modernize frontend tooling so client asset generation no longer depends on
    the legacy Node.js 6-era toolchain. Complete.
    - Replace Node 6 and `node-sass` with a modern npm/Dart Sass client asset
