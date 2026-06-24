@@ -1,4 +1,5 @@
 import importlib
+import json
 import os
 import sys
 import time
@@ -33,6 +34,15 @@ def import_module(real_orm_module):
         yield importlib.import_module("import_mysql_to_postgres")
     finally:
         sys.modules.pop("import_mysql_to_postgres", None)
+
+
+@pytest.fixture
+def report_validator_module(import_module):
+    sys.modules.pop("validate_import_reports", None)
+    try:
+        yield importlib.import_module("validate_import_reports")
+    finally:
+        sys.modules.pop("validate_import_reports", None)
 
 
 @pytest.fixture
@@ -257,6 +267,8 @@ def test_import_rehearsal_copies_mysql_rows_into_postgres(
     real_orm_module,
     real_auth_module,
     import_module,
+    report_validator_module,
+    tmp_path,
 ):
     mysql_url, postgres_url = mysql_postgres_rehearsal_urls
     mysql_engine = sqlalchemy.create_engine(mysql_url)
@@ -268,12 +280,73 @@ def test_import_rehearsal_copies_mysql_rows_into_postgres(
         _upgrade_database(postgres_engine)
         _seed_mysql_source(mysql_engine, real_orm_module)
 
-        report = import_module.import_database(mysql_url, postgres_url)
+        dry_run_report_path = tmp_path / "dry-run-report.json"
+        import_report_path = tmp_path / "import-report.json"
+        assert (
+            import_module.main(
+                [
+                    "--source-url",
+                    mysql_url,
+                    "--target-url",
+                    postgres_url,
+                    "--dry-run",
+                    "--report-json",
+                    str(dry_run_report_path),
+                ]
+            )
+            == 0
+        )
+        assert (
+            import_module.main(
+                [
+                    "--source-url",
+                    mysql_url,
+                    "--target-url",
+                    postgres_url,
+                    "--report-json",
+                    str(import_report_path),
+                ]
+            )
+            == 0
+        )
 
-        assert report.total_rows == 20
+        assert (
+            report_validator_module.main(
+                [
+                    "--dry-run-report",
+                    str(dry_run_report_path),
+                    "--import-report",
+                    str(import_report_path),
+                ]
+            )
+            == 0
+        )
+        dry_run_report_text = dry_run_report_path.read_text()
+        import_report_text = import_report_path.read_text()
+        assert "://" not in dry_run_report_text
+        assert "://" not in import_report_text
+        dry_run_payload = json.loads(dry_run_report_text)
+        import_payload = json.loads(import_report_text)
+
+        assert dry_run_payload["total_rows"] == 20
+        assert import_payload["total_rows"] == 20
         assert [
-            (table.table_name, table.source_count, table.target_count)
-            for table in report.tables
+            (table["table_name"], table["source_count"], table["target_count"])
+            for table in dry_run_payload["tables"]
+        ] == [
+            ("game_mode", 2, 2),
+            ("game_state", 4, 4),
+            ("rating_type", 4, 4),
+            ("user", 2, 0),
+            ("game", 1, 0),
+            ("game_player", 2, 0),
+            ("key_value", 1, 0),
+            ("rating", 2, 0),
+            ("record", 2, 0),
+        ]
+        assert [
+            (table["table_name"], table["source_count"], table["target_count"])
+            for table in import_payload["tables"]
         ] == [
             ("game_mode", 2, 2),
             ("game_state", 4, 4),
