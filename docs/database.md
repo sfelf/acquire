@@ -20,8 +20,8 @@ losing the MySQL persistence coverage that protects the refactor.
   tables. Unit tests cover command behavior against synthetic schemas, and the
   Postgres marker suite runs a Docker-backed rehearsal from MySQL into
   Postgres.
-- `server/initialize_database.py` remains as a legacy local reset path until
-  MySQL rollback and reset workflows are replaced.
+- The legacy MySQL reset command has been removed. Alembic and
+  `server/setup_database.py` are the supported schema setup paths.
 - MySQL integration tests cover schema creation, migrations, runtime
   constraints, auth persistence, lookup persistence, transaction behavior, and
   completed-game log import persistence. Postgres marker tests now cover
@@ -34,8 +34,6 @@ losing the MySQL persistence coverage that protects the refactor.
 - `server/orm.py` uses explicit `ACQUIRE_DATABASE_URL` when present, structured
   `POSTGRES_*` environment variables for the local Docker Postgres path, and
   keeps the legacy `MYSQL_*` fallback for MySQL parity and rollback work.
-- `server/initialize_database.py` shells out to the `mysql` CLI, recreates the
-  schema with `utf8mb4_bin`, and seeds lookup rows for the legacy reset path.
 - `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
   SQLAlchemy types with MySQL variants and applies MySQL table collation
   options only when running against MySQL.
@@ -67,8 +65,8 @@ losing the MySQL persistence coverage that protects the refactor.
    both MySQL and Postgres until parity is proven. Complete for the current
    migration baseline.
 6. Replace `initialize_database.py` with Alembic upgrade plus seed data in
-   local Docker and e2e setup. Complete. Remove the legacy reset command after
-   the MySQL rollback workflow is documented.
+   local Docker and e2e setup. Complete. The legacy reset command has been
+   removed.
 7. Switch local development defaults from MySQL to Postgres after the dual
    database test suite is green. Complete.
 8. Document the production deployment and rollback gate before removing MySQL
@@ -163,8 +161,7 @@ reviewed script or deliberately discarded by the rollback owner.
   rollback confidence from the legacy engine.
 - Keep the MySQL Compose profile until production rollback no longer depends on
   quickly starting a local MySQL parity stack.
-- Remove `server/initialize_database.py` only after the Alembic setup path and
-  rollback runbook cover local reset and production recovery workflows.
+- Keep Alembic and `server/setup_database.py` as the only schema setup paths.
 - Remove the legacy `MYSQL_*` ORM fallback only after production deployment no
   longer needs the application to connect to MySQL during rollback.
 

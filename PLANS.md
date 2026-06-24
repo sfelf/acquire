@@ -150,6 +150,9 @@ independently.
      Pending.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
+     Legacy `initialize_database.py` reset command removal is complete;
+     broader MySQL rollback-surface cleanup remains gated on production
+     cutover ownership and a real backup rehearsal.
 5. Modernize frontend tooling so client asset generation no longer depends on
    the legacy Node.js 6-era toolchain. Complete.
    - Replace Node 6 and `node-sass` with a modern npm/Dart Sass client asset
