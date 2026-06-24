@@ -145,7 +145,8 @@ independently.
    - Add tested MySQL-to-Postgres import tooling for cutover rehearsals.
      Complete for synthetic unit coverage and Docker-backed MySQL-to-Postgres
      rehearsal coverage. The tool can emit sanitized JSON count reports for
-     real backup rehearsal evidence; real backup rehearsal remains pending.
+     real backup rehearsal evidence, and those reports have a validator;
+     real backup rehearsal remains pending.
    - Document the sanitized or staging backup rehearsal runbook. Complete.
    - Run the import rehearsal against a sanitized or staging MySQL backup.
      Pending.

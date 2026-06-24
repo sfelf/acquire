@@ -59,13 +59,24 @@ strings to the repository.
    The JSON report contains only dry-run mode, total rows, table names, and
    source/target counts. It must not include connection URLs, credentials,
    hostnames, backup paths, or row contents.
-7. Run the MySQL and Postgres pytest marker suites as independent database
+7. Validate the report pair before using it as rehearsal evidence:
+
+   ```bash
+   uv run python server/validate_import_reports.py \
+     --dry-run-report /tmp/acquire-rehearsal/dry-run-report.json \
+     --import-report /tmp/acquire-rehearsal/import-report.json
+   ```
+
+   This check verifies that both reports use the sanitized report shape, that
+   the dry-run and import source counts match, and that every imported target
+   count equals its source count.
+8. Run the MySQL and Postgres pytest marker suites as independent database
    compatibility checks. Keep these marker suites pointed at separate
    disposable test databases, or leave their test URLs unset so their fixtures
    create their own databases. Do not point marker test URLs at the restored
    MySQL source or imported Postgres target because those fixtures reset
    application tables.
-8. Start the local gateway against the imported Postgres database before running
+9. Start the local gateway against the imported Postgres database before running
    e2e checks as evidence for the imported data. The default Compose gateway
    points at the fresh `postgres` service, and the gateway requires generated
    client assets before it can serve the UI. Build the client assets first:
@@ -101,10 +112,10 @@ strings to the repository.
    imported-data behavior, point `ACQUIRE_E2E_URL` at this gateway. If
    `ACQUIRE_E2E_URL` is unset, the default Docker-backed e2e fixture creates a
    fresh database instead of using the imported rehearsal target.
-9. Verify representative application behavior against the imported Postgres
+10. Verify representative application behavior against the imported Postgres
    database: login, global chat, game creation, joining, starting, tile play,
    stats pages, and historical replay checks.
-10. Record the sanitized rehearsal outcome in the project notes or PR summary
+11. Record the sanitized rehearsal outcome in the project notes or PR summary
    without including credentials, host-specific paths, or private data.
 
 ## Pass Criteria
@@ -115,6 +126,7 @@ strings to the repository.
   expectations while non-lookup target tables remain empty.
 - The actual import JSON report matches source and target row counts for every
   copied table.
+- `server/validate_import_reports.py` accepts the dry-run/import report pair.
 - Imported Postgres rows pass application-level checks through Python auth
   rules, ORM lookup helpers, completed-game rating checks, stats checks, and
   historical replay checks.
