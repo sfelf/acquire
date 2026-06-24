@@ -1,0 +1,318 @@
+"""Validate sanitized MySQL-to-Postgres import rehearsal reports."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
+from import_mysql_to_postgres import BASELINE_LOOKUP_TABLES, TABLE_ORDER
+
+REPORT_KEYS = frozenset({"dry_run", "total_rows", "tables"})
+TABLE_KEYS = frozenset({"table_name", "source_count", "target_count"})
+EXPECTED_TABLE_ORDER = tuple(TABLE_ORDER)
+
+
+class ReportValidationError(RuntimeError):
+    """Raised when an import rehearsal report is malformed or inconsistent."""
+
+
+@dataclass(frozen=True)
+class TableCounts:
+    """Represent sanitized count data for one imported table."""
+
+    table_name: str
+    source_count: int
+    target_count: int
+
+
+@dataclass(frozen=True)
+class ImportReport:
+    """Represent a sanitized import rehearsal report."""
+
+    dry_run: bool
+    total_rows: int
+    tables: tuple[TableCounts, ...]
+
+
+def load_report(path: Path) -> ImportReport:
+    """Load and validate a sanitized import rehearsal report.
+
+    Report files are intended to be safe to reference from project notes or PR
+    summaries. This parser rejects unexpected fields so connection URLs,
+    credentials, backup paths, hostnames, or row contents cannot quietly become
+    part of the accepted report contract.
+
+    Args:
+        path: JSON report path to load.
+
+    Returns:
+        Parsed import report.
+
+    Raises:
+        ReportValidationError: If the JSON payload is malformed or contains
+            unexpected fields.
+    """
+    try:
+        payload = json.loads(path.read_text(), object_pairs_hook=_reject_duplicate_keys)
+    except json.JSONDecodeError as exc:
+        raise ReportValidationError(f"{path}: invalid JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise ReportValidationError(f"{path}: report must be a JSON object")
+    _validate_keys(path, payload, REPORT_KEYS)
+
+    dry_run = payload["dry_run"]
+    total_rows = payload["total_rows"]
+    tables = payload["tables"]
+    if not isinstance(dry_run, bool):
+        raise ReportValidationError(f"{path}: dry_run must be a boolean")
+    if not _is_nonnegative_int(total_rows):
+        raise ReportValidationError(f"{path}: total_rows must be a non-negative integer")
+    if not isinstance(tables, list):
+        raise ReportValidationError(f"{path}: tables must be a list")
+
+    parsed_tables = tuple(_parse_table(path, index, table) for index, table in enumerate(tables))
+    _validate_table_order(path, parsed_tables)
+    source_total = sum(table.source_count for table in parsed_tables)
+    if source_total != total_rows:
+        raise ReportValidationError(
+            f"{path}: total_rows {total_rows} does not match source row total {source_total}"
+        )
+    return ImportReport(dry_run=dry_run, total_rows=total_rows, tables=parsed_tables)
+
+
+def validate_report_pair(dry_run_report: ImportReport, import_report: ImportReport) -> None:
+    """Validate that dry-run and import reports describe the same source data.
+
+    The dry-run report proves the source row counts reviewed before mutation.
+    The import report proves those same rows were copied and counted in the
+    target. This check intentionally compares counts only; it does not inspect
+    row contents or require private backup data.
+
+    Args:
+        dry_run_report: Report produced with `--dry-run`.
+        import_report: Report produced by the completed import.
+
+    Raises:
+        ReportValidationError: If modes, table order, source counts, totals, or
+            imported target counts are inconsistent.
+    """
+    if not dry_run_report.dry_run:
+        raise ReportValidationError("dry-run report must have dry_run=true")
+    if import_report.dry_run:
+        raise ReportValidationError("import report must have dry_run=false")
+    if len(dry_run_report.tables) != len(import_report.tables):
+        raise ReportValidationError("report table counts differ")
+    if dry_run_report.total_rows != import_report.total_rows:
+        raise ReportValidationError("report total_rows values differ")
+    _validate_table_order("dry-run report", dry_run_report.tables)
+    _validate_table_order("import report", import_report.tables)
+    _validate_dry_run_target_counts(dry_run_report)
+
+    for dry_run_table, import_table in zip(
+        dry_run_report.tables,
+        import_report.tables,
+        strict=True,
+    ):
+        if dry_run_table.source_count != import_table.source_count:
+            raise ReportValidationError(
+                f"{dry_run_table.table_name}: source counts differ "
+                f"({dry_run_table.source_count} != {import_table.source_count})"
+            )
+        if import_table.target_count != import_table.source_count:
+            raise ReportValidationError(
+                f"{import_table.table_name}: imported target count "
+                f"{import_table.target_count} does not match source count "
+                f"{import_table.source_count}"
+            )
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for report validation.
+
+    Args:
+        argv: Optional argument list for tests. Defaults to process arguments.
+
+    Returns:
+        Parsed command-line namespace.
+    """
+    parser = argparse.ArgumentParser(
+        description="Validate sanitized MySQL-to-Postgres import rehearsal reports."
+    )
+    parser.add_argument("--dry-run-report", required=True, type=Path)
+    parser.add_argument("--import-report", required=True, type=Path)
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the report validation command-line interface.
+
+    Args:
+        argv: Optional argument list for tests. Defaults to process arguments.
+
+    Returns:
+        Process exit code.
+    """
+    args = parse_args(argv)
+    dry_run_report = load_report(args.dry_run_report)
+    import_report = load_report(args.import_report)
+    validate_report_pair(dry_run_report, import_report)
+    print(
+        "validated import reports for "
+        f"{import_report.total_rows} rows across {len(import_report.tables)} tables"
+    )
+    return 0
+
+
+def _parse_table(path: Path, index: int, payload: object) -> TableCounts:
+    """Parse one table-count entry from a report.
+
+    Args:
+        path: Report path used in validation messages.
+        index: Position of the table entry in the report.
+        payload: Raw JSON value for the table entry.
+
+    Returns:
+        Parsed table-count entry.
+
+    Raises:
+        ReportValidationError: If the table entry is malformed.
+    """
+    if not isinstance(payload, Mapping):
+        raise ReportValidationError(f"{path}: tables[{index}] must be an object")
+    _validate_keys(path, payload, TABLE_KEYS, prefix=f"tables[{index}]")
+
+    table_name = payload["table_name"]
+    source_count = payload["source_count"]
+    target_count = payload["target_count"]
+    if not isinstance(table_name, str) or not table_name:
+        raise ReportValidationError(f"{path}: tables[{index}].table_name must be a string")
+    if not _is_nonnegative_int(source_count):
+        raise ReportValidationError(
+            f"{path}: tables[{index}].source_count must be a non-negative integer"
+        )
+    if not _is_nonnegative_int(target_count):
+        raise ReportValidationError(
+            f"{path}: tables[{index}].target_count must be a non-negative integer"
+        )
+    return TableCounts(
+        table_name=table_name,
+        source_count=source_count,
+        target_count=target_count,
+    )
+
+
+def _validate_table_order(context: object, tables: tuple[TableCounts, ...]) -> None:
+    """Validate that report tables match the import tool's table order.
+
+    Args:
+        context: Report path or label used in validation messages.
+        tables: Parsed table-count entries.
+
+    Raises:
+        ReportValidationError: If table names are missing, duplicated,
+            unexpected, or out of order.
+    """
+    table_names = tuple(table.table_name for table in tables)
+    if table_names != EXPECTED_TABLE_ORDER:
+        raise ReportValidationError(
+            f"{context}: tables must match expected order: {', '.join(EXPECTED_TABLE_ORDER)}"
+        )
+
+
+def _validate_dry_run_target_counts(dry_run_report: ImportReport) -> None:
+    """Validate dry-run target counts against the expected empty target shape.
+
+    Lookup tables may already contain Alembic-seeded rows matching the source.
+    Mutable application tables must be empty during the dry run, otherwise the
+    rehearsal did not prove the target was safe to import into.
+
+    Args:
+        dry_run_report: Parsed dry-run report.
+
+    Raises:
+        ReportValidationError: If a lookup table count is inconsistent or a
+            mutable table is not empty.
+    """
+    for table in dry_run_report.tables:
+        if table.table_name in BASELINE_LOOKUP_TABLES:
+            if table.target_count not in (0, table.source_count):
+                raise ReportValidationError(
+                    f"{table.table_name}: dry-run lookup target count {table.target_count} "
+                    f"must be 0 or match source count {table.source_count}"
+                )
+        elif table.target_count != 0:
+            raise ReportValidationError(
+                f"{table.table_name}: dry-run target count {table.target_count} "
+                "must be 0 for mutable tables"
+            )
+
+
+def _validate_keys(
+    path: Path,
+    payload: Mapping[object, object],
+    expected_keys: frozenset[str],
+    *,
+    prefix: str = "report",
+) -> None:
+    """Validate that a JSON object has exactly the expected keys.
+
+    Args:
+        path: Report path used in validation messages.
+        payload: JSON object to inspect.
+        expected_keys: Exact key set required for the object.
+        prefix: Human-readable object label for validation messages.
+
+    Raises:
+        ReportValidationError: If any expected key is missing or any
+            unexpected key is present.
+    """
+    keys = set(payload)
+    if keys != expected_keys:
+        unexpected_keys = sorted(str(key) for key in keys - expected_keys)
+        missing_keys = sorted(expected_keys - keys)
+        details = []
+        if unexpected_keys:
+            details.append(f"unexpected keys: {', '.join(unexpected_keys)}")
+        if missing_keys:
+            details.append(f"missing keys: {', '.join(missing_keys)}")
+        raise ReportValidationError(f"{path}: {prefix} has {'; '.join(details)}")
+
+
+def _reject_duplicate_keys(pairs: Sequence[tuple[str, object]]) -> dict[str, object]:
+    """Return a JSON object while rejecting duplicate keys.
+
+    Args:
+        pairs: JSON object key/value pairs in source order.
+
+    Returns:
+        Dictionary built from the key/value pairs.
+
+    Raises:
+        ReportValidationError: If a key appears more than once in the same JSON
+            object.
+    """
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ReportValidationError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _is_nonnegative_int(value: object) -> bool:
+    """Return whether a value is a non-boolean non-negative integer.
+
+    Args:
+        value: Value to inspect.
+
+    Returns:
+        `True` when `value` is an `int`, is not a `bool`, and is non-negative.
+    """
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
