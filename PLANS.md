@@ -178,7 +178,7 @@ independently.
    - Document production image build, migration, runtime, and AWS deployment
      notes. Complete.
    - Add cloud-specific deployment configuration after the production container
-     contract is reviewed. Pending.
+     contract is reviewed. Complete for optional ECR image publishing.
 
 ## Open Notes
 

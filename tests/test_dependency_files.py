@@ -2,6 +2,8 @@ import json
 import tomllib
 from pathlib import Path
 
+import yaml
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -133,6 +135,29 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     assert "docker build -t acquire:production ." in deployment_notes
     assert "python setup_database.py" in deployment_notes
     assert "AWS" in deployment_notes
+
+
+def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> None:
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "production-image.yml").read_text()
+    workflow_data = yaml.safe_load(workflow)
+    deployment_notes = (REPOSITORY_ROOT / "docs" / "deployment.md").read_text()
+    build_job = workflow_data["jobs"]["build"]
+    publish_job = workflow_data["jobs"]["publish-ecr"]
+
+    assert {"build", "publish-ecr"} <= set(workflow_data["jobs"])
+    assert build_job.get("permissions") in (None, {"contents": "read"})
+    assert publish_job["permissions"] == {"contents": "read", "id-token": "write"}
+    assert "docker build -t acquire:production-test ." in workflow
+    assert workflow.count("production image smoke ok") == 2
+    assert "aws-actions/configure-aws-credentials@v4" in workflow
+    assert "aws-actions/amazon-ecr-login@v2" in workflow
+    assert "AWS_ROLE_TO_ASSUME" in workflow
+    assert "AWS_ECR_REPOSITORY" in workflow
+    assert "docker push" in workflow
+
+    assert "AWS_ROLE_TO_ASSUME" in deployment_notes
+    assert "AWS_ECR_REPOSITORY" in deployment_notes
+    assert "commit SHA" in deployment_notes
 
 
 def test_python_quality_config_scopes_type_checker_exceptions() -> None:
