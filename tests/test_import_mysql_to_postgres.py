@@ -1,4 +1,5 @@
 import importlib
+import json
 
 import pytest
 import sqlalchemy
@@ -305,6 +306,155 @@ def test_main_prints_import_report(import_module, capsys, monkeypatch):
 
     assert exit_code == 0
     assert capsys.readouterr().out == "dry run covered 2 rows\nuser: source=2 target=0\n"
+
+
+def test_write_report_json_records_sanitized_table_counts(import_module, tmp_path):
+    report = import_module.ImportReport(
+        dry_run=False,
+        tables=(
+            import_module.TableImportResult(
+                table_name="user",
+                source_count=2,
+                target_count=2,
+            ),
+            import_module.TableImportResult(
+                table_name="game",
+                source_count=1,
+                target_count=1,
+            ),
+        ),
+    )
+    report_path = tmp_path / "nested" / "import-report.json"
+
+    import_module.write_report_json(report, report_path)
+
+    payload = json.loads(report_path.read_text())
+    assert payload == {
+        "dry_run": False,
+        "total_rows": 3,
+        "tables": [
+            {"source_count": 2, "table_name": "user", "target_count": 2},
+            {"source_count": 1, "table_name": "game", "target_count": 1},
+        ],
+    }
+    assert "mysql" not in report_path.read_text()
+    assert "postgres" not in report_path.read_text()
+    assert "://" not in report_path.read_text()
+
+
+def test_main_writes_report_json_when_requested(import_module, capsys, monkeypatch, tmp_path):
+    report = import_module.ImportReport(
+        dry_run=True,
+        tables=(
+            import_module.TableImportResult(
+                table_name="user",
+                source_count=2,
+                target_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        import_module,
+        "import_database",
+        lambda source_url, target_url, *, dry_run: report,
+    )
+    report_path = tmp_path / "import-report.json"
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://user:password@source/acquire",
+            "--target-url",
+            "postgresql+psycopg://user:password@target/acquire",
+            "--dry-run",
+            "--report-json",
+            str(report_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert json.loads(report_path.read_text()) == {
+        "dry_run": True,
+        "total_rows": 2,
+        "tables": [{"source_count": 2, "table_name": "user", "target_count": 0}],
+    }
+    assert capsys.readouterr().out == "dry run covered 2 rows\nuser: source=2 target=0\n"
+
+
+def test_main_preflights_report_path_before_importing(
+    import_module,
+    monkeypatch,
+    tmp_path,
+):
+    call_order = []
+    report = import_module.ImportReport(
+        dry_run=False,
+        tables=(
+            import_module.TableImportResult(
+                table_name="user",
+                source_count=2,
+                target_count=2,
+            ),
+        ),
+    )
+
+    def record_preflight(path):
+        call_order.append(("preflight", path.exists()))
+        path.write_text("")
+
+    def record_import(source_url, target_url, *, dry_run):
+        call_order.append(("import", dry_run))
+        return report
+
+    monkeypatch.setattr(import_module, "preflight_report_json_path", record_preflight)
+    monkeypatch.setattr(import_module, "import_database", record_import)
+    report_path = tmp_path / "import-report.json"
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+            "--report-json",
+            str(report_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert call_order == [("preflight", False), ("import", False)]
+    assert json.loads(report_path.read_text())["total_rows"] == 2
+
+
+def test_main_fails_report_path_preflight_before_importing(
+    import_module,
+    monkeypatch,
+    tmp_path,
+):
+    import_calls = []
+    monkeypatch.setattr(
+        import_module,
+        "import_database",
+        lambda source_url, target_url, *, dry_run: import_calls.append(
+            (source_url, target_url, dry_run)
+        ),
+    )
+    report_path = tmp_path / "existing-directory"
+    report_path.mkdir()
+
+    with pytest.raises(IsADirectoryError):
+        import_module.main(
+            [
+                "--source-url",
+                "mysql+mysqlconnector://source",
+                "--target-url",
+                "postgresql+psycopg://target",
+                "--report-json",
+                str(report_path),
+            ]
+        )
+
+    assert import_calls == []
 
 
 def test_reset_postgres_sequence_advances_single_primary_key(import_module, orm_module):

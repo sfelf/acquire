@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 import orm
 import sqlalchemy
@@ -285,7 +287,60 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Validate the target and report counts without inserting rows",
     )
+    parser.add_argument(
+        "--report-json",
+        type=Path,
+        help="Write a sanitized JSON report containing import mode and table counts",
+    )
     return parser.parse_args(argv)
+
+
+def write_report_json(report: ImportReport, path: Path) -> None:
+    """Write a sanitized import report as JSON.
+
+    The report intentionally contains only table names, source counts, target
+    counts, dry-run mode, and total row count. It excludes connection URLs,
+    hostnames, credentials, and filesystem paths so rehearsal evidence can be
+    referenced from PRs or project notes without leaking environment details.
+
+    Args:
+        report: Import report returned by the rehearsal command.
+        path: Destination JSON path.
+    """
+    payload = {
+        "dry_run": report.dry_run,
+        "total_rows": report.total_rows,
+        "tables": [
+            {
+                "table_name": table.table_name,
+                "source_count": table.source_count,
+                "target_count": table.target_count,
+            }
+            for table in report.tables
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def preflight_report_json_path(path: Path) -> None:
+    """Validate that the JSON report destination is writable before import.
+
+    Non-dry-run imports commit data before the command can write its final
+    evidence report. This preflight creates parent directories and opens the
+    destination for writing first so an invalid path fails before database
+    mutation starts. The final report write later replaces this empty probe
+    file with the sanitized JSON payload.
+
+    Args:
+        path: Destination JSON path requested by the operator.
+
+    Raises:
+        OSError: If the path cannot be created, opened, or written.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w"):
+        pass
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -298,11 +353,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         Process exit code.
     """
     args = parse_args(argv)
+    if args.report_json is not None:
+        preflight_report_json_path(args.report_json)
     report = import_database(args.source_url, args.target_url, dry_run=args.dry_run)
     mode = "dry run" if report.dry_run else "import"
     print(f"{mode} covered {report.total_rows} rows")
     for table in report.tables:
         print(f"{table.table_name}: source={table.source_count} target={table.target_count}")
+    if args.report_json is not None:
+        write_report_json(report, args.report_json)
     return 0
 
 
