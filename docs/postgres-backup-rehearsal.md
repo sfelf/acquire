@@ -34,17 +34,31 @@ strings to the repository.
    ```
 
 5. Run `server/import_mysql_to_postgres.py` with explicit placeholder source and
-   target URLs, `--dry-run`, and review the per-table source counts:
+   target URLs, `--dry-run`, and a report path outside the repository. Review
+   the per-table source counts:
 
    ```bash
    uv run python server/import_mysql_to_postgres.py \
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
-     --dry-run
+     --dry-run \
+     --report-json /tmp/acquire-rehearsal/dry-run-report.json
    ```
 
 6. Run the import without `--dry-run` only after the dry-run source counts match
-   expectations and the non-lookup target tables are confirmed empty.
+   expectations and the non-lookup target tables are confirmed empty. Write a
+   second report for the completed import:
+
+   ```bash
+   uv run python server/import_mysql_to_postgres.py \
+     --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
+     --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
+     --report-json /tmp/acquire-rehearsal/import-report.json
+   ```
+
+   The JSON report contains only dry-run mode, total rows, table names, and
+   source/target counts. It must not include connection URLs, credentials,
+   hostnames, backup paths, or row contents.
 7. Run the MySQL and Postgres pytest marker suites as independent database
    compatibility checks. Keep these marker suites pointed at separate
    disposable test databases, or leave their test URLs unset so their fixtures
@@ -97,9 +111,9 @@ strings to the repository.
 
 - The backup restore succeeds into a disposable MySQL database.
 - Alembic creates the target Postgres schema at the expected head revision.
-- The import dry run reports source row counts that match expectations while
-  non-lookup target tables remain empty.
-- The actual import report matches source and target row counts for every
+- The import dry-run JSON report records source row counts that match
+  expectations while non-lookup target tables remain empty.
+- The actual import JSON report matches source and target row counts for every
   copied table.
 - Imported Postgres rows pass application-level checks through Python auth
   rules, ORM lookup helpers, completed-game rating checks, stats checks, and

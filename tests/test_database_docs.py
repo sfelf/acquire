@@ -80,7 +80,10 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "--target-url postgresql+psycopg://user:password@host:5432" in (
         backup_runbook
     )
-    assert "dry run reports source row counts that match expectations" in backup_runbook
+    assert "--report-json /tmp/acquire-rehearsal/dry-run-report.json" in backup_runbook
+    assert "--report-json /tmp/acquire-rehearsal/import-report.json" in backup_runbook
+    assert "must not include connection URLs, credentials" in backup_runbook
+    assert "dry-run JSON report records source row counts" in backup_runbook
     assert "separate\n   disposable test databases" in backup_runbook
     assert "Do not point marker test URLs at the restored\n   MySQL source" in (
         backup_runbook
