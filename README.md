@@ -87,9 +87,8 @@ uv run alembic current
 
 The initial migration is a baseline for the current MySQL schema and required
 lookup rows. Use `upgrade head` for an empty schema. For a database that was
-already created by the legacy `initialize_database.py` reset command and
-matches the current schema and lookup rows, mark the baseline as already
-applied instead:
+already created by the pre-Alembic reset workflow and matches the current
+schema and lookup rows, mark the baseline as already applied instead:
 
 ```bash
 uv run alembic stamp head

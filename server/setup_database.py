@@ -72,8 +72,8 @@ def alembic_config() -> Config:
 def is_unstamped_legacy_schema() -> bool:
     """Return whether the database has the baseline schema but no Alembic stamp.
 
-    Local development databases created by the legacy `initialize_database.py`
-    command already contain the baseline application tables but do not contain
+    Local development databases created by the pre-Alembic reset command
+    already contain the baseline application tables but do not contain
     Alembic's version table. Stamping those databases before upgrade lets them
     move onto the migration path without dropping local data.
 

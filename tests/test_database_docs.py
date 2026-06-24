@@ -108,8 +108,10 @@ def test_local_database_setup_docs_use_alembic_command() -> None:
     local_development = (REPOSITORY_ROOT / "docs" / "local-development.md").read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
 
+    assert not (REPOSITORY_ROOT / "server" / "initialize_database.py").exists()
     assert "python setup_database.py" in readme
     assert "python setup_database.py" in local_development
     assert "server/setup_database.py" in database_notes
+    assert "The legacy MySQL reset command has been removed" in database_notes
     assert "python initialize_database.py" not in readme
     assert "python initialize_database.py" not in local_development

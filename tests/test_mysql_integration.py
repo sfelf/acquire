@@ -328,56 +328,6 @@ def _table_collation_contract(inspector):
     }
 
 
-def test_initialize_database_seeds_lookup_rows_in_mysql(
-    mysql_engine,
-    real_orm_module,
-    empty_mysql_schema,
-    monkeypatch,
-):
-    sys.modules.pop("initialize_database", None)
-    initialize_database = importlib.import_module("initialize_database")
-    monkeypatch.setattr(initialize_database.orm, "engine", mysql_engine)
-    initialize_database.orm.Session.configure(bind=mysql_engine)
-    reset_calls = []
-
-    def reset_schema(command):
-        reset_calls.append(command)
-        real_orm_module.Base.metadata.drop_all(mysql_engine)
-        return 0
-
-    monkeypatch.setattr(initialize_database.subprocess, "call", reset_schema)
-
-    try:
-        initialize_database.main()
-        initialize_database.main()
-
-        session = make_mysql_session(mysql_engine)
-        try:
-            assert [
-                row.name
-                for row in session.query(real_orm_module.GameMode).order_by(
-                    real_orm_module.GameMode.game_mode_id
-                )
-            ] == ["Singles", "Teams"]
-            assert [
-                row.name
-                for row in session.query(real_orm_module.GameState).order_by(
-                    real_orm_module.GameState.game_state_id
-                )
-            ] == ["Starting", "StartingFull", "InProgress", "Completed"]
-            assert [
-                row.name
-                for row in session.query(real_orm_module.RatingType).order_by(
-                    real_orm_module.RatingType.rating_type_id
-                )
-            ] == ["Singles2", "Singles3", "Singles4", "Teams"]
-            assert len(reset_calls) == 2
-        finally:
-            session.close()
-    finally:
-        sys.modules.pop("initialize_database", None)
-
-
 def test_session_scope_commits_and_rolls_back_against_mysql(
     mysql_engine,
     real_orm_module,
