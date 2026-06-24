@@ -155,8 +155,18 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert "AWS_ECR_REPOSITORY" in workflow
     assert "docker push" in workflow
 
+    assert "GitHub Variables" in deployment_notes
+    assert "AWS ECR Publishing Setup" in deployment_notes
     assert "AWS_ROLE_TO_ASSUME" in deployment_notes
     assert "AWS_ECR_REPOSITORY" in deployment_notes
+    assert "token.actions.githubusercontent.com" in deployment_notes
+    assert "sts:AssumeRoleWithWebIdentity" in deployment_notes
+    assert "ecr:GetAuthorizationToken" in deployment_notes
+    assert "ecr:PutImage" in deployment_notes
+    assert "repo:sfelf/acquire:ref:refs/heads/main" in deployment_notes
+    assert "repo:sfelf/acquire:ref:refs/heads/feature/modernization-refactor" in (
+        deployment_notes
+    )
     assert "commit SHA" in deployment_notes
 
 
