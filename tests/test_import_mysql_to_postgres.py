@@ -250,6 +250,25 @@ def test_import_engines_dry_run_reports_counts_without_writing(
     assert table_rows(target_engine, orm_module, "game") == []
 
 
+@pytest.mark.parametrize("table_name", ["key_value", "record"])
+def test_import_engines_rejects_missing_required_source_tables(
+    import_module,
+    orm_module,
+    source_engine,
+    target_engine,
+    table_name,
+):
+    with source_engine.begin() as connection:
+        connection.execute(sqlalchemy.text(f"drop table {table_name}"))
+    seed_matching_lookup_rows(target_engine, orm_module)
+
+    with pytest.raises(
+        import_module.ImportValidationError,
+        match=f"source database is missing required tables: {table_name}",
+    ):
+        import_module.import_engines(source_engine, target_engine)
+
+
 def test_import_database_builds_engines_from_urls(import_module, orm_module, tmp_path):
     source_url = f"sqlite:///{tmp_path / 'source.db'}"
     target_url = f"sqlite:///{tmp_path / 'target.db'}"

@@ -122,6 +122,7 @@ def import_engines(
     tables = _ordered_tables(TABLE_ORDER)
 
     with source_engine.connect() as source_connection, target_engine.begin() as target_connection:
+        _validate_source_tables(source_connection, tables)
         for table in tables:
             rows = _read_rows(source_connection, table)
             target_rows = _read_rows(target_connection, table)
@@ -158,6 +159,35 @@ def _ordered_tables(table_names: Sequence[str]) -> tuple[Table, ...]:
         Tuple of SQLAlchemy table objects.
     """
     return tuple(orm.Base.metadata.tables[table_name] for table_name in table_names)
+
+
+def _validate_source_tables(connection: Connection, tables: tuple[Table, ...]) -> None:
+    """Validate that the source database has every import table.
+
+    The importer requires every application table, including the derived
+    `record` table. Runtime stats reads do not rebuild historical record rows
+    from imported games, so accepting a source without `record` would silently
+    reset win/place stats after cutover.
+
+    Args:
+        connection: SQLAlchemy connection bound to the source database.
+        tables: Application tables expected by the import workflow.
+
+    Raises:
+        ImportValidationError: If the source database is missing a required
+            application table.
+    """
+    source_table_names = set(sqlalchemy.inspect(connection).get_table_names())
+    missing_required_tables = [
+        table.name
+        for table in tables
+        if table.name not in source_table_names
+    ]
+    if missing_required_tables:
+        raise ImportValidationError(
+            "source database is missing required tables: "
+            + ", ".join(missing_required_tables)
+        )
 
 
 def _validate_target_table(
