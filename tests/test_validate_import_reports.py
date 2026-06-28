@@ -366,6 +366,63 @@ def test_validate_report_pair_rejects_inconsistent_reports(
         validate_import_reports.validate_report_pair(dry_run_report, import_report)
 
 
+def test_validate_report_pair_accepts_required_source_tables_with_rows():
+    dry_run_report = report_model(dry_run=True)
+    import_report = report_model(dry_run=False)
+
+    validate_import_reports.validate_report_pair(
+        dry_run_report,
+        import_report,
+        required_source_tables=["rating", "record"],
+    )
+
+
+def test_validate_report_pair_rejects_required_source_table_without_rows():
+    dry_run_report = report_model(dry_run=True)
+    import_report = report_model(dry_run=False)
+    dry_run_report = validate_import_reports.ImportReport(
+        dry_run=True,
+        total_rows=dry_run_report.total_rows - SOURCE_COUNTS["record"],
+        tables=(
+            *dry_run_report.tables[:-1],
+            validate_import_reports.TableCounts("record", 0, 0),
+        ),
+    )
+    import_report = validate_import_reports.ImportReport(
+        dry_run=False,
+        total_rows=import_report.total_rows - SOURCE_COUNTS["record"],
+        tables=(
+            *import_report.tables[:-1],
+            validate_import_reports.TableCounts("record", 0, 0),
+        ),
+    )
+
+    with pytest.raises(
+        validate_import_reports.ReportValidationError,
+        match="record: required source table has no rows",
+    ):
+        validate_import_reports.validate_report_pair(
+            dry_run_report,
+            import_report,
+            required_source_tables=["record"],
+        )
+
+
+def test_validate_report_pair_rejects_unknown_required_source_table():
+    dry_run_report = report_model(dry_run=True)
+    import_report = report_model(dry_run=False)
+
+    with pytest.raises(
+        validate_import_reports.ReportValidationError,
+        match="missing_table: required source table is unknown",
+    ):
+        validate_import_reports.validate_report_pair(
+            dry_run_report,
+            import_report,
+            required_source_tables=["missing_table"],
+        )
+
+
 def test_main_validates_report_files(tmp_path, capsys):
     dry_run_path = tmp_path / "dry-run-report.json"
     import_path = tmp_path / "import-report.json"
@@ -386,3 +443,25 @@ def test_main_validates_report_files(tmp_path, capsys):
         f"validated import reports for {expected_total_rows()} rows across "
         f"{len(validate_import_reports.EXPECTED_TABLE_ORDER)} tables\n"
     )
+
+
+def test_main_validates_required_source_tables(tmp_path):
+    dry_run_path = tmp_path / "dry-run-report.json"
+    import_path = tmp_path / "import-report.json"
+    write_json(dry_run_path, report_payload(dry_run=True))
+    write_json(import_path, report_payload(dry_run=False))
+
+    exit_code = validate_import_reports.main(
+        [
+            "--dry-run-report",
+            str(dry_run_path),
+            "--import-report",
+            str(import_path),
+            "--require-source-rows",
+            "rating",
+            "--require-source-rows",
+            "record",
+        ]
+    )
+
+    assert exit_code == 0

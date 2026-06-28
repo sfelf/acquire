@@ -64,12 +64,16 @@ strings to the repository.
    ```bash
    uv run python server/validate_import_reports.py \
      --dry-run-report /tmp/acquire-rehearsal/dry-run-report.json \
-     --import-report /tmp/acquire-rehearsal/import-report.json
+     --import-report /tmp/acquire-rehearsal/import-report.json \
+     --require-source-rows rating \
+     --require-source-rows record
    ```
 
    This check verifies that both reports use the sanitized report shape, that
    the dry-run and import source counts match, and that every imported target
-   count equals its source count.
+   count equals its source count. The required source-row checks keep a
+   production-like rehearsal from passing with a sparse source dump that lacks
+   persisted rating history or derived win/place stats records.
 8. Run the MySQL and Postgres pytest marker suites as independent database
    compatibility checks. Keep these marker suites pointed at separate
    disposable test databases, or leave their test URLs unset so their fixtures

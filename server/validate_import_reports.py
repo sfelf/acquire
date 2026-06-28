@@ -83,21 +83,32 @@ def load_report(path: Path) -> ImportReport:
     return ImportReport(dry_run=dry_run, total_rows=total_rows, tables=parsed_tables)
 
 
-def validate_report_pair(dry_run_report: ImportReport, import_report: ImportReport) -> None:
+def validate_report_pair(
+    dry_run_report: ImportReport,
+    import_report: ImportReport,
+    *,
+    required_source_tables: Sequence[str] = (),
+) -> None:
     """Validate that dry-run and import reports describe the same source data.
 
     The dry-run report proves the source row counts reviewed before mutation.
     The import report proves those same rows were copied and counted in the
     target. This check intentionally compares counts only; it does not inspect
-    row contents or require private backup data.
+    row contents or require private backup data. Operators can require
+    non-empty source counts for critical tables, such as persisted rating and
+    record stats, so a sparse staging dump cannot accidentally satisfy a
+    production-like rehearsal gate.
 
     Args:
         dry_run_report: Report produced with `--dry-run`.
         import_report: Report produced by the completed import.
+        required_source_tables: Table names that must have at least one source
+            row in both reports.
 
     Raises:
         ReportValidationError: If modes, table order, source counts, totals, or
-            imported target counts are inconsistent.
+            imported target counts are inconsistent, or if a required source
+            table has no source rows.
     """
     if not dry_run_report.dry_run:
         raise ReportValidationError("dry-run report must have dry_run=true")
@@ -127,6 +138,7 @@ def validate_report_pair(dry_run_report: ImportReport, import_report: ImportRepo
                 f"{import_table.target_count} does not match source count "
                 f"{import_table.source_count}"
             )
+    _validate_required_source_tables(import_report, required_source_tables)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -143,6 +155,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--dry-run-report", required=True, type=Path)
     parser.add_argument("--import-report", required=True, type=Path)
+    parser.add_argument(
+        "--require-source-rows",
+        action="append",
+        default=[],
+        choices=EXPECTED_TABLE_ORDER,
+        metavar="TABLE",
+        help="Require TABLE to have at least one source row in the validated reports",
+    )
     return parser.parse_args(argv)
 
 
@@ -158,12 +178,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     dry_run_report = load_report(args.dry_run_report)
     import_report = load_report(args.import_report)
-    validate_report_pair(dry_run_report, import_report)
+    validate_report_pair(
+        dry_run_report,
+        import_report,
+        required_source_tables=args.require_source_rows,
+    )
     print(
         "validated import reports for "
         f"{import_report.total_rows} rows across {len(import_report.tables)} tables"
     )
     return 0
+
+
+def _validate_required_source_tables(
+    import_report: ImportReport,
+    table_names: Sequence[str],
+) -> None:
+    """Validate that required source tables are represented by nonzero counts.
+
+    Args:
+        import_report: Parsed completed-import report.
+        table_names: Table names that must have source rows.
+
+    Raises:
+        ReportValidationError: If a required table has zero source rows.
+    """
+    counts_by_table = {table.table_name: table.source_count for table in import_report.tables}
+    for table_name in table_names:
+        if table_name not in counts_by_table:
+            raise ReportValidationError(f"{table_name}: required source table is unknown")
+        if counts_by_table[table_name] == 0:
+            raise ReportValidationError(
+                f"{table_name}: required source table has no rows"
+            )
 
 
 def _parse_table(path: Path, index: int, payload: object) -> TableCounts:
