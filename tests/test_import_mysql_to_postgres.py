@@ -250,6 +250,63 @@ def test_import_engines_dry_run_reports_counts_without_writing(
     assert table_rows(target_engine, orm_module, "game") == []
 
 
+def test_import_engines_accepts_required_source_tables_with_rows(
+    import_module,
+    orm_module,
+    source_engine,
+    target_engine,
+):
+    seed_matching_lookup_rows(target_engine, orm_module)
+
+    report = import_module.import_engines(
+        source_engine,
+        target_engine,
+        dry_run=True,
+        required_source_tables=["rating", "record"],
+    )
+
+    assert report.total_rows == 13
+
+
+def test_import_engines_rejects_empty_required_source_table_before_writing(
+    import_module,
+    orm_module,
+    source_engine,
+    target_engine,
+):
+    with source_engine.begin() as connection:
+        connection.execute(sqlalchemy.text("delete from rating"))
+    seed_matching_lookup_rows(target_engine, orm_module)
+
+    with pytest.raises(
+        import_module.ImportValidationError,
+        match="rating: required source table has no rows",
+    ):
+        import_module.import_engines(
+            source_engine,
+            target_engine,
+            required_source_tables=["rating"],
+        )
+
+    assert table_rows(target_engine, orm_module, "user") == []
+
+
+def test_import_engines_rejects_unknown_required_source_table(
+    import_module,
+    source_engine,
+    target_engine,
+):
+    with pytest.raises(
+        import_module.ImportValidationError,
+        match="missing_table: required source table is unknown",
+    ):
+        import_module.import_engines(
+            source_engine,
+            target_engine,
+            required_source_tables=["missing_table"],
+        )
+
+
 @pytest.mark.parametrize("table_name", ["key_value", "record"])
 def test_import_engines_rejects_missing_required_source_tables(
     import_module,
@@ -310,7 +367,7 @@ def test_main_prints_import_report(import_module, capsys, monkeypatch):
     monkeypatch.setattr(
         import_module,
         "import_database",
-        lambda source_url, target_url, *, dry_run: report,
+        lambda source_url, target_url, *, dry_run, required_source_tables: report,
     )
 
     exit_code = import_module.main(
@@ -375,7 +432,7 @@ def test_main_writes_report_json_when_requested(import_module, capsys, monkeypat
     monkeypatch.setattr(
         import_module,
         "import_database",
-        lambda source_url, target_url, *, dry_run: report,
+        lambda source_url, target_url, *, dry_run, required_source_tables: report,
     )
     report_path = tmp_path / "import-report.json"
 
@@ -421,8 +478,8 @@ def test_main_preflights_report_path_before_importing(
         call_order.append(("preflight", path.exists()))
         path.write_text("")
 
-    def record_import(source_url, target_url, *, dry_run):
-        call_order.append(("import", dry_run))
+    def record_import(source_url, target_url, *, dry_run, required_source_tables):
+        call_order.append(("import", dry_run, tuple(required_source_tables)))
         return report
 
     monkeypatch.setattr(import_module, "preflight_report_json_path", record_preflight)
@@ -441,8 +498,52 @@ def test_main_preflights_report_path_before_importing(
     )
 
     assert exit_code == 0
-    assert call_order == [("preflight", False), ("import", False)]
+    assert call_order == [("preflight", False), ("import", False, ())]
     assert json.loads(report_path.read_text())["total_rows"] == 2
+
+
+def test_main_passes_required_source_tables_to_import(import_module, monkeypatch):
+    import_calls = []
+    report = import_module.ImportReport(
+        dry_run=True,
+        tables=(
+            import_module.TableImportResult(
+                table_name="rating",
+                source_count=2,
+                target_count=0,
+            ),
+        ),
+    )
+
+    def record_import(source_url, target_url, *, dry_run, required_source_tables):
+        import_calls.append((source_url, target_url, dry_run, tuple(required_source_tables)))
+        return report
+
+    monkeypatch.setattr(import_module, "import_database", record_import)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+            "--dry-run",
+            "--require-source-rows",
+            "rating",
+            "--require-source-rows",
+            "record",
+        ]
+    )
+
+    assert exit_code == 0
+    assert import_calls == [
+        (
+            "mysql+mysqlconnector://source",
+            "postgresql+psycopg://target",
+            True,
+            ("rating", "record"),
+        )
+    ]
 
 
 def test_main_fails_report_path_preflight_before_importing(
@@ -454,8 +555,8 @@ def test_main_fails_report_path_preflight_before_importing(
     monkeypatch.setattr(
         import_module,
         "import_database",
-        lambda source_url, target_url, *, dry_run: import_calls.append(
-            (source_url, target_url, dry_run)
+        lambda source_url, target_url, *, dry_run, required_source_tables: import_calls.append(
+            (source_url, target_url, dry_run, required_source_tables)
         ),
     )
     report_path = tmp_path / "existing-directory"

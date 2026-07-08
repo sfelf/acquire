@@ -100,7 +100,10 @@ Remove `--dry-run` only after the count report and target validation look
 correct. The command copies the known application tables in foreign-key-safe
 order, preserves primary keys, and reports source and target row counts for
 each table. Baseline lookup tables may already contain Alembic-seeded rows when
-they exactly match the source. Other target tables must be empty.
+they exactly match the source. Other target tables must be empty. Use
+`--require-source-rows rating --require-source-rows record` for
+production-like rehearsals so sparse source dumps fail before target rows are
+copied.
 
 The `postgres` marker suite includes a Docker-backed rehearsal that creates
 matching MySQL and Postgres schemas with Alembic, seeds representative MySQL
