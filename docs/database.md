@@ -115,7 +115,9 @@ lookup helpers.
 Use `docs/postgres-backup-rehearsal.md` when repeating the rehearsal with a new
 sanitized or staging MySQL backup. The runbook keeps backup files, credentials,
 generated reports, host-specific paths, and private data out of the repository
-and defines the pass/fail criteria for counting the rehearsal as complete.
+and defines the pass/fail criteria for counting the rehearsal as complete. It
+also includes a source readiness check for nonzero `rating` and `record` table
+counts before a backup can close the full persisted-stats rehearsal gate.
 
 ## Production Cutover And Rollback Gate
 
