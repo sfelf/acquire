@@ -18,11 +18,38 @@ the file stays in an approved controlled environment. Do not commit dumps,
 restored data, generated reports, database credentials, or local connection
 strings to the repository.
 
+## Source Readiness Check
+
+Before creating the backup for a production-like rehearsal, confirm that the
+source contains the historical stats data required to validate the migration:
+
+```sql
+select 'rating' as table_name, count(*) as row_count from rating
+union all
+select 'record' as table_name, count(*) as row_count from record;
+```
+
+Both counts must be greater than zero for the rehearsal to prove persisted
+rating history and derived win/place stats. A source without these rows can
+still exercise schema, user, game-history, and key/value import behavior, but
+it must be recorded as a partial rehearsal and cannot close the Phase 6 backup
+rehearsal gate.
+
+For a partial sparse-source rehearsal, follow the same restore, dry-run,
+import, report-validation, and application-check steps, but omit
+`--require-source-rows rating` and `--require-source-rows record` from the
+import and report-validation commands. Record the missing source tables in the
+rehearsal summary. Do not use a partial sparse-source rehearsal as production
+cutover evidence for persisted rating history or derived win/place stats.
+
 ## Rehearsal Steps
 
 1. Create a working directory outside the repository for the backup, logs, and
    generated reports.
-2. Restore the MySQL backup into a disposable MySQL database.
+2. Restore the MySQL backup into a disposable MySQL database. If the source
+   readiness check was not run before the dump was created, run the same
+   `rating` and `record` count check against the restored disposable source
+   before creating the Postgres target.
 3. Create or reset a disposable Postgres database.
 4. Apply Alembic migrations to the disposable Postgres database with an
    explicit placeholder connection override, replacing the URL with the

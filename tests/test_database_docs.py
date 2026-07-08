@@ -78,6 +78,27 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "full persisted rating/record stats rehearsal remains pending" in database_notes
     assert "keep backup files outside the repository" in backup_runbook
     assert "Do not commit dumps" in backup_runbook
+    assert "Source Readiness Check" in backup_runbook
+    assert "select 'rating' as table_name, count(*) as row_count from rating" in (
+        backup_runbook
+    )
+    assert "select 'record' as table_name, count(*) as row_count from record" in (
+        backup_runbook
+    )
+    assert "Both counts must be greater than zero" in backup_runbook
+    assert "partial rehearsal and cannot close the Phase 6 backup\nrehearsal gate" in (
+        backup_runbook
+    )
+    assert "For a partial sparse-source rehearsal" in backup_runbook
+    assert (
+        "omit\n`--require-source-rows rating` and `--require-source-rows record`"
+        in backup_runbook
+    )
+    assert "Record the missing source tables in the\nrehearsal summary" in backup_runbook
+    assert "Do not use a partial sparse-source rehearsal as production\ncutover evidence" in (
+        backup_runbook
+    )
+    assert "source readiness check for nonzero `rating` and `record`" in database_notes
     assert "ACQUIRE_DATABASE_URL=postgresql+psycopg://user:password@host:5432" in (
         backup_runbook
     )
