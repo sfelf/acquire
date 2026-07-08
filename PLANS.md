@@ -203,5 +203,6 @@ independently.
   Postgres becomes the local Docker default.
 - Docker starts as local-development tooling only.
 - AWS is the preferred future cloud target.
-- README coverage badges should be added after the coverage reporting source is finalized.
+- README coverage and supported Python version badges are published from dynamic
+  badge sources.
 - Runtime dependency upgrades are intentionally deferred.
