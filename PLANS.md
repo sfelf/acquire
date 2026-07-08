@@ -156,7 +156,9 @@ independently.
      from imported games, full persisted rating/record stats rehearsal remains
      pending on a richer source dump before this gate can be marked complete.
      The partial rehearsal also verified stats reads and the gateway e2e suite
-     against the imported Postgres target.
+     against the imported Postgres target. The report validator now supports
+     requiring nonzero `rating` and `record` source counts for the next
+     production-like rehearsal.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
      Legacy `initialize_database.py` reset command removal is complete;

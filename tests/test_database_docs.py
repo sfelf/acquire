@@ -93,6 +93,9 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "server/validate_import_reports.py" in backup_runbook
     assert "--dry-run-report /tmp/acquire-rehearsal/dry-run-report.json" in backup_runbook
     assert "--import-report /tmp/acquire-rehearsal/import-report.json" in backup_runbook
+    assert "--require-source-rows rating" in backup_runbook
+    assert "--require-source-rows record" in backup_runbook
+    assert "sparse source dump that lacks\n   persisted rating history" in backup_runbook
     assert "separate\n   disposable test databases" in backup_runbook
     assert "Do not point marker test URLs at the restored\n   MySQL source" in (
         backup_runbook
