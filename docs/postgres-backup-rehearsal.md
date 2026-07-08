@@ -42,6 +42,8 @@ strings to the repository.
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
      --dry-run \
+     --require-source-rows rating \
+     --require-source-rows record \
      --report-json /tmp/acquire-rehearsal/dry-run-report.json
    ```
 
@@ -53,12 +55,17 @@ strings to the repository.
    uv run python server/import_mysql_to_postgres.py \
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
+     --require-source-rows rating \
+     --require-source-rows record \
      --report-json /tmp/acquire-rehearsal/import-report.json
    ```
 
    The JSON report contains only dry-run mode, total rows, table names, and
    source/target counts. It must not include connection URLs, credentials,
    hostnames, backup paths, or row contents.
+   The required source-row checks fail before target rows are copied if the
+   source dump lacks persisted rating history or derived win/place stats
+   records.
 7. Validate the report pair before using it as rehearsal evidence:
 
    ```bash

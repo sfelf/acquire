@@ -158,7 +158,8 @@ independently.
      The partial rehearsal also verified stats reads and the gateway e2e suite
      against the imported Postgres target. The report validator now supports
      requiring nonzero `rating` and `record` source counts for the next
-     production-like rehearsal.
+     production-like rehearsal, and the import command can enforce the same
+     requirement before target rows are copied.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
      documented. Pending.
      Legacy `initialize_database.py` reset command removal is complete;

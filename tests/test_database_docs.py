@@ -67,6 +67,8 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "--dry-run" in database_notes
     assert "preserves primary keys" in database_notes
     assert "Other target tables must be empty" in database_notes
+    assert "`--require-source-rows rating --require-source-rows record`" in database_notes
+    assert "fail before target rows are\ncopied" in database_notes
     assert "Postgres marker suite runs a Docker-backed rehearsal" in database_notes
     assert "primary-key sequences advance" in database_notes
     assert "Python auth rules" in database_notes
@@ -88,6 +90,7 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     )
     assert "--report-json /tmp/acquire-rehearsal/dry-run-report.json" in backup_runbook
     assert "--report-json /tmp/acquire-rehearsal/import-report.json" in backup_runbook
+    assert "fail before target rows are copied" in backup_runbook
     assert "must not include connection URLs, credentials" in backup_runbook
     assert "dry-run JSON report records source row counts" in backup_runbook
     assert "server/validate_import_reports.py" in backup_runbook

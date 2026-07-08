@@ -57,7 +57,13 @@ class ImportValidationError(RuntimeError):
     """Raised when source and target counts do not match after import."""
 
 
-def import_database(source_url: str, target_url: str, *, dry_run: bool = False) -> ImportReport:
+def import_database(
+    source_url: str,
+    target_url: str,
+    *,
+    dry_run: bool = False,
+    required_source_tables: Sequence[str] = (),
+) -> ImportReport:
     """Copy application tables from a source database to an empty target database.
 
     The target database must already have the current Alembic schema applied.
@@ -73,6 +79,8 @@ def import_database(source_url: str, target_url: str, *, dry_run: bool = False) 
         target_url: SQLAlchemy URL for the target Postgres-compatible database.
         dry_run: When `True`, validate the target and report source counts
             without inserting rows.
+        required_source_tables: Table names that must have at least one source
+            row before the import can proceed.
 
     Returns:
         Import report containing per-table counts.
@@ -85,7 +93,12 @@ def import_database(source_url: str, target_url: str, *, dry_run: bool = False) 
     source_engine = sqlalchemy.create_engine(source_url)
     target_engine = sqlalchemy.create_engine(target_url)
     try:
-        return import_engines(source_engine, target_engine, dry_run=dry_run)
+        return import_engines(
+            source_engine,
+            target_engine,
+            dry_run=dry_run,
+            required_source_tables=required_source_tables,
+        )
     finally:
         source_engine.dispose()
         target_engine.dispose()
@@ -96,6 +109,7 @@ def import_engines(
     target_engine: Engine,
     *,
     dry_run: bool = False,
+    required_source_tables: Sequence[str] = (),
 ) -> ImportReport:
     """Copy application tables between already-created SQLAlchemy engines.
 
@@ -109,6 +123,8 @@ def import_engines(
         source_engine: SQLAlchemy engine bound to the source database.
         target_engine: SQLAlchemy engine bound to the target database.
         dry_run: When `True`, report source counts without inserting rows.
+        required_source_tables: Table names that must have at least one source
+            row before the import can proceed.
 
     Returns:
         Import report containing per-table counts.
@@ -123,6 +139,11 @@ def import_engines(
 
     with source_engine.connect() as source_connection, target_engine.begin() as target_connection:
         _validate_source_tables(source_connection, tables)
+        _validate_required_source_tables(
+            source_connection,
+            tables,
+            required_source_tables,
+        )
         for table in tables:
             rows = _read_rows(source_connection, table)
             target_rows = _read_rows(target_connection, table)
@@ -159,6 +180,35 @@ def _ordered_tables(table_names: Sequence[str]) -> tuple[Table, ...]:
         Tuple of SQLAlchemy table objects.
     """
     return tuple(orm.Base.metadata.tables[table_name] for table_name in table_names)
+
+
+def _validate_required_source_tables(
+    connection: Connection,
+    tables: tuple[Table, ...],
+    table_names: Sequence[str],
+) -> None:
+    """Validate that required source tables contain rows before copying.
+
+    This guard is intended for production-like rehearsals where sparse staging
+    dumps should fail before target mutation. In particular, persisted ratings
+    and derived records are required to prove historical stats will survive the
+    cutover.
+
+    Args:
+        connection: SQLAlchemy connection bound to the source database.
+        tables: Application tables expected by the import workflow.
+        table_names: Table names that must have source rows.
+
+    Raises:
+        ImportValidationError: If a required source table is unknown or empty.
+    """
+    tables_by_name = {table.name: table for table in tables}
+    for table_name in table_names:
+        table = tables_by_name.get(table_name)
+        if table is None:
+            raise ImportValidationError(f"{table_name}: required source table is unknown")
+        if _count_rows(connection, table) == 0:
+            raise ImportValidationError(f"{table_name}: required source table has no rows")
 
 
 def _validate_source_tables(connection: Connection, tables: tuple[Table, ...]) -> None:
@@ -322,6 +372,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Write a sanitized JSON report containing import mode and table counts",
     )
+    parser.add_argument(
+        "--require-source-rows",
+        action="append",
+        default=[],
+        choices=TABLE_ORDER,
+        metavar="TABLE",
+        help="Require TABLE to have at least one source row before importing",
+    )
     return parser.parse_args(argv)
 
 
@@ -385,7 +443,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.report_json is not None:
         preflight_report_json_path(args.report_json)
-    report = import_database(args.source_url, args.target_url, dry_run=args.dry_run)
+    report = import_database(
+        args.source_url,
+        args.target_url,
+        dry_run=args.dry_run,
+        required_source_tables=args.require_source_rows,
+    )
     mode = "dry run" if report.dry_run else "import"
     print(f"{mode} covered {report.total_rows} rows")
     for table in report.tables:
