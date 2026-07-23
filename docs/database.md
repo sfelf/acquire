@@ -19,8 +19,11 @@ losing the MySQL persistence coverage that protects the refactor.
   to merge user, game, rating, record, or key/value data into non-empty target
   tables. Unit tests cover command behavior against synthetic schemas, and the
   Postgres marker suite runs a Docker-backed rehearsal from MySQL into
-  Postgres. The importer requires the derived `record` table because runtime
-  stats reads do not rebuild historical win/place records from imported games.
+  Postgres. The importer requires every application table, including the
+  derived `record` table. The optional `--require-source-rows` checks require
+  selected tables to be nonempty for production-like rehearsals because
+  runtime stats reads do not rebuild historical win/place records from
+  imported games.
 - The legacy MySQL reset command has been removed. Alembic and
   `server/setup_database.py` are the supported schema setup paths.
 - MySQL integration tests cover schema creation, migrations, runtime
@@ -76,12 +79,15 @@ losing the MySQL persistence coverage that protects the refactor.
    Complete for synthetic unit coverage and Docker-backed MySQL-to-Postgres
    rehearsal coverage. A partial staging backup rehearsal completed with
    sanitized reports covering lookup, user, game, game-player, and key/value
-   rows from a legacy source that did not include rating rows or the derived
-   `record` table. Full persisted rating/record stats rehearsal remains
-   pending on a richer source dump.
+   rows from a legacy source whose required `rating` and `record` tables were
+   empty because that server did not generate persisted stats. This
+   sparse-stats limitation is accepted for the current migration evidence; a
+   source that omits any required table is rejected by the importer.
 10. Remove MySQL-only dependencies, Compose services, environment variables, and
    documentation after the production cutover work has an approved execution
-   plan and rollback owner.
+   plan and rollback owner. Retain the MySQL-to-Postgres backup import tool and
+   the MySQL driver dependency until backups from the existing MySQL server no
+   longer need to be migrated.
 
 ## Import Rehearsal Command
 
@@ -117,7 +123,7 @@ sanitized or staging MySQL backup. The runbook keeps backup files, credentials,
 generated reports, host-specific paths, and private data out of the repository
 and defines the pass/fail criteria for counting the rehearsal as complete. It
 also includes a source readiness check for nonzero `rating` and `record` table
-counts before a backup can close the full persisted-stats rehearsal gate.
+counts when a source claims to contain persisted stats.
 
 ## Production Cutover And Rollback Gate
 
@@ -133,7 +139,8 @@ needed by production until the following items have owners and a tested dry run.
 - A repeatable export/import command exists for production data, including
   users, games, actions, chat messages, and game-player rows.
 - The import dry run validates row counts, representative user login behavior,
-  completed-game ratings, and historical game replay checks against Postgres.
+  historical game replay checks, and completed-game ratings when the source
+  generated persisted rating rows.
 - The MySQL and Postgres marker suites pass against disposable schemas, and the
   e2e suite passes against the Postgres-backed local gateway.
 - The deployment owner has selected a maintenance window and a rollback owner.
@@ -170,6 +177,8 @@ reviewed script or deliberately discarded by the rollback owner.
   rollback confidence from the legacy engine.
 - Keep the MySQL Compose profile until production rollback no longer depends on
   quickly starting a local MySQL parity stack.
+- Keep the MySQL-to-Postgres backup import tool and MySQL driver dependency
+  until migration from an existing MySQL server backup is no longer required.
 - Keep Alembic and `server/setup_database.py` as the only schema setup paths.
 - Remove the legacy `MYSQL_*` ORM fallback only after production deployment no
   longer needs the application to connect to MySQL during rollback.
@@ -178,12 +187,12 @@ reviewed script or deliberately discarded by the rollback owner.
 
 - Postgres driver selection is complete for the current migration baseline:
   `psycopg` 3 is used for Docker-backed marker tests.
-- The production import command has been partially validated against a staging
-  backup rehearsal that covered game-history rows and stats read paths. The
-  staging source did not include rating rows or the derived `record` table, so
-  full persisted rating/record stats rehearsal remains pending on a richer
-  source dump. Production cutover still requires a fresh backup, a selected
-  maintenance window, and final pre-cutover validation.
+- The production import command has been validated against the available
+  staging backup rehearsal for game-history rows and stats read paths. The
+  staging source contained the required `rating` and `record` tables but no
+  rows in either, so persisted rating/record evidence is explicitly unavailable
+  for the current server. Production cutover still requires a fresh backup, a
+  selected maintenance window, and final pre-cutover validation.
 - The backup rehearsal runbook is documented in
   `docs/postgres-backup-rehearsal.md`; repeat it for any newer staging or
   production-like backup before cutover.

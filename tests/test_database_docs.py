@@ -54,14 +54,20 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     ).read_text()
 
     assert "import tooling for cutover rehearsals" in plans
-    assert "61 sanitized\n     report rows" in plans
+    assert "61 sanitized report rows" in plans
     assert "sanitized or staging backup rehearsal runbook. Complete." in plans
     assert "Run the import rehearsal against a sanitized or staging MySQL backup." in plans
-    assert "In progress. The latest staging rehearsal proved" in plans
-    assert "full persisted rating/record stats rehearsal remains\n     pending" in plans
+    assert "Complete with an accepted sparse-stats limitation" in plans
+    assert "not possible from the current server\n     backup" in plans
+    assert "restored source still included every table required by the\n     importer" in plans
+    assert "retain\n     `--require-source-rows`" in plans
+    assert "Keep the MySQL-to-Postgres backup import tooling" in plans
     assert "Docker-backed MySQL-to-Postgres" in plans
     assert "server/import_mysql_to_postgres.py" in database_notes
-    assert "requires the derived `record` table" in database_notes
+    assert "requires every application table, including the\n  derived `record` table" in (
+        database_notes
+    )
+    assert "optional `--require-source-rows` checks require\n  selected tables" in database_notes
     assert "docs/postgres-backup-rehearsal.md" in database_notes
     assert "Import Rehearsal Command" in database_notes
     assert "--dry-run" in database_notes
@@ -75,7 +81,15 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "ORM\nlookup helpers" in database_notes
     assert "partial staging backup rehearsal completed with\n   sanitized reports" in database_notes
     assert "game-history rows and stats read paths" in database_notes
-    assert "full persisted rating/record stats rehearsal remains pending" in database_notes
+    assert "sparse-stats limitation is accepted for the current migration evidence" in (
+        database_notes
+    )
+    assert "source that omits any required table is rejected by the importer" in (
+        database_notes
+    )
+    assert "Retain the MySQL-to-Postgres backup import tool" in database_notes
+    assert "Keep the MySQL-to-Postgres backup import tool" in database_notes
+    assert "persisted rating/record evidence is explicitly unavailable" in database_notes
     assert "keep backup files outside the repository" in backup_runbook
     assert "Do not commit dumps" in backup_runbook
     assert "Source Readiness Check" in backup_runbook
@@ -86,7 +100,12 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
         backup_runbook
     )
     assert "Both counts must be greater than zero" in backup_runbook
-    assert "partial rehearsal and cannot close the Phase 6 backup\nrehearsal gate" in (
+    assert "Every application table, including `rating` and `record`, must exist" in (
+        backup_runbook
+    )
+    assert "source with empty stats tables\ncan still exercise" in backup_runbook
+    assert "When the server never generated persisted stats" in backup_runbook
+    assert "do not claim persisted rating or derived-record coverage" in (
         backup_runbook
     )
     assert "For a partial sparse-source rehearsal" in backup_runbook
@@ -94,8 +113,9 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
         "omit\n`--require-source-rows rating` and `--require-source-rows record`"
         in backup_runbook
     )
-    assert "Record the missing source tables in the\nrehearsal summary" in backup_runbook
-    assert "Do not use a partial sparse-source rehearsal as production\ncutover evidence" in (
+    assert "Record the empty stats tables in the\nrehearsal summary" in backup_runbook
+    assert "A missing table remains a schema validation failure" in backup_runbook
+    assert "Do not\nuse a partial sparse-source rehearsal as production cutover evidence" in (
         backup_runbook
     )
     assert "source readiness check for nonzero `rating` and `record`" in database_notes
@@ -139,6 +159,10 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     )
     assert "ACQUIRE_E2E_URL" in backup_runbook
     assert "Pass Criteria" in backup_runbook
+    assert "Completed-game rating checks pass when the source generated persisted rating" in (
+        backup_runbook
+    )
+    assert "otherwise the rehearsal records the sparse-stats limitation" in backup_runbook
     assert "Failure Handling" in backup_runbook
 
 
