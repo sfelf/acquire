@@ -29,18 +29,22 @@ union all
 select 'record' as table_name, count(*) as row_count from record;
 ```
 
+Every application table, including `rating` and `record`, must exist in the
+restored source or the importer rejects it.
+
 Both counts must be greater than zero for the rehearsal to prove persisted
-rating history and derived win/place stats. A source without these rows can
-still exercise schema, user, game-history, and key/value import behavior. When
-the server never generated persisted stats, record that limitation in the
+rating history and derived win/place stats. A source with empty stats tables
+can still exercise schema, user, game-history, and key/value import behavior.
+When the server never generated persisted stats, record that limitation in the
 rehearsal summary and do not claim persisted rating or derived-record coverage.
 
 For a partial sparse-source rehearsal, follow the same restore, dry-run,
 import, report-validation, and application-check steps, but omit
 `--require-source-rows rating` and `--require-source-rows record` from the
-import and report-validation commands. Record the missing source tables in the
-rehearsal summary. Do not use a partial sparse-source rehearsal as production
-cutover evidence for persisted rating history or derived win/place stats.
+import and report-validation commands. Record the empty stats tables in the
+rehearsal summary. A missing table remains a schema validation failure. Do not
+use a partial sparse-source rehearsal as production cutover evidence for
+persisted rating history or derived win/place stats.
 
 ## Rehearsal Steps
 

@@ -150,10 +150,11 @@ independently.
    - Document the sanitized or staging backup rehearsal runbook. Complete.
    - Run the import rehearsal against a sanitized or staging MySQL backup.
      Complete with an accepted sparse-stats limitation. The available staging
-     source did not generate rating rows or the derived `record` table, so a
-     fuller persisted rating/record rehearsal is not possible from the current
-     server backup. The completed rehearsal proved lookup, user, game-history,
-     and key/value import/report validation for 61 sanitized report rows and
+     source did not contain rating or derived `record` rows, so a fuller
+     persisted rating/record rehearsal is not possible from the current server
+     backup. The restored source still included every table required by the
+     importer. The completed rehearsal proved lookup, user, game-history, and
+     key/value import/report validation for 61 sanitized report rows and
      verified stats reads plus the gateway e2e suite against the imported
      Postgres target. The report validator and import command retain
      `--require-source-rows` for future sources that do contain persisted stats.
