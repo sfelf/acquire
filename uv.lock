@@ -10,6 +10,8 @@ dependencies = [
     { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlalchemy" },
+    { name = "trueskill" },
+    { name = "ujson" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
@@ -28,9 +30,6 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "six" },
-    { name = "trueskill" },
-    { name = "ujson" },
 ]
 
 [package.metadata]
@@ -39,6 +38,8 @@ requires-dist = [
     { name = "mysql-connector-python", marker = "extra == 'mysql-migration'", specifier = ">=9.3,<10" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "sqlalchemy", specifier = ">=2,<3" },
+    { name = "trueskill", specifier = "==0.4.4" },
+    { name = "ujson", specifier = ">=5.13,<6" },
     { name = "uvicorn", specifier = ">=0.32,<1" },
     { name = "websockets", specifier = ">=14,<16" },
 ]
@@ -53,9 +54,6 @@ dev = [
     { name = "pytest", specifier = ">=8.4,<9" },
     { name = "pytest-cov", specifier = ">=7,<8" },
     { name = "ruff", specifier = ">=0.14,<0.15" },
-    { name = "six", specifier = ">=1.17,<2" },
-    { name = "trueskill", specifier = "==0.4.4" },
-    { name = "ujson", specifier = ">=5.13,<6" },
 ]
 
 [[package]]

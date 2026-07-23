@@ -8,6 +8,8 @@ dependencies = [
     "fastapi>=0.115,<1",
     "psycopg[binary]>=3.2,<4",
     "sqlalchemy>=2,<3",
+    "trueskill==0.4.4",
+    "ujson>=5.13,<6",
     "uvicorn>=0.32,<1",
     "websockets>=14,<16",
 ]
@@ -26,9 +28,6 @@ dev = [
     "pytest>=8.4,<9",
     "pytest-cov>=7,<8",
     "ruff>=0.14,<0.15",
-    "six>=1.17,<2",
-    "trueskill==0.4.4",
-    "ujson>=5.13,<6",
 ]
 
 [tool.uv]

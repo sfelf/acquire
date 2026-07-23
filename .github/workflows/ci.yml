@@ -39,12 +39,26 @@ jobs:
       - name: Install tooling
         run: uv sync --group dev --frozen
 
-      - name: Verify MySQL backup migration dependency boundary
+      - name: Verify runtime dependency boundaries
         run: |
-          uv run --isolated --frozen python -c \
-            "import importlib.util; assert importlib.util.find_spec('mysql') is None"
-          uv run --isolated --frozen --extra mysql-migration \
-            python -c "import mysql.connector, sys; sys.path.insert(0, 'server'); import import_mysql_to_postgres"
+          uv run --isolated --frozen --no-dev python - <<'PY'
+          import importlib.util
+          import sys
+
+          sys.path.insert(0, "server")
+          import cron
+          import http_server
+
+          assert importlib.util.find_spec("mysql") is None
+          PY
+          uv run --isolated --frozen --no-dev --extra mysql-migration python - <<'PY'
+          import sys
+
+          import mysql.connector
+
+          sys.path.insert(0, "server")
+          import import_mysql_to_postgres
+          PY
 
       - name: Run ruff
         run: uv run ruff check .

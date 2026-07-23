@@ -28,11 +28,16 @@ def test_mysql_connector_is_isolated_to_backup_migration_extra() -> None:
     assert "mysql-connector-python>=9.3,<10" not in pyproject["dependency-groups"]["dev"]
 
 
-def test_ci_loads_importer_with_mysql_migration_extra() -> None:
+def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
-    assert "assert importlib.util.find_spec('mysql') is None" in workflow
-    assert "uv run --isolated --frozen --extra mysql-migration" in workflow
+    assert "uv run --isolated --frozen --no-dev python -" in workflow
+    assert "import cron" in workflow
+    assert "import http_server" in workflow
+    assert 'assert importlib.util.find_spec("mysql") is None' in workflow
+    assert (
+        "uv run --isolated --frozen --no-dev --extra mysql-migration python -" in workflow
+    )
     assert "import mysql.connector" in workflow
     assert "import import_mysql_to_postgres" in workflow
 
@@ -53,6 +58,12 @@ def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> 
     assert compatibility_requirements <= local_docker_requirements
     assert {"psycopg[binary]>=3.2,<4", "sqlalchemy>=2,<3"} <= set(
         pyproject["project"]["dependencies"]
+    )
+    assert {"trueskill==0.4.4", "ujson>=5.13,<6"} <= set(
+        pyproject["project"]["dependencies"]
+    )
+    assert {"six>=1.17,<2", "trueskill==0.4.4", "ujson>=5.13,<6"}.isdisjoint(
+        pyproject["dependency-groups"]["dev"]
     )
 
 
