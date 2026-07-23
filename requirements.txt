@@ -1,5 +1,5 @@
 fastapi>=0.115,<1
-mysql-connector-python>=9.3,<10
+psycopg[binary]>=3.2,<4
 pytz==2016.10
 six>=1.17,<2
 sqlalchemy>=2,<3

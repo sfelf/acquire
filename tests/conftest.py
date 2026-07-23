@@ -22,7 +22,7 @@ def _is_marker_selected(config, marker):
     return bool(markexpr and marker in markexpr)
 
 
-def _docker_compose_command(project_name, include_test_override=False, profiles=()):
+def _docker_compose_command(project_name, include_test_override=False):
     command = [
         "docker",
         "compose",
@@ -33,18 +33,15 @@ def _docker_compose_command(project_name, include_test_override=False, profiles=
     ]
     if include_test_override:
         command.extend(["-f", "docker-compose.test.yml"])
-    for profile in profiles:
-        command.extend(["--profile", profile])
     return command
 
 
-def _run_docker_compose(project_name, *args, include_test_override=False, profiles=()):
+def _run_docker_compose(project_name, *args, include_test_override=False):
     return subprocess.run(
         [
             *_docker_compose_command(
                 project_name,
                 include_test_override=include_test_override,
-                profiles=profiles,
             ),
             *args,
         ],
@@ -54,13 +51,12 @@ def _run_docker_compose(project_name, *args, include_test_override=False, profil
     )
 
 
-def _cleanup_docker_compose(project_name, *args, include_test_override=False, profiles=()):
+def _cleanup_docker_compose(project_name, *args, include_test_override=False):
     subprocess.run(
         [
             *_docker_compose_command(
                 project_name,
                 include_test_override=include_test_override,
-                profiles=profiles,
             ),
             *args,
         ],
@@ -86,57 +82,6 @@ def _get_available_local_port():
         except OSError:
             return "35432"
         return str(sock.getsockname()[1])
-
-
-@pytest.fixture(scope="session")
-def mysql_test_url(pytestconfig):
-    configured_url = os.environ.get("ACQUIRE_MYSQL_TEST_URL")
-    if configured_url:
-        yield configured_url
-        return
-    if not _is_marker_selected(pytestconfig, "mysql"):
-        pytest.skip("mysql marker was not selected")
-
-    project_name = f"acquire-pytest-mysql-{os.getpid()}"
-    mysql_port = os.environ.get("ACQUIRE_MYSQL_TEST_PORT", "33061")
-    compose_env = {
-        "ACQUIRE_MYSQL_TEST_PORT": mysql_port,
-        "MYSQL_DATABASE": os.environ.get("MYSQL_DATABASE", "acquire"),
-        "MYSQL_USER": os.environ.get("MYSQL_USER", "acquire"),
-        "MYSQL_PASSWORD": os.environ.get("MYSQL_PASSWORD", "acquire"),
-    }
-    previous_env = {key: os.environ.get(key) for key in compose_env}
-    os.environ.update(compose_env)
-    try:
-        _run_docker_compose(
-            project_name,
-            "up",
-            "-d",
-            "mysql",
-            include_test_override=True,
-            profiles=("mysql",),
-        )
-        yield (
-            "mysql+mysqlconnector://{}:{}@127.0.0.1:{}/{}".format(
-                quote(compose_env["MYSQL_USER"], safe=""),
-                quote(compose_env["MYSQL_PASSWORD"], safe=""),
-                mysql_port,
-                compose_env["MYSQL_DATABASE"],
-            )
-        )
-    finally:
-        _cleanup_docker_compose(
-            project_name,
-            "down",
-            "--volumes",
-            include_test_override=True,
-            profiles=("mysql",),
-        )
-        for key, value in previous_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
 
 @pytest.fixture(scope="session")

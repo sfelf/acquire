@@ -32,12 +32,15 @@ Run specific pytest marker layers with:
 uv run pytest -m unit
 uv run pytest -m golden
 uv run pytest -m integration
-uv run pytest -m mysql
 uv run pytest -m postgres
 uv run pytest -m e2e
 ```
 
-MySQL, Postgres, and e2e marker runs create isolated Docker Compose projects when service URL environment variables are not set. Use `ACQUIRE_MYSQL_TEST_URL`, `ACQUIRE_POSTGRES_TEST_URL`, or `ACQUIRE_E2E_URL` only when you want to point those tests at already-running services. Integration tests skip when the local environment blocks socket binding.
+Postgres and e2e marker runs create isolated Docker Compose projects when
+service URL environment variables are not set. Use
+`ACQUIRE_POSTGRES_TEST_URL` or `ACQUIRE_E2E_URL` only when you want to point
+those tests at already-running services. Integration tests skip when the local
+environment blocks socket binding.
 
 ## Local Docker Development
 
@@ -85,18 +88,17 @@ uv run alembic upgrade head
 uv run alembic current
 ```
 
-The initial migration is a baseline for the current MySQL schema and required
-lookup rows. Use `upgrade head` for an empty schema. For a database that was
-already created by the pre-Alembic reset workflow and matches the current
-schema and lookup rows, mark the baseline as already applied instead:
+The initial migration is a baseline for the current schema and required lookup
+rows. Use `upgrade head` for an empty schema. For a database that was already
+created by the pre-Alembic reset workflow and matches the current schema and
+lookup rows, mark the baseline as already applied instead:
 
 ```bash
 uv run alembic stamp head
 ```
 
 Local Docker setup uses Alembic through `server/setup_database.py`; future
-schema or required lookup-data changes should be added as Alembic revisions
-before the MySQL-to-Postgres migration.
+schema or required lookup-data changes should be added as Alembic revisions.
 
 ## Install dependencies
 
@@ -106,7 +108,7 @@ Docker.
 Install other dependencies.
 
 ```bash
-sudo apt-get install mysql-server python3-pip python3-venv python3-wheel zopfli
+sudo apt-get install python3-pip python3-venv python3-wheel zopfli
 
 python3 -m venv venv
 source venv/bin/activate

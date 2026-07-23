@@ -11,10 +11,12 @@ def test_phase_6_tracks_postgres_migration_sequence() -> None:
     plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
 
+    assert "## Phase 6: Dependency And Deployment Modernization" in plans
+    assert "Status: complete." in plans
     assert "Add Alembic migrations for the current MySQL schema" in plans
     assert "engines. Complete." in plans
     assert "MySQL-to-Postgres migration" in plans
-    assert "In progress." in plans
+    assert "persistence tests are in place. Complete." in plans
     assert "Postgres Migration Sequence" in database_notes
     assert "Add Postgres test dependencies" in database_notes
     assert "Add a `postgres` pytest marker" in database_notes
@@ -22,28 +24,32 @@ def test_phase_6_tracks_postgres_migration_sequence() -> None:
     assert "Switch local development defaults from MySQL to Postgres" in database_notes
     assert "Document the production deployment and rollback gate" in database_notes
     assert "Add tested MySQL-to-Postgres import tooling" in database_notes
-    assert "Remove MySQL-only dependencies" in database_notes
+    assert "Remove MySQL-only runtime dependencies" in database_notes
+    assert "variables, marker tests, and runtime documentation. Complete." in database_notes
 
 
-def test_postgres_cutover_docs_define_rollback_gate() -> None:
+def test_postgres_runtime_docs_define_retained_backup_boundary() -> None:
     plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
 
-    assert "Postgres is the default local Docker database" in agent_notes
-    assert "rollback planning" in agent_notes
+    assert "Postgres is the only application runtime database" in agent_notes
+    assert "`mysql-migration` optional uv extra" in agent_notes
     assert "deployment and rollback gate" in plans
     assert (
         "Remove MySQL-only runtime paths after deployment and rollback plans are\n"
-        "     documented. Pending."
+        "     documented. Complete."
     ) in plans
-    assert "Production Cutover And Rollback Gate" in database_notes
+    assert "Backup Import And Deployment Gate" in database_notes
     assert "Cutover Preconditions" in database_notes
     assert "Deployment Plan" in database_notes
     assert "Rollback Plan" in database_notes
-    assert "Runtime Cleanup Rules" in database_notes
+    assert "Retained Migration Rules" in database_notes
     assert "dual-write" in database_notes
-    assert "Remove the legacy `MYSQL_*` ORM fallback only after" in database_notes
+    assert "no MySQL runtime\n  fallback" in database_notes
+    assert "normal development and production runtime\n  dependencies do not install" in (
+        database_notes
+    )
 
 
 def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
@@ -52,6 +58,8 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     backup_runbook = (
         REPOSITORY_ROOT / "docs" / "postgres-backup-rehearsal.md"
     ).read_text()
+    normalized_database_notes = " ".join(database_notes.split())
+    normalized_backup_runbook = " ".join(backup_runbook.split())
 
     assert "import tooling for cutover rehearsals" in plans
     assert "61 sanitized report rows" in plans
@@ -61,13 +69,15 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "not possible from the current server\n     backup" in plans
     assert "restored source still included every table required by the\n     importer" in plans
     assert "retain\n     `--require-source-rows`" in plans
-    assert "Keep the MySQL-to-Postgres backup import tooling" in plans
-    assert "Docker-backed MySQL-to-Postgres" in plans
+    assert "Keep the\n     MySQL-to-Postgres backup import tooling" in plans
+    assert "`mysql-migration` optional uv extra" in plans
     assert "server/import_mysql_to_postgres.py" in database_notes
-    assert "requires every application table, including the\n  derived `record` table" in (
-        database_notes
+    assert "requires every application table, including the derived `record` table" in (
+        normalized_database_notes
     )
-    assert "optional `--require-source-rows` checks require\n  selected tables" in database_notes
+    assert "optional `--require-source-rows` checks require selected tables" in (
+        normalized_database_notes
+    )
     assert "docs/postgres-backup-rehearsal.md" in database_notes
     assert "Import Rehearsal Command" in database_notes
     assert "--dry-run" in database_notes
@@ -75,10 +85,9 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "Other target tables must be empty" in database_notes
     assert "`--require-source-rows rating --require-source-rows record`" in database_notes
     assert "fail before target rows are\ncopied" in database_notes
-    assert "Postgres marker suite runs a Docker-backed rehearsal" in database_notes
-    assert "primary-key sequences advance" in database_notes
-    assert "Python auth rules" in database_notes
-    assert "ORM\nlookup helpers" in database_notes
+    assert "Focused unit tests use synthetic source and target schemas" in database_notes
+    assert "Postgres\nsequence repair" in database_notes
+    assert "Run the backup rehearsal procedure for end-to-end evidence" in database_notes
     assert "partial staging backup rehearsal completed with\n   sanitized reports" in database_notes
     assert "game-history rows and stats read paths" in database_notes
     assert "sparse-stats limitation is accepted for the current migration evidence" in (
@@ -87,7 +96,6 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "source that omits any required table is rejected by the importer" in (
         database_notes
     )
-    assert "Retain the MySQL-to-Postgres backup import tool" in database_notes
     assert "Keep the MySQL-to-Postgres backup import tool" in database_notes
     assert "persisted rating/record evidence is explicitly unavailable" in database_notes
     assert "keep backup files outside the repository" in backup_runbook
@@ -140,10 +148,8 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "--require-source-rows rating" in backup_runbook
     assert "--require-source-rows record" in backup_runbook
     assert "sparse source dump that lacks\n   persisted rating history" in backup_runbook
-    assert "separate\n   disposable test databases" in backup_runbook
-    assert "Do not point marker test URLs at the restored\n   MySQL source" in (
-        backup_runbook
-    )
+    assert "separate disposable test database" in normalized_backup_runbook
+    assert "Do not point the marker at the\n   imported Postgres target" in backup_runbook
     assert "docker compose --profile client-build run --rm client-assets" in (
         backup_runbook
     )

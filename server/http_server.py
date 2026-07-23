@@ -165,7 +165,7 @@ def set_password_in_session(
 
     This function performs synchronous SQLAlchemy work and is called from the
     FastAPI route through Starlette's threadpool. Keeping it separate preserves
-    the previous threaded behavior: a slow MySQL lookup or flush should not
+    the previous threaded behavior: a slow database lookup or flush should not
     block the ASGI event loop from serving unrelated requests.
 
     Args:

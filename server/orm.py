@@ -22,7 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
 )
-from sqlalchemy.dialects import mysql, postgresql
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.url import URL
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -32,12 +32,10 @@ UNSIGNED_INTEGER_MAX = 4_294_967_295
 UNSIGNED_SMALL_INTEGER_MAX = 65_535
 UNSIGNED_TINY_INTEGER_MAX = 255
 
-UnsignedInteger = BigInteger().with_variant(mysql.INTEGER(unsigned=True), "mysql")
-UnsignedSmallInteger = Integer().with_variant(mysql.SMALLINT(unsigned=True), "mysql")
-UnsignedTinyInteger = SmallInteger().with_variant(mysql.TINYINT(unsigned=True), "mysql")
-LegacyFloat = Float().with_variant(mysql.FLOAT(), "mysql").with_variant(
-    postgresql.REAL(), "postgresql"
-)
+UnsignedInteger = BigInteger()
+UnsignedSmallInteger = Integer()
+UnsignedTinyInteger = SmallInteger()
+LegacyFloat = Float().with_variant(postgresql.REAL(), "postgresql")
 
 
 def _unsigned_range_constraint(
@@ -45,18 +43,16 @@ def _unsigned_range_constraint(
     column_name: str,
     max_value: int,
 ) -> CheckConstraint:
-    """Return a database-level range check for a MySQL unsigned column.
+    """Return a database-level range check for a formerly unsigned column.
 
     Postgres does not have unsigned integer column types, so these constraints
-    preserve the value ranges accepted by the current MySQL schema when ORM
-    metadata is created against Postgres. MySQL keeps its native unsigned types
-    and cannot attach check constraints to auto-increment columns, so the
-    constraint is emitted only for Postgres.
+    preserve the value ranges accepted by the historical source schema when ORM
+    metadata is created against Postgres.
 
     Args:
         table_name: Table that owns the constrained column.
         column_name: Unsigned column name.
-        max_value: Highest value accepted by the matching MySQL unsigned type.
+        max_value: Highest value accepted by the historical unsigned type.
 
     Returns:
         SQLAlchemy check constraint for the unsigned range.
@@ -70,11 +66,10 @@ def _unsigned_range_constraint(
 def _build_engine_config() -> tuple[str | URL, dict[str, dict[str, str]]]:
     """Return the configured SQLAlchemy engine URL and connection arguments.
 
-    `ACQUIRE_DATABASE_URL` is the explicit escape hatch for migration and
-    database testing. When it is absent and `POSTGRES_HOST` is configured,
-    Postgres environment variables provide the local-development database
-    connection. Otherwise, the legacy MySQL environment-variable behavior
-    remains available as the fallback path.
+    `ACQUIRE_DATABASE_URL` provides an explicit connection for deployment,
+    migration, and database testing. Otherwise, Postgres environment variables
+    configure the application database and default to a local development
+    connection.
 
     Returns:
         Tuple of database URL or SQLAlchemy `URL` plus keyword arguments for
@@ -84,38 +79,16 @@ def _build_engine_config() -> tuple[str | URL, dict[str, dict[str, str]]]:
     if configured_url:
         return configured_url, {}
 
-    postgres_host = os.environ.get("POSTGRES_HOST")
-    if postgres_host:
-        return (
-            URL.create(
-                "postgresql+psycopg",
-                username=os.environ.get("POSTGRES_USER", "acquire"),
-                password=os.environ.get("POSTGRES_PASSWORD", "acquire"),
-                host=postgres_host,
-                port=int(os.environ.get("POSTGRES_PORT", "5432")),
-                database=os.environ.get("POSTGRES_DB", "acquire"),
-            ),
-            {},
-        )
-
-    mysql_user = os.environ.get("MYSQL_USER", "acquire")
-    mysql_password = os.environ.get("MYSQL_PASSWORD", "acquire")
-    mysql_database = os.environ.get("MYSQL_DATABASE", "acquire")
-    mysql_socket = os.environ.get("MYSQL_SOCKET", "/var/run/mysqld/mysqld.sock")
-    mysql_auth_plugin = os.environ.get("MYSQL_AUTH_PLUGIN", "mysql_native_password")
-    connect_args: dict[str, str] = {}
-    if mysql_auth_plugin:
-        connect_args["auth_plugin"] = mysql_auth_plugin
     return (
         URL.create(
-            "mysql+mysqlconnector",
-            username=mysql_user,
-            password=mysql_password,
-            host="localhost",
-            database=mysql_database,
-            query={"unix_socket": mysql_socket},
+            "postgresql+psycopg",
+            username=os.environ.get("POSTGRES_USER", "acquire"),
+            password=os.environ.get("POSTGRES_PASSWORD", "acquire"),
+            host=os.environ.get("POSTGRES_HOST", "localhost"),
+            port=int(os.environ.get("POSTGRES_PORT", "5432")),
+            database=os.environ.get("POSTGRES_DB", "acquire"),
         ),
-        {"connect_args": connect_args},
+        {},
     )
 
 

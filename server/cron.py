@@ -1,4 +1,4 @@
-"""Import legacy game logs into MySQL and generate published stats files.
+"""Import legacy game logs into Postgres and generate published stats files.
 
 This module is part of the legacy Python runtime and replay tooling.
 """
@@ -312,22 +312,22 @@ def get_empty_records() -> list[list[int]]:
 class StatsGen:
     """Generate JSON stats files from persisted game and rating data."""
 
-    users_with_completed_games_sql_template = """
-        select distinct {user_table}.user_id,
-            {user_table}.name,
-            record.encoded
-        from {user_table}
-        join game_player on {user_table}.user_id = game_player.user_id
-        join game on game_player.game_id = game.game_id
-        left join record on {user_table}.user_id = record.user_id
-        where game.end_time is not null
-        order by {user_table}.user_id asc
-        """
     users_with_completed_games_sql = sqlalchemy.sql.text(
-        users_with_completed_games_sql_template.format(user_table="user")
+        """
+        select distinct "user".user_id,
+            "user".name,
+            record.encoded
+        from "user"
+        join game_player on "user".user_id = game_player.user_id
+        join game on game_player.game_id = game.game_id
+        left join record on "user".user_id = record.user_id
+        where game.end_time is not null
+        order by "user".user_id asc
+        """
     )
-    ratings_sql_template = """
-        select {user_table}.name,
+    ratings_sql = sqlalchemy.sql.text(
+        """
+        select "user".name,
             rating_type.name as rating_type,
             rating.time,
             rating.mu,
@@ -341,12 +341,12 @@ class StatsGen:
             group by user_id, rating_type_id
         ) rating_summary on rating.rating_id = rating_summary.rating_id
         join rating_type on rating.rating_type_id = rating_type.rating_type_id
-        join {user_table} on rating.user_id = {user_table}.user_id
+        join "user" on rating.user_id = "user".user_id
         where rating.time >= :minimum_rating_time
         order by rating.mu - rating.sigma * 3 desc,
             rating.mu desc, rating.time asc, rating.user_id asc
         """
-    ratings_sql = sqlalchemy.sql.text(ratings_sql_template.format(user_table="user"))
+    )
     user_ratings_sql = sqlalchemy.sql.text(
         """
         select rating_type.name,
@@ -364,12 +364,13 @@ class StatsGen:
         order by rating_type.name
         """
     )
-    user_games_sql_template = """
+    user_games_sql = sqlalchemy.sql.text(
+        """
         select game.game_id,
             game.end_time,
             game.game_mode_id,
             game_player.player_index,
-            {user_table}.name,
+            "user".name,
             game_player.score
         from game
         join (
@@ -382,29 +383,10 @@ class StatsGen:
             limit 100
         ) game_ids on game.game_id = game_ids.game_id
         join game_player on game.game_id = game_player.game_id
-        join {user_table} on game_player.user_id = {user_table}.user_id
+        join "user" on game_player.user_id = "user".user_id
         order by game.end_time desc, game.game_id desc, game_player.player_index asc
         """
-    user_games_sql = sqlalchemy.sql.text(user_games_sql_template.format(user_table="user"))
-
-    @staticmethod
-    def user_table_for_session(session):
-        """Return the account table reference for the active database dialect.
-
-        Postgres reserves `user`, while the legacy MySQL schema uses it as the
-        account table name. This method keeps that dialect choice centralized
-        and closed over known values before query templates are rendered.
-
-        Args:
-            session: SQLAlchemy session or compatible test double.
-
-        Returns:
-            SQL table reference for the legacy account table.
-        """
-        get_bind = getattr(session, "get_bind", None)
-        bind = get_bind() if get_bind else None
-        dialect = getattr(bind, "dialect", None)
-        return '"user"' if getattr(dialect, "name", None) == "postgresql" else "user"
+    )
 
     def __init__(self, session, output_dir):
         """Initialize stats generation state for one database session.
@@ -417,16 +399,12 @@ class StatsGen:
         self.output_dir = output_dir
 
     def users_with_completed_games_sql_for_session(self):
-        """Return the completed-game users query for the active database dialect.
+        """Return the completed-game users query.
 
         Returns:
-            SQLAlchemy text query for the current session bind.
+            SQLAlchemy text query for Postgres.
         """
-        return sqlalchemy.sql.text(
-            StatsGen.users_with_completed_games_sql_template.format(
-                user_table=StatsGen.user_table_for_session(self.session)
-            )
-        )
+        return StatsGen.users_with_completed_games_sql
 
     def get_users_with_completed_games(self):
         """Get users with completed games.
@@ -443,41 +421,27 @@ class StatsGen:
         return users_with_completed_games
 
     def ratings_sql_for_session(self):
-        """Return the ratings summary SQL for the active database dialect.
-
-        Postgres reserves `user`, while the legacy MySQL schema uses it as the
-        account table name. The table name comes from a closed dialect check so
-        the rest of the raw SQL can keep its historical shape without exposing
-        an interpolation surface to callers.
+        """Return the ratings summary SQL.
 
         Returns:
-            SQLAlchemy text query for the current session bind.
+            SQLAlchemy text query for Postgres.
         """
-        return sqlalchemy.sql.text(
-            StatsGen.ratings_sql_template.format(
-                user_table=StatsGen.user_table_for_session(self.session)
-            )
-        )
+        return StatsGen.ratings_sql
 
     def user_games_sql_for_session(self):
-        """Return the user game history SQL for the active database dialect.
+        """Return the user game history SQL.
 
         Returns:
-            SQLAlchemy text query for the current session bind.
+            SQLAlchemy text query for Postgres.
         """
-        return sqlalchemy.sql.text(
-            StatsGen.user_games_sql_template.format(
-                user_table=StatsGen.user_table_for_session(self.session)
-            )
-        )
+        return StatsGen.user_games_sql
 
     def output_ratings(self):
         """Write the public ratings summary for recently active players.
 
-        The cutoff is computed in Python instead of the database so this query
-        remains portable across MySQL and Postgres. The published ratings file
-        still includes only latest ratings with activity in the rolling
-        30-day window used by the legacy cron job.
+        The cutoff is computed in Python so the published ratings file includes
+        only latest ratings with activity in the rolling 30-day window used by
+        the legacy cron job.
         """
         rating_type_to_ratings = collections.defaultdict(list)
         minimum_rating_time = int(time.time()) - RECENT_RATINGS_WINDOW_SECONDS
@@ -536,12 +500,11 @@ class StatsGen:
 
 
 def decode_database_text(value: bytes | str) -> str:
-    """Return text from legacy byte rows or modern string rows.
+    """Return text from byte rows or modern string rows.
 
-    Raw SQL result rows may contain `bytes` with the legacy connector and `str`
-    with modern mysql-connector-python. Stats generation uses this helper at
-    the database/output boundary so JSON serialization receives plain strings
-    regardless of which connector produced the row.
+    Stats generation uses this helper at the database/output boundary so JSON
+    serialization receives plain strings even when a test double or historical
+    adapter supplies bytes.
 
     Args:
         value: Database text value returned as `bytes` or `str`.

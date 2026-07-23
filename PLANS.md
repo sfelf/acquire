@@ -36,7 +36,9 @@ Status: complete.
 - Create a dedicated `tests/` layout. Complete.
 - Move or mirror the existing `server/test.py` coverage under pytest. Complete.
 - Add fixtures for game-server behavior. Complete.
-- Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`. Complete.
+- Add markers for `unit`, `integration`, `golden`, `mysql`, and `e2e`.
+  Complete for the migration baseline; the MySQL marker was retired after the
+  Postgres cutover.
 - Add coverage reporting with a 90% minimum threshold. Complete.
 - Keep fast tests separate from MySQL and end-to-end tests. Complete.
 
@@ -44,7 +46,13 @@ Notes:
 
 - The pytest suite now covers the core Python server modules, log parser/processor helpers, ORM helpers, cron helpers, and replay fixtures without requiring MySQL for fast checks.
 - Coverage now has a 90% minimum threshold across the measured Python source without legacy-function exclusions.
-- Docker-backed `mysql` and `e2e` marker fixtures are in place. MySQL coverage now exercises schema creation, seed data, runtime constraints, lookup persistence, transaction behavior, and completed-game log import persistence. Integration coverage now exercises Python server protocol flows for connection, chat, game creation, joining, starting, watching, leaving, disconnecting, and rejoining. E2E coverage now verifies UI/report endpoints, login, global/game chat, game creation, joining, starting, tile play, watching, leaving, and rejoining through the local browser gateway.
+- Docker-backed Postgres and e2e marker fixtures are in place. Historical MySQL
+  parity coverage was retired after Postgres became the sole runtime database.
+  Integration coverage exercises Python server protocol flows for connection,
+  chat, game creation, joining, starting, watching, leaving, disconnecting, and
+  rejoining. E2E coverage verifies UI/report endpoints, login, global/game chat,
+  game creation, joining, starting, tile play, watching, leaving, and rejoining
+  through the local browser gateway.
 
 ## Phase 3: Golden Replay Tests
 
@@ -68,7 +76,8 @@ Notes:
 Status: complete.
 
 - Add Docker Compose for local development. Complete.
-- Include MySQL as a local service. Complete.
+- Include MySQL as a local service during migration. Complete and later retired
+  after Postgres became the sole runtime database.
 - Support the Python gateway while the Node.js backend runtime is retired. Complete.
 - Expose the local browser UI through the Python gateway. Complete.
 - Generate legacy client assets inside the local Docker profile. Complete.
@@ -90,7 +99,7 @@ change can be reviewed and validated independently.
    non-websocket HTTP routes formerly served by `server/server.js` and prove
    existing browser flows still work through integration and e2e coverage.
 3. Move auth and user checks fully into Python. Complete. Consolidate login,
-   session, and user lookup behavior in the Python backend, with MySQL-backed
+   session, and user lookup behavior in the Python backend, with database-backed
    coverage for successful credentials, failed credentials, missing users,
    existing users, and session edge cases. Password setup is Python-owned;
    SockJS login has moved onto the Python gateway path for the default local
@@ -113,7 +122,7 @@ change can be reviewed and validated independently.
 
 ## Phase 6: Dependency And Deployment Modernization
 
-Status: in progress.
+Status: complete.
 
 Phase 6 should be split into small PRs so dependency risk, database migration
 risk, frontend build changes, and deployment changes can be reviewed
@@ -126,7 +135,7 @@ independently.
 3. Add Alembic migrations for the current MySQL schema before changing database
    engines. Complete.
 4. Plan and execute the MySQL-to-Postgres migration after migrations and
-   persistence tests are in place. In progress.
+   persistence tests are in place. Complete.
    - Document the current MySQL-specific surface area and migration sequence.
      Complete.
    - Add Postgres dependencies and Docker-backed `postgres` marker fixtures
@@ -159,12 +168,11 @@ independently.
      Postgres target. The report validator and import command retain
      `--require-source-rows` for future sources that do contain persisted stats.
    - Remove MySQL-only runtime paths after deployment and rollback plans are
-     documented. Pending.
-     Legacy `initialize_database.py` reset command removal is complete;
-     broader MySQL rollback-surface cleanup remains gated on production
-     cutover ownership. Keep the MySQL-to-Postgres backup import tooling and
-     its MySQL driver dependency until production no longer needs to migrate
-     from an existing MySQL backup.
+     documented. Complete. The application runtime, local Docker stack, CI
+     marker suites, and normal dependency sets are Postgres-only. Keep the
+     MySQL-to-Postgres backup import tooling and install its source driver only
+     through the `mysql-migration` optional uv extra so existing backups remain
+     migratable.
 5. Modernize frontend tooling so client asset generation no longer depends on
    the legacy Node.js 6-era toolchain. Complete.
    - Replace Node 6 and `node-sass` with a modern npm/Dart Sass client asset
@@ -199,8 +207,9 @@ independently.
 
 ## Open Notes
 
-- MySQL remains available for parity testing and rollback planning while
-  Postgres becomes the local Docker default.
+- Postgres is the sole application runtime database. The retained
+  MySQL-to-Postgres importer is an optional operational tool for existing
+  backups, not a runtime or rollback path.
 - Docker starts as local-development tooling only.
 - AWS is the preferred future cloud target.
 - README coverage and supported Python version badges are published from dynamic
