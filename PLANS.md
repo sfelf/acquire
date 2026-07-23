@@ -1,10 +1,17 @@
-# Modernization Plan
+# Completed Modernization Plan
 
-This document tracks the agreed modernization path for the Acquire codebase.
+Status: complete as of July 23, 2026.
+
+This document is the historical record of the agreed modernization path for
+the Acquire codebase. New work is tracked through GitHub issues and milestones.
 
 ## Project Goal
 
-Modernize the repository in phases so the team can safely perform a major refactor, retire the Node.js server, keep the Python backend, preserve current behavior through extensive pytest coverage, keep MySQL initially, and prepare for Docker-first local development with a later AWS deployment path.
+The project modernized the repository in phases so the team can safely perform
+a major refactor, retire the Node.js server, keep the Python backend, preserve
+current behavior through extensive pytest coverage, migrate from MySQL to
+Postgres, support Docker-based development, and establish a production image
+and optional AWS publishing path.
 
 ## Phase 1: Tooling And Agent Docs
 
@@ -88,8 +95,8 @@ Status: complete.
 
 Status: complete.
 
-Phase 5 will be completed as a sequence of focused PRs so each runtime boundary
-change can be reviewed and validated independently.
+Phase 5 was completed as a sequence of focused PRs so each runtime boundary
+change could be reviewed and validated independently.
 
 1. Runtime boundary inventory. Complete. Document every Node-owned HTTP endpoint and
    SockJS message path, map each behavior to the existing Python equivalent or a
@@ -124,9 +131,8 @@ change can be reviewed and validated independently.
 
 Status: complete.
 
-Phase 6 should be split into small PRs so dependency risk, database migration
-risk, frontend build changes, and deployment changes can be reviewed
-independently.
+Phase 6 was split into small PRs so dependency risk, database migration risk,
+frontend build changes, and deployment changes could be reviewed independently.
 
 1. Upgrade Python runtime dependencies in controlled groups, starting with
    compatibility patches needed for supported Python versions. Complete.
@@ -205,13 +211,14 @@ independently.
    - Document GitHub repository variables, AWS OIDC trust policy, and minimal
      ECR push permissions for image publishing. Complete.
 
-## Open Notes
+## Completed Baseline And Follow-Up
 
 - Postgres is the sole application runtime database. The retained
   MySQL-to-Postgres importer is an optional operational tool for existing
   backups, not a runtime or rollback path.
-- Docker starts as local-development tooling only.
-- AWS is the preferred future cloud target.
+- Docker supports the local development stack and the production image.
+- AWS remains the preferred cloud target; optional ECR publishing is configured.
 - README coverage and supported Python version badges are published from dynamic
   badge sources.
-- Runtime dependency upgrades are intentionally deferred.
+- Further dependency, packaging, and import work is tracked through GitHub
+  issues and milestones.

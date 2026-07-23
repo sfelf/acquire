@@ -1,6 +1,4 @@
-# Keep this Docker-only dependency set separate from requirements.txt.
-# Keep this Docker-only dependency set separate from requirements.txt while
-# runtime dependencies are modernized in controlled groups.
+# Keep this Docker dependency set explicit until project packaging is consolidated.
 alembic>=1.17,<2
 fastapi>=0.115,<1
 psycopg[binary]>=3.2,<4

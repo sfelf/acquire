@@ -4,11 +4,28 @@
 ![Supported Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 [![Project coverage](https://codecov.io/github/sfelf/acquire/branch/feature%2Fmodernization-refactor/graph/badge.svg)](https://app.codecov.io/github/sfelf/acquire/tree/feature%2Fmodernization-refactor)
 
-This is the code for my Acquire board game program which can be played at [http://acquire.tlstyer.com/](http://acquire.tlstyer.com/).
+## About This Fork
 
-## Modernization testing
+This repository is an independently maintained fork of
+[tlstyer/acquire](https://github.com/tlstyer/acquire). The original project,
+which can be played at [acquire.tlstyer.com](http://acquire.tlstyer.com/),
+provided the foundation for this work. We are grateful to tlstyer and the
+project's contributors for creating and sharing it.
 
-The modernization branch uses `uv`, `pytest`, `ruff`, `mypy`, and GitHub Actions for Python 3.12, 3.13, and 3.14.
+This fork is not affiliated with, endorsed by, or maintained in collaboration
+with tlstyer. Its changes are developed independently and are not currently
+intended for contribution back to the original repository.
+
+This fork preserves the original project's foundation while modernizing the
+codebase, development tooling, testing, deployment process, and architecture.
+Its goal is to support continued maintenance and the addition of new game
+features. This repository is not the source currently deployed at
+`acquire.tlstyer.com`.
+
+## Development And Testing
+
+The project uses `uv`, `pytest`, `ruff`, `mypy`, and GitHub Actions for Python
+3.12, 3.13, and 3.14.
 
 Run the fast validation suite with:
 
@@ -24,7 +41,11 @@ Run the informational coverage report with:
 uv run pytest --cov=server --cov-report=term-missing:skip-covered --cov-report=xml
 ```
 
-Current coverage is informational while golden replay tests are expanded before the major refactor. The coverage command generates `coverage.xml`, and CI uploads that report to Codecov so the README coverage badge can update without committing generated badge files to the repository. The repository must be connected to Codecov for uploads and the badge to resolve.
+The test configuration enforces at least 90% total coverage. The coverage
+command generates `coverage.xml`, and CI uploads that report to Codecov so the
+README coverage badge can update without committing generated badge files to
+the repository. The repository must be connected to Codecov for uploads and
+the badge to resolve.
 
 Run specific pytest marker layers with:
 
@@ -102,20 +123,32 @@ schema or required lookup-data changes should be added as Alembic revisions.
 
 ## Install dependencies
 
-Install Node.js 22 LTS or newer when you want to build client assets outside
-Docker.
-
-Install other dependencies.
+Install `uv`, then create the project environment:
 
 ```bash
-sudo apt-get install python3-pip python3-venv python3-wheel zopfli
+uv sync --group dev
+```
 
+Install Node.js 22 LTS or newer when you want to build client assets outside
+Docker, then run:
+
+```bash
+npm ci
+npm run build:client
+```
+
+Install the `zopfli` system package when running the legacy stats compression
+workflow.
+
+### Legacy Python Installation
+
+`requirements.txt` remains available temporarily for compatibility with the
+pre-uv installation path. New development should use `uv`.
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip3 install -r requirements.txt
-
-npm ci
-npm run build:client
 ```
 
 ## Download libraries for development use:

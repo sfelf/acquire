@@ -7,6 +7,29 @@ pytestmark = pytest.mark.unit
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_readme_identifies_independent_fork_and_hosted_original() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text()
+
+    assert "[tlstyer/acquire](https://github.com/tlstyer/acquire)" in readme
+    assert "[acquire.tlstyer.com](http://acquire.tlstyer.com/)" in readme
+    assert "We are grateful to tlstyer and the\nproject's contributors" in readme
+    assert "not affiliated with, endorsed by, or maintained in collaboration" in readme
+    assert "not the source currently deployed at\n`acquire.tlstyer.com`" in readme
+
+
+def test_completed_modernization_docs_point_to_issue_tracking() -> None:
+    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
+
+    assert plans.startswith("# Completed Modernization Plan\n")
+    assert "Status: complete as of July 23, 2026." in plans
+    assert "New work is tracked through GitHub issues and milestones." in plans
+    assert "Runtime dependency upgrades are intentionally deferred." not in plans
+    assert "The six-phase modernization plan is complete." in agent_notes
+    assert "Complete packaging and import restructuring" in agent_notes
+    assert "Keep linting and type checking permissive" not in agent_notes
+
+
 def test_phase_6_tracks_postgres_migration_sequence() -> None:
     plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()

@@ -1,10 +1,10 @@
 # Agent Instructions
 
-This repository is in a modernization and refactor effort. Tooling,
-documentation, CI, Docker-backed local development, pytest coverage, and Python
-backend consolidation are in place; the current goal is dependency and
-deployment modernization while preserving behavior with the existing test
-suite. Phase 6 is complete, and packaging work is tracked separately.
+The six-phase modernization plan is complete. Tooling, documentation, CI,
+Docker-backed development, pytest coverage, Python backend consolidation,
+Postgres migration support, and production image publishing are in place. New
+work should follow GitHub issues and milestones, beginning with packaging and
+import restructuring before the major refactor.
 
 ## Current Architecture
 
@@ -21,13 +21,16 @@ suite. Phase 6 is complete, and packaging work is tracked separately.
 ## Important Constraints
 
 - Do not change runtime behavior in tooling-only work.
-- Do not upgrade legacy runtime dependencies until test coverage is strong.
-- Do not add Node.js services back to the local backend runtime path; keep Node usage limited to explicit client asset build tooling until the frontend toolchain is modernized.
+- Keep dependency upgrades issue-scoped and covered by focused regression
+  tests; do not combine broad upgrades with unrelated refactors.
+- Do not add Node.js services back to the backend runtime path; keep Node usage
+  limited to explicit client asset build tooling.
 - Do not edit generated client assets directly.
-- Keep linting and type checking permissive until golden tests protect behavior.
+- Preserve the current `ruff` and `mypy` baseline; new code must pass both
+  checks without adding broad exceptions.
 - Prefer small, reviewable changes with clear validation notes.
 - Prefer module-sized test coverage PRs when a module can be covered cleanly without changing runtime behavior.
-- Use FastAPI and Pydantic for new Python HTTP routes when they fit the endpoint contract, while preserving legacy response bodies and error codes during the migration.
+- Use FastAPI and Pydantic for new Python HTTP routes when they fit the endpoint contract, while preserving existing response bodies and error codes unless an issue explicitly changes the public contract.
 - Add Google-style docstrings for new non-test Python modules, classes, functions, and methods. Always include a useful summary line. Include `Args:` and `Returns:` sections when there are arguments or return values to document; omit those sections when they would only say `None`.
 - Prefer concise docstrings, but add a longer paragraph after the summary when the callable has non-obvious business or domain rules, mutates state, persists data, sends messages, publishes events, mutates arguments, relies on important preconditions, has ordering or lifecycle constraints, handles surprising edge cases, coordinates multiple systems, returns values that need interpretation, raises meaningful exceptions, uses exceptions as part of its contract, has security/authorization/concurrency/idempotency/retry/transaction concerns, is a public API or service boundary, represents an important abstraction/lifecycle/protocol/domain concept, or exists for a reason that is not clear from the local method name. Do not add longer descriptions that merely repeat the function name, restate type information, or explain implementation details callers do not need.
 - When reviewing docstrings, classify each reviewed docstring as `Summary only is sufficient`, `Longer description recommended`, or `Longer description required`, with a brief reason or the specific missing caller-relevant context.
@@ -96,11 +99,13 @@ Run pre-commit hooks with:
 uv run pre-commit run --all-files
 ```
 
-## Modernization Priorities
+## Current Priorities
 
-1. Establish tooling, CI, and agent instructions.
-2. Add pytest coverage around existing behavior.
-3. Add golden replay tests from historical game logs.
-4. Add local-development Docker support.
-5. Consolidate the runtime into Python and deprecate Node.js.
-6. Upgrade dependencies, add migration tooling, modernize frontend asset builds, and plan deployment.
+1. Complete packaging and import restructuring through the Packaging milestone.
+2. Keep characterization, integration, database, golden, and e2e tests green
+   while preparing the major refactor.
+3. Preserve the optional MySQL-backup import path until existing backups no
+   longer need to be migrated.
+
+`PLANS.md` is the completed historical modernization record, not the active
+work tracker.
