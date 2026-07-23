@@ -1,8 +1,8 @@
 # Acquire board game
 
-[![CI](https://github.com/sfelf/acquire/actions/workflows/ci.yml/badge.svg?branch=feature/modernization-refactor)](https://github.com/sfelf/acquire/actions/workflows/ci.yml?query=branch%3Afeature%2Fmodernization-refactor)
+[![CI](https://github.com/sfelf/acquire/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sfelf/acquire/actions/workflows/ci.yml?query=branch%3Amain)
 ![Supported Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
-[![Project coverage](https://codecov.io/github/sfelf/acquire/branch/feature%2Fmodernization-refactor/graph/badge.svg)](https://app.codecov.io/github/sfelf/acquire/tree/feature%2Fmodernization-refactor)
+[![Project coverage](https://codecov.io/github/sfelf/acquire/branch/main/graph/badge.svg)](https://app.codecov.io/github/sfelf/acquire/tree/main)
 
 ## About This Fork
 
