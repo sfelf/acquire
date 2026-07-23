@@ -199,12 +199,25 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert "AWS ECR Publishing Setup" in deployment_notes
     assert "AWS_ROLE_TO_ASSUME" in deployment_notes
     assert "AWS_ECR_REPOSITORY" in deployment_notes
-    assert "token.actions.githubusercontent.com" in deployment_notes
     assert "sts:AssumeRoleWithWebIdentity" in deployment_notes
     assert "ecr:GetAuthorizationToken" in deployment_notes
     assert "ecr:PutImage" in deployment_notes
-    assert "repo:sfelf/acquire:ref:refs/heads/main" in deployment_notes
     assert "commit SHA" in deployment_notes
+
+    trust_policy_text = deployment_notes.split("```json", 1)[1].split("```", 1)[0]
+    trust_policy = json.loads(trust_policy_text)
+    trust_statement = trust_policy["Statement"][0]
+    assert trust_statement["Principal"]["Federated"] == (
+        "arn:aws:iam::123456789012:"
+        "oidc-provider/token.actions.githubusercontent.com"
+    )
+    assert trust_statement["Action"] == "sts:AssumeRoleWithWebIdentity"
+    assert trust_statement["Condition"]["StringEquals"] == {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": (
+            "repo:sfelf/acquire:ref:refs/heads/main"
+        ),
+    }
 
 
 def test_long_lived_delivery_configuration_targets_main() -> None:
