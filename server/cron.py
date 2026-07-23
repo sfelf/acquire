@@ -11,6 +11,7 @@ import os.path
 import subprocess
 import time
 import traceback
+from pathlib import Path
 from typing import Protocol, cast
 
 import orm
@@ -22,6 +23,9 @@ import ujson
 import util
 
 RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
+DEFAULT_STATS_DATA_ROOT = (
+    Path(__file__).resolve().parents[1] / "client" / "stats" / "data"
+)
 
 
 class MutableKeyValue(Protocol):
@@ -525,11 +529,21 @@ record_key_to_record_index: dict[str, int] = {
 }
 
 
-def process_logs(write_stats_files: bool) -> None:
-    """Process logs.
+def process_logs(
+    write_stats_files: bool,
+    *,
+    stats_data_root: Path = DEFAULT_STATS_DATA_ROOT,
+) -> None:
+    """Import new log records and optionally publish browser stats data.
+
+    Generated ratings and per-user files are moved into the stats client's
+    gitignored data directory after compression. The FastAPI gateway serves
+    that directory under `/stats/data/`, so cron and the browser share one
+    publication tree regardless of the process working directory.
 
     Args:
         write_stats_files: Whether to generate public stats files after import.
+        stats_data_root: Directory where generated stats JSON is published.
     """
     with orm.session_scope() as session:
         lookup = orm.Lookup(session)
@@ -571,6 +585,9 @@ def process_logs(write_stats_files: bool) -> None:
             ratings_filenames = glob.glob("stats_temp/*.json")
             users_filenames = glob.glob("stats_temp/users/*.json")
             if ratings_filenames:
+                users_stats_data_root = stats_data_root / "users"
+                users_stats_data_root.mkdir(parents=True, exist_ok=True)
+
                 command = ["zopfli"]
                 command.extend(ratings_filenames)
                 command.extend(users_filenames)
@@ -586,12 +603,12 @@ def process_logs(write_stats_files: bool) -> None:
 
                 command = ["mv"]
                 command.extend(ratings_filenames)
-                command.append("web/stats/data")
+                command.append(os.fspath(stats_data_root))
                 subprocess.call(command)
 
                 command = ["mv"]
                 command.extend(users_filenames)
-                command.append("web/stats/data/users")
+                command.append(os.fspath(users_stats_data_root))
                 subprocess.call(command)
 
 

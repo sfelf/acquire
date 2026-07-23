@@ -36,6 +36,12 @@ Both paths write the same gitignored files into the checkout:
 - `client/main/js/main.js`
 - `client/main/js/main.js.map`
 
+The separately gitignored `client/stats/data` directory is runtime data, not a
+client build output. The cron log processor publishes ratings and per-user JSON
+there, and the Python gateway serves it at `/stats/data/`. Deployments that run
+cron and the gateway as separate processes must give both processes access to
+the same writable `client/stats/data` tree.
+
 ## Repository Boundary
 
 Do not commit generated client assets. The tracked source of truth is the SCSS,

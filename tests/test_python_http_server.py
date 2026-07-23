@@ -120,6 +120,30 @@ def test_python_http_server_serves_stats_static_assets(tmp_path):
     assert js_response.content == b"window.stats = true;"
 
 
+def test_python_http_server_serves_cron_generated_stats_data(tmp_path):
+    client, _main_root, stats_root = make_client(tmp_path)
+    users_root = stats_root / "data" / "users"
+    users_root.mkdir(parents=True)
+    (stats_root / "data" / "ratings.json").write_text(
+        '{"Singles2":[]}',
+        encoding="utf-8",
+    )
+    (users_root / "alice.json").write_text(
+        '{"username":"alice"}',
+        encoding="utf-8",
+    )
+
+    ratings_response = client.get("/stats/data/ratings.json")
+    user_response = client.get("/stats/data/users/alice.json")
+
+    assert ratings_response.status_code == 200
+    assert ratings_response.headers["content-type"].startswith("application/json")
+    assert ratings_response.json() == {"Singles2": []}
+    assert user_response.status_code == 200
+    assert user_response.headers["content-type"].startswith("application/json")
+    assert user_response.json() == {"username": "alice"}
+
+
 def test_python_http_server_redirects_stats_index_without_trailing_slash(tmp_path):
     client, _main_root, stats_root = make_client(tmp_path)
     (stats_root / "index.html").write_text(

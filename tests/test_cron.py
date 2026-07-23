@@ -877,8 +877,14 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
         lambda command: subprocess_calls.append(command),
     )
 
-    cron_module.process_logs(write_stats_files=True)
+    stats_data_root = tmp_path / "client" / "stats" / "data"
+    cron_module.process_logs(
+        write_stats_files=True,
+        stats_data_root=stats_data_root,
+    )
 
+    assert stats_data_root.is_dir()
+    assert (stats_data_root / "users").is_dir()
     assert subprocess_calls == [
         ["zopfli", "stats_temp/ratings.json", "stats_temp/users/alice.json"],
         [
@@ -894,13 +900,13 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
             "mv",
             "stats_temp/ratings.json",
             "stats_temp/ratings.json.gz",
-            "web/stats/data",
+            str(stats_data_root),
         ],
         [
             "mv",
             "stats_temp/users/alice.json",
             "stats_temp/users/alice.json.gz",
-            "web/stats/data/users",
+            str(stats_data_root / "users"),
         ],
     ]
 
