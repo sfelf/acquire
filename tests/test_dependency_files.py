@@ -204,10 +204,36 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert "ecr:GetAuthorizationToken" in deployment_notes
     assert "ecr:PutImage" in deployment_notes
     assert "repo:sfelf/acquire:ref:refs/heads/main" in deployment_notes
-    assert "repo:sfelf/acquire:ref:refs/heads/feature/modernization-refactor" in (
-        deployment_notes
-    )
     assert "commit SHA" in deployment_notes
+
+
+def test_long_lived_delivery_configuration_targets_main() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text()
+    ci_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
+    ).read_text()
+    production_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "production-image.yml"
+    ).read_text()
+    deployment_notes = (REPOSITORY_ROOT / "docs" / "deployment.md").read_text()
+
+    assert "badge.svg?branch=main" in readme
+    assert "branch%3Amain" in readme
+    assert "/branch/main/graph/badge.svg" in readme
+    assert "/tree/main" in readme
+    assert yaml.load(ci_workflow, Loader=yaml.BaseLoader)["on"]["push"]["branches"] == [
+        "main"
+    ]
+    assert yaml.load(production_workflow, Loader=yaml.BaseLoader)["on"]["push"][
+        "branches"
+    ] == ["main"]
+    assert "On pushes to `main`" in deployment_notes
+
+    delivery_configuration = "\n".join(
+        (readme, ci_workflow, production_workflow, deployment_notes)
+    )
+    assert "feature/modernization-refactor" not in delivery_configuration
+    assert "feature%2Fmodernization-refactor" not in delivery_configuration
 
 
 def test_python_quality_config_scopes_type_checker_exceptions() -> None:

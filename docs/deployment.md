@@ -59,9 +59,9 @@ healthcheck used by local Docker.
 
 The image can be pushed to Amazon ECR and run on ECS Fargate, App Runner, or
 another container service. The `Production Image` GitHub Actions workflow always
-builds and smoke-tests the production image. On pushes to `main` or
-`feature/modernization-refactor`, it can also publish the image to ECR when the
-repository has these GitHub Actions variables configured:
+builds and smoke-tests the production image. On pushes to `main`, it can also
+publish the image to ECR when the repository has these GitHub Actions variables
+configured:
 
 - `AWS_REGION`: AWS region that contains the target ECR repository.
 - `AWS_ROLE_TO_ASSUME`: IAM role ARN trusted by GitHub Actions OIDC.
@@ -110,13 +110,8 @@ and the branches that are allowed to publish:
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": [
-            "repo:sfelf/acquire:ref:refs/heads/main",
-            "repo:sfelf/acquire:ref:refs/heads/feature/modernization-refactor"
-          ]
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:sfelf/acquire:ref:refs/heads/main"
         }
       }
     }
