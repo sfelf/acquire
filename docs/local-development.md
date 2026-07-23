@@ -7,12 +7,12 @@ The local development stack now uses the Python gateway as the default runtime:
 - `server/server.py` owns the Python game state and gameplay command handling.
 - Node.js is used only by the opt-in client asset build helper.
 
-The Docker Compose setup is intended for local development only while deployment support matures.
+Docker Compose provides the supported local development stack. The production
+container workflow is documented separately in `docs/deployment.md`.
 
-The local Python image intentionally installs from `requirements.local-docker.txt` so
-Docker can keep a narrow, already-tested dependency surface while the legacy
-runtime requirements are modernized in controlled groups. SQLAlchemy remains
-intentionally pinned until the dedicated ORM upgrade step.
+The local Python image installs from `requirements.local-docker.txt` to keep
+its tested runtime and database-migration dependencies explicit while project
+packaging is consolidated.
 
 ## Start The Local UI
 
