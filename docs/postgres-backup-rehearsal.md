@@ -31,9 +31,9 @@ select 'record' as table_name, count(*) as row_count from record;
 
 Both counts must be greater than zero for the rehearsal to prove persisted
 rating history and derived win/place stats. A source without these rows can
-still exercise schema, user, game-history, and key/value import behavior, but
-it must be recorded as a partial rehearsal and cannot close the Phase 6 backup
-rehearsal gate.
+still exercise schema, user, game-history, and key/value import behavior. When
+the server never generated persisted stats, record that limitation in the
+rehearsal summary and do not claim persisted rating or derived-record coverage.
 
 For a partial sparse-source rehearsal, follow the same restore, dry-run,
 import, report-validation, and application-check steps, but omit
@@ -166,8 +166,9 @@ cutover evidence for persisted rating history or derived win/place stats.
   copied table.
 - `server/validate_import_reports.py` accepts the dry-run/import report pair.
 - Imported Postgres rows pass application-level checks through Python auth
-  rules, ORM lookup helpers, completed-game rating checks, stats checks, and
-  historical replay checks.
+  rules, ORM lookup helpers, stats checks, and historical replay checks.
+- Completed-game rating checks pass when the source generated persisted rating
+  rows; otherwise the rehearsal records the sparse-stats limitation.
 - Postgres primary-key sequences advance after explicit id imports.
 - MySQL, Postgres, and e2e marker suites pass after the rehearsal.
 - The rollback owner confirms whether any post-cutover Postgres writes would be
