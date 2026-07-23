@@ -1,0 +1,77 @@
+[
+  {
+    "actions": {
+      "count": 0,
+      "first": [],
+      "last": []
+    },
+    "additional_tile_rack_tiles": {
+      "count": 0,
+      "first": [],
+      "last": []
+    },
+    "board_rows": [
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777",
+      "777777777777"
+    ],
+    "external_game_id": 99,
+    "final_tile_racks": [
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    ],
+    "history_by_user": {
+      "alice": {
+        "count": 0,
+        "first": [],
+        "last": []
+      }
+    },
+    "initial_tile_racks": [
+      [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    ],
+    "internal_game_id": 1,
+    "score": null,
+    "score_sheet_chain_size": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "score_sheet_players": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        60
+      ]
+    ],
+    "state": "Starting"
+  }
+]

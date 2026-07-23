@@ -1,0 +1,4 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${ACQUIRE_POSTGRES_TEST_PORT:-35432}:5432"

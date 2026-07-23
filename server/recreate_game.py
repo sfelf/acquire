@@ -1,15 +1,33 @@
+"""Recreate in-progress games from serialized server-game snapshots.
+
+This module is part of the legacy Python runtime and replay tooling.
+"""
+
 import inspect
-import orm
 import os
 import pickle
 import re
+from typing import cast
+
+import orm
+
 import server
-import sqlalchemy.sql
 
-server_dict = {x: y for x, y in inspect.getmembers(server)}
+server_dict: dict[str, object] = dict(inspect.getmembers(server))
 
 
-def recreate_game(server_, filename):
+def recreate_game(server_: server.Server, filename: str) -> None:
+    """Load one serialized game snapshot into a live server instance.
+
+    The snapshot contains internal server objects saved by replay tooling. This
+    bypasses normal game construction, allocates fresh public and internal ids,
+    restores mutable sub-objects, and registers the result in
+    `server_.game_id_to_game`.
+
+    Args:
+        server_: Server instance that will own the recreated game.
+        filename: Pickle file containing serialized game data.
+    """
     with open(filename, "rb") as f:
         game_data = pickle.load(f)
 
@@ -23,9 +41,7 @@ def recreate_game(server_, filename):
     game.num_players = game_data["num_players"]
     game.tile_bag = game_data["tile_bag"]
     game.turn_player_id = game_data["turn_player_id"]
-    game.turns_without_played_tiles_count = game_data[
-        "turns_without_played_tiles_count"
-    ]
+    game.turns_without_played_tiles_count = game_data["turns_without_played_tiles_count"]
     game.history_messages = game_data["history_messages"]
 
     game.add_pending_messages = server_.add_pending_messages
@@ -49,7 +65,7 @@ def recreate_game(server_, filename):
 
     game.actions = []
     for action_data in game_data["actions"]:
-        cls = server_dict[action_data["__name__"]]
+        cls = cast(type[server.Action], server_dict[action_data["__name__"]])
         action = cls.__new__(cls)
         action.game = game
         for key, value in action_data.items():
@@ -67,7 +83,16 @@ def recreate_game(server_, filename):
     server_.game_id_to_game[game.game_id] = game
 
 
-def recreate_some_games(server_):
+def recreate_some_games(server_: server.Server) -> None:
+    """Recreate up to five recent snapshot games missing from the database.
+
+    This maintenance helper scans a legacy snapshot directory, removes games
+    that are already persisted, and restores the highest-tile-count remaining
+    games into the provided server.
+
+    Args:
+        server_: Server instance that will own recreated games.
+    """
     input_dir = "/opt/data/tim/"
     regex = re.compile(r"^(\d+)_0*(\d+)_0*(\d+).bin$")
 
@@ -85,16 +110,8 @@ def recreate_some_games(server_):
                 filename,
             )
 
-    sql = sqlalchemy.sql.text(
-        """
-        select
-            log_time,
-            number
-        from game
-        """
-    )
     with orm.session_scope() as session:
-        for row in session.execute(sql):
+        for row in session.query(orm.Game.log_time, orm.Game.number).all():
             key = (row.log_time, row.number)
             if key in in_progress_game_files:
                 del in_progress_game_files[key]
@@ -103,8 +120,8 @@ def recreate_some_games(server_):
         in_progress_game_files.values(), key=lambda x: (-x[0], x[1])
     )
 
-    for num_tiles_played_and_filenames in num_tiles_played_and_filenames[:5]:
-        num_tiles_played, filename = num_tiles_played_and_filenames
+    for num_tiles_played_and_filename in num_tiles_played_and_filenames[:5]:
+        num_tiles_played, filename = num_tiles_played_and_filename
         filename = input_dir + filename
         print(filename)
         recreate_game(server_, filename)

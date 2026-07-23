@@ -1,0 +1,13 @@
+time: 1700000000.5
+connection_made
+
+time: 1700000001.0
+1 connect alice 127.0.0.1 socket-1 False
+1 <- [[1,1],[2,1,"alice","127.0.0.1"]]
+1 -> [6," hello world "]
+{"_":"game","game-id":1,"external-game-id":99,"state":"Starting","mode":"Singles","max-players":2,"begin":1700000001}
+{"_":"game-player","game-id":1,"external-game-id":99,"player-id":0,"username":"alice"}
+
+time: 1700000002.0
+game #99 expired (internal #1)
+1 disconnect

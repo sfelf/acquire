@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acquire}
+      POSTGRES_USER: ${POSTGRES_USER:-acquire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acquire}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  client-enums:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    profiles:
+      - client-build
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: sh -c "python server/enumsgen.py js development > client/main/js/enums.js"
+
+  client-assets:
+    image: node:22-bookworm-slim
+    profiles:
+      - client-build
+    depends_on:
+      client-enums:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+      - node-modules:/app/node_modules
+    working_dir: /app
+    command: >
+      sh -c "npm ci
+      && npm run build:css
+      && npm run build:js"
+
+  python-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acquire}
+      POSTGRES_USER: ${POSTGRES_USER:-acquire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acquire}
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/sockjs/info >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "${ACQUIRE_UI_PORT:-9000}:9000"
+    volumes:
+      - .:/app
+    working_dir: /app/server
+    command: >
+      sh -c "test -f /app/client/main/js/main.js
+      && test -f /app/client/main/css/main.css
+      && test -f /app/client/stats/css/stats.css
+      || { echo 'Run docker compose --profile client-build run --rm client-assets before starting python-gateway.'; exit 1; }
+      && python http_server.py --host 0.0.0.0 --port 9000"
+
+volumes:
+  postgres-data:
+  node-modules:

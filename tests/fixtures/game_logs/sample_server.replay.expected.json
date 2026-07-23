@@ -1,0 +1,26 @@
+[
+  {
+    "begin": 1700000001,
+    "end": null,
+    "expired": true,
+    "external_game_id": 99,
+    "first_played_tiles": [],
+    "history_count_by_user": {
+      "alice": 0
+    },
+    "internal_game_id": 1,
+    "last_played_tiles": [],
+    "log_timestamp": 1700000000,
+    "max_players": 2,
+    "mode": "Singles",
+    "played_tiles_count": 0,
+    "player_id_to_username": {
+      "0": "alice"
+    },
+    "score": null,
+    "state": "Starting",
+    "username_to_player_id": {
+      "alice": 0
+    }
+  }
+]

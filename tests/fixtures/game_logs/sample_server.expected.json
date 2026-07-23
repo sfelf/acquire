@@ -1,0 +1,125 @@
+[
+  {
+    "line_number": 1,
+    "line_type": "time",
+    "parse_line_data": [
+      1700000000.5
+    ]
+  },
+  {
+    "line_number": 2,
+    "line_type": "connection_made",
+    "parse_line_data": []
+  },
+  {
+    "line_number": 3,
+    "line_type": "blank_line",
+    "parse_line_data": []
+  },
+  {
+    "line_number": 4,
+    "line_type": "time",
+    "parse_line_data": [
+      1700000001.0
+    ]
+  },
+  {
+    "line_number": 5,
+    "line_type": "connect",
+    "parse_line_data": [
+      1,
+      "alice"
+    ]
+  },
+  {
+    "line_number": 6,
+    "line_type": "command_to_client",
+    "parse_line_data": [
+      [
+        1
+      ],
+      [
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1,
+          "alice",
+          "127.0.0.1"
+        ]
+      ]
+    ]
+  },
+  {
+    "line_number": 7,
+    "line_type": "command_to_server",
+    "parse_line_data": [
+      1,
+      [
+        6,
+        " hello world "
+      ]
+    ]
+  },
+  {
+    "line_number": 8,
+    "line_type": "log",
+    "parse_line_data": [
+      {
+        "_": "game",
+        "begin": 1700000001,
+        "external-game-id": 99,
+        "game-id": 1,
+        "max-players": 2,
+        "mode": "Singles",
+        "state": "Starting"
+      }
+    ]
+  },
+  {
+    "line_number": 9,
+    "line_type": "log",
+    "parse_line_data": [
+      {
+        "_": "game-player",
+        "external-game-id": 99,
+        "game-id": 1,
+        "player-id": 0,
+        "username": "alice"
+      }
+    ]
+  },
+  {
+    "line_number": 10,
+    "line_type": "blank_line",
+    "parse_line_data": []
+  },
+  {
+    "line_number": 11,
+    "line_type": "time",
+    "parse_line_data": [
+      1700000002.0
+    ]
+  },
+  {
+    "line_number": 12,
+    "line_type": "game_expired",
+    "parse_line_data": [
+      99
+    ]
+  },
+  {
+    "line_number": 13,
+    "line_type": "disconnect",
+    "parse_line_data": [
+      1
+    ]
+  },
+  {
+    "line_number": 14,
+    "line_type": "blank_line",
+    "parse_line_data": []
+  }
+]
