@@ -8,8 +8,17 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "sqlalchemy" },
+    { name = "trueskill" },
+    { name = "ujson" },
     { name = "uvicorn" },
     { name = "websockets" },
+]
+
+[package.optional-dependencies]
+mysql-migration = [
+    { name = "mysql-connector-python" },
 ]
 
 [package.dev-dependencies]
@@ -17,40 +26,34 @@ dev = [
     { name = "alembic" },
     { name = "httpx" },
     { name = "mypy" },
-    { name = "mysql-connector-python" },
     { name = "pre-commit" },
-    { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "six" },
-    { name = "sqlalchemy" },
-    { name = "trueskill" },
-    { name = "ujson" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "mysql-connector-python", marker = "extra == 'mysql-migration'", specifier = ">=9.3,<10" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
+    { name = "sqlalchemy", specifier = ">=2,<3" },
+    { name = "trueskill", specifier = "==0.4.4" },
+    { name = "ujson", specifier = ">=5.13,<6" },
     { name = "uvicorn", specifier = ">=0.32,<1" },
     { name = "websockets", specifier = ">=14,<16" },
 ]
+provides-extras = ["mysql-migration"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "alembic", specifier = ">=1.17,<2" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "mypy", specifier = ">=1.18,<2" },
-    { name = "mysql-connector-python", specifier = ">=9.3,<10" },
     { name = "pre-commit", specifier = ">=4,<5" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pytest", specifier = ">=8.4,<9" },
     { name = "pytest-cov", specifier = ">=7,<8" },
     { name = "ruff", specifier = ">=0.14,<0.15" },
-    { name = "six", specifier = ">=1.17,<2" },
-    { name = "sqlalchemy", specifier = ">=2,<3" },
-    { name = "trueskill", specifier = "==0.4.4" },
-    { name = "ujson", specifier = ">=5.13,<6" },
 ]
 
 [[package]]

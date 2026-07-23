@@ -28,8 +28,7 @@ def get_configured_url() -> str:
     """Return the configured database URL for Alembic commands.
 
     Tests can set `sqlalchemy.url` directly on the Alembic config. Normal local
-    commands fall back to the same URL assembled by `server/orm.py`, preserving
-    the existing MySQL environment-variable behavior.
+    commands fall back to the same Postgres URL assembled by `server/orm.py`.
 
     Returns:
         Configured Alembic URL or the ORM-derived runtime URL.
@@ -57,9 +56,8 @@ def get_connectable() -> Connection | Engine:
     """Return the injected connection or create an Alembic engine.
 
     The test suite injects a connection so migrations run against the same
-    Docker-backed database fixture. CLI commands use `server/orm.py`'s engine
-    when no URL is supplied, which keeps MySQL socket and auth plugin settings
-    aligned with the legacy runtime.
+    Docker-backed database fixture. CLI commands use `server/orm.py`'s Postgres
+    engine when no URL is supplied.
 
     Returns:
         Injected SQLAlchemy connection, configured engine, or ORM runtime engine.

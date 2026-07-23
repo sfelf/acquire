@@ -14,9 +14,9 @@ def test_default_compose_runtime_excludes_node_services():
     services = _load_compose_services()
 
     assert "profiles" not in services["python-gateway"]
-    assert services["mysql"]["profiles"] == ["mysql"]
     assert services["client-enums"]["profiles"] == ["client-build"]
     assert services["client-assets"]["profiles"] == ["client-build"]
+    assert "mysql" not in services
     assert "python-server" not in services
     assert "node-gateway" not in services
 
@@ -62,13 +62,8 @@ def test_e2e_fixture_uses_alembic_database_setup():
     assert '"setup_database.py"' in fixture_text
     assert "python initialize_database.py" not in fixture_text
     assert '"postgres"' in fixture_text
-    assert "mysqld.sock" not in fixture_text
-
-
-def test_mysql_fixture_tears_down_profiled_service():
-    fixture_text = (REPO_DIR / "tests" / "conftest.py").read_text()
-
-    assert 'profiles=("mysql",)' in fixture_text
+    assert "mysql_test_url" not in fixture_text
+    assert "ACQUIRE_MYSQL" not in fixture_text
 
 
 def test_compose_defines_postgres_as_default_database():

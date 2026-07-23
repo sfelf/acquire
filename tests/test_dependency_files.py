@@ -15,19 +15,40 @@ def _read_requirements(path: str) -> list[str]:
     ]
 
 
-def test_runtime_requirements_use_reachable_mysql_connector_package() -> None:
+def test_mysql_connector_is_isolated_to_backup_migration_extra() -> None:
     requirements = _read_requirements("requirements.txt")
+    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert "mysql-connector-python>=9.3,<10" in requirements
-    assert not any(requirement.startswith("http://cdn.mysql.com/") for requirement in requirements)
+    assert "mysql-connector-python>=9.3,<10" not in requirements
+    assert "mysql-connector-python>=9.3,<10" not in local_docker_requirements
+    assert pyproject["project"]["optional-dependencies"]["mysql-migration"] == [
+        "mysql-connector-python>=9.3,<10"
+    ]
+    assert "mysql-connector-python>=9.3,<10" not in pyproject["dependency-groups"]["dev"]
+
+
+def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None:
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "uv run --isolated --frozen --no-dev python -" in workflow
+    assert "import cron" in workflow
+    assert "import http_server" in workflow
+    assert 'assert importlib.util.find_spec("mysql") is None' in workflow
+    assert (
+        "uv run --isolated --frozen --no-dev --extra mysql-migration python -" in workflow
+    )
+    assert "import mysql.connector" in workflow
+    assert "import import_mysql_to_postgres" in workflow
 
 
 def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> None:
     requirements = set(_read_requirements("requirements.txt"))
     local_docker_requirements = set(_read_requirements("requirements.local-docker.txt"))
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
     compatibility_requirements = {
-        "mysql-connector-python>=9.3,<10",
+        "psycopg[binary]>=3.2,<4",
         "six>=1.17,<2",
         "sqlalchemy>=2,<3",
         "ujson>=5.13,<6",
@@ -35,6 +56,25 @@ def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> 
 
     assert compatibility_requirements <= requirements
     assert compatibility_requirements <= local_docker_requirements
+    assert {"psycopg[binary]>=3.2,<4", "sqlalchemy>=2,<3"} <= set(
+        pyproject["project"]["dependencies"]
+    )
+    assert {"trueskill==0.4.4", "ujson>=5.13,<6"} <= set(
+        pyproject["project"]["dependencies"]
+    )
+    assert {"six>=1.17,<2", "trueskill==0.4.4", "ujson>=5.13,<6"}.isdisjoint(
+        pyproject["dependency-groups"]["dev"]
+    )
+
+
+def test_runtime_images_do_not_install_mysql_dependencies() -> None:
+    local_dockerfile = (REPOSITORY_ROOT / "Dockerfile.local").read_text()
+    production_dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text()
+    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+
+    assert "default-mysql-client" not in local_dockerfile
+    assert "mysql-connector-python" not in local_docker_requirements
+    assert "requirements.local-docker.txt" in production_dockerfile
 
 
 def test_local_docker_includes_alembic_for_database_setup() -> None:

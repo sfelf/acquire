@@ -10,8 +10,8 @@ disposable local databases and keep backup files outside the repository.
   under `/tmp/acquire-rehearsal`.
 - Disposable MySQL database restored from that backup.
 - Disposable Postgres database with the current Alembic schema applied.
-- Current branch with `server/import_mysql_to_postgres.py` and the Docker-backed
-  marker suites passing.
+- Current branch with `server/import_mysql_to_postgres.py`, its focused unit
+  tests, and the Postgres/e2e marker suites passing.
 
 Do not use a production backup that contains secrets or private user data unless
 the file stays in an approved controlled environment. Do not commit dumps,
@@ -69,7 +69,7 @@ persisted rating history or derived win/place stats.
    the per-table source counts:
 
    ```bash
-   uv run python server/import_mysql_to_postgres.py \
+   uv run --extra mysql-migration python server/import_mysql_to_postgres.py \
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
      --dry-run \
@@ -83,7 +83,7 @@ persisted rating history or derived win/place stats.
    second report for the completed import:
 
    ```bash
-   uv run python server/import_mysql_to_postgres.py \
+   uv run --extra mysql-migration python server/import_mysql_to_postgres.py \
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
      --require-source-rows rating \
@@ -112,12 +112,10 @@ persisted rating history or derived win/place stats.
    count equals its source count. The required source-row checks keep a
    production-like rehearsal from passing with a sparse source dump that lacks
    persisted rating history or derived win/place stats records.
-8. Run the MySQL and Postgres pytest marker suites as independent database
-   compatibility checks. Keep these marker suites pointed at separate
-   disposable test databases, or leave their test URLs unset so their fixtures
-   create their own databases. Do not point marker test URLs at the restored
-   MySQL source or imported Postgres target because those fixtures reset
-   application tables.
+8. Run the focused importer unit tests and the Postgres marker suite. Keep the
+   Postgres marker pointed at a separate disposable test database, or leave its
+   test URL unset so the fixture creates one. Do not point the marker at the
+   imported Postgres target because the fixture resets application tables.
 9. Start the local gateway against the imported Postgres database before running
    e2e checks as evidence for the imported data. The default Compose gateway
    points at the fresh `postgres` service, and the gateway requires generated
@@ -174,7 +172,8 @@ persisted rating history or derived win/place stats.
 - Completed-game rating checks pass when the source generated persisted rating
   rows; otherwise the rehearsal records the sparse-stats limitation.
 - Postgres primary-key sequences advance after explicit id imports.
-- MySQL, Postgres, and e2e marker suites pass after the rehearsal.
+- Focused importer unit tests plus the Postgres and e2e marker suites pass after
+  the rehearsal.
 - The rollback owner confirms whether any post-cutover Postgres writes would be
   reconciled back to MySQL or deliberately discarded during rollback.
 

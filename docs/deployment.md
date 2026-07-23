@@ -24,9 +24,8 @@ Production deployments should provide an explicit Postgres URL:
 ACQUIRE_DATABASE_URL=postgresql+psycopg://user:password@host:5432/acquire
 ```
 
-The image still contains MySQL-compatible dependencies while the production
-cutover and rollback gates remain open, but Postgres is the expected deployment
-target for new environments.
+The image installs only the Postgres application runtime. The optional MySQL
+driver used by the backup import tool is not included.
 
 ## Apply Migrations
 

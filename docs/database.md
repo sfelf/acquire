@@ -1,15 +1,15 @@
 # Database Notes
 
-Postgres is the default local Docker database. Alembic owns schema migrations,
-and the database modernization goal remains moving toward Postgres without
-losing the MySQL persistence coverage that protects the refactor.
+Postgres is the application runtime database, and Alembic owns schema
+migrations. MySQL is supported only as the source format for importing an
+existing backup into Postgres.
 
 ## Current State
 
 - Python database models live in `server/orm.py`.
 - Alembic migrations live in `migrations/`.
-- The initial Alembic revision creates the current schema and required lookup
-  rows against MySQL and Postgres.
+- The initial Alembic revision creates the current Postgres schema and required
+  lookup rows.
 - `server/setup_database.py` applies Alembic migrations for local Docker and
   e2e setup without dropping data. Local Docker now runs this against
   Postgres by default.
@@ -17,40 +17,35 @@ losing the MySQL persistence coverage that protects the refactor.
   MySQL-compatible source into a migrated Postgres-compatible target for
   cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses
   to merge user, game, rating, record, or key/value data into non-empty target
-  tables. Unit tests cover command behavior against synthetic schemas, and the
-  Postgres marker suite runs a Docker-backed rehearsal from MySQL into
-  Postgres. The importer requires every application table, including the
-  derived `record` table. The optional `--require-source-rows` checks require
-  selected tables to be nonempty for production-like rehearsals because
+  tables. Focused unit tests cover command behavior against synthetic schemas,
+  and the completed staging rehearsal provides evidence for the end-to-end
+  backup workflow. The importer requires every application table, including
+  the derived `record` table. The optional `--require-source-rows` checks
+  require selected tables to be nonempty for production-like rehearsals because
   runtime stats reads do not rebuild historical win/place records from
   imported games.
 - The legacy MySQL reset command has been removed. Alembic and
   `server/setup_database.py` are the supported schema setup paths.
-- MySQL integration tests cover schema creation, migrations, runtime
-  constraints, auth persistence, lookup persistence, transaction behavior, and
-  completed-game log import persistence. Postgres marker tests now cover
-  connectivity, ORM metadata creation, the Alembic baseline, transaction
-  behavior, auth persistence, runtime constraints, lookup persistence, and
-  completed-game log import persistence.
+- Postgres marker tests cover connectivity, ORM metadata creation, the Alembic
+  baseline, transaction behavior, auth persistence, runtime constraints,
+  lookup persistence, and completed-game log import persistence.
 
-## MySQL-Specific Surface Area
+## Retained MySQL Backup Surface
 
-- `server/orm.py` uses explicit `ACQUIRE_DATABASE_URL` when present, structured
-  `POSTGRES_*` environment variables for the local Docker Postgres path, and
-  keeps the legacy `MYSQL_*` fallback for MySQL parity and rollback work.
+- `server/import_mysql_to_postgres.py` and
+  `server/validate_import_reports.py` retain the backup import and sanitized
+  report-validation workflow.
+- The `mysql-migration` optional uv extra installs
+  `mysql-connector-python`; normal development and production runtime
+  dependencies do not install a MySQL driver.
+- `server/orm.py` uses `ACQUIRE_DATABASE_URL` or structured `POSTGRES_*`
+  environment variables for application connections. It has no MySQL runtime
+  fallback.
 - `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
-  SQLAlchemy types with MySQL variants and applies MySQL table collation
-  options only when running against MySQL.
-- `server/cron.py` uses dialect-aware SQL rendering for stats queries that
-  reference the legacy `user` table, and computes the rolling ratings cutoff in
-  Python so the stats query no longer depends on MySQL timestamp functions.
-- `server/logs_to_games.py` uses dialect-aware SQL rendering for manual
-  database comparison tools that reference the legacy `user` table.
-- `server/recreate_game.py` uses ORM lookups for persisted-game checks instead
-  of raw SQL.
-- Docker Compose and local-development docs use Postgres for the default local
-  gateway stack. MySQL remains available as a Compose service for marker tests
-  and parity coverage.
+  SQLAlchemy types and preserves the historical source schema contract needed
+  to interpret legacy backups. It is not an application runtime connection
+  path.
+- Docker Compose, CI marker suites, and local development are Postgres-only.
 
 ## Postgres Migration Sequence
 
@@ -83,11 +78,9 @@ losing the MySQL persistence coverage that protects the refactor.
    empty because that server did not generate persisted stats. This
    sparse-stats limitation is accepted for the current migration evidence; a
    source that omits any required table is rejected by the importer.
-10. Remove MySQL-only dependencies, Compose services, environment variables, and
-   documentation after the production cutover work has an approved execution
-   plan and rollback owner. Retain the MySQL-to-Postgres backup import tool and
-   the MySQL driver dependency until backups from the existing MySQL server no
-   longer need to be migrated.
+10. Remove MySQL-only runtime dependencies, Compose services, environment
+    variables, marker tests, and runtime documentation. Complete. The backup
+    importer remains available through the `mysql-migration` optional extra.
 
 ## Import Rehearsal Command
 
@@ -96,7 +89,7 @@ databases until the production runbook has owners and a tested backup restore.
 The target database must already have the current Alembic schema applied:
 
 ```bash
-uv run python server/import_mysql_to_postgres.py \
+uv run --extra mysql-migration python server/import_mysql_to_postgres.py \
   --source-url mysql+mysqlconnector://user:password@host/source_db \
   --target-url postgresql+psycopg://user:password@host/target_db \
   --dry-run
@@ -111,12 +104,10 @@ they exactly match the source. Other target tables must be empty. Use
 production-like rehearsals so sparse source dumps fail before target rows are
 copied.
 
-The `postgres` marker suite includes a Docker-backed rehearsal that creates
-matching MySQL and Postgres schemas with Alembic, seeds representative MySQL
-rows, imports them into Postgres, verifies key rows, and confirms Postgres
-primary-key sequences advance after explicit id imports. The same rehearsal
-also verifies the imported Postgres rows through the Python auth rules and ORM
-lookup helpers.
+Focused unit tests use synthetic source and target schemas to protect table
+validation, target safeguards, row copying, report output, and Postgres
+sequence repair. Run the backup rehearsal procedure for end-to-end evidence
+against a restored MySQL backup.
 
 Use `docs/postgres-backup-rehearsal.md` when repeating the rehearsal with a new
 sanitized or staging MySQL backup. The runbook keeps backup files, credentials,
@@ -125,11 +116,10 @@ and defines the pass/fail criteria for counting the rehearsal as complete. It
 also includes a source readiness check for nonzero `rating` and `record` table
 counts when a source claims to contain persisted stats.
 
-## Production Cutover And Rollback Gate
+## Backup Import And Deployment Gate
 
-Postgres is the default local Docker database, but production migration remains
-gated on an explicit cutover runbook. Do not remove the MySQL rollback surface
-needed by production until the following items have owners and a tested dry run.
+The application runtime is Postgres-only. Importing an existing MySQL backup
+still requires an explicit deployment plan, owners, and a tested dry run.
 
 ### Cutover Preconditions
 
@@ -141,8 +131,7 @@ needed by production until the following items have owners and a tested dry run.
 - The import dry run validates row counts, representative user login behavior,
   historical game replay checks, and completed-game ratings when the source
   generated persisted rating rows.
-- The MySQL and Postgres marker suites pass against disposable schemas, and the
-  e2e suite passes against the Postgres-backed local gateway.
+- The focused importer unit tests, Postgres marker suite, and e2e suite pass.
 - The deployment owner has selected a maintenance window and a rollback owner.
 
 ### Deployment Plan
@@ -160,41 +149,34 @@ needed by production until the following items have owners and a tested dry run.
 ### Rollback Plan
 
 Rollback is only straightforward while production writes remain stopped or
-while the Postgres cutover is still inside the validation window. If validation
-fails before reopening traffic, point the application back at the verified
-MySQL backup or the untouched MySQL primary, redeploy the previous
-configuration, and rerun login plus gameplay smoke checks.
+while the Postgres deployment is still inside the validation window. If
+validation fails before reopening traffic, discard the Postgres target and
+continue operating the source system without deploying this Postgres-only
+application version.
 
 If traffic has already been reopened and Postgres has accepted writes, rollback
-requires an explicit data-reconciliation decision before switching back to
-MySQL. The project does not currently dual-write to both databases, so any
-post-cutover Postgres writes must either be exported back to MySQL with a
-reviewed script or deliberately discarded by the rollback owner.
+requires an explicit data-reconciliation decision. The project does not
+dual-write, and this repository no longer provides a MySQL application runtime.
 
-### Runtime Cleanup Rules
+### Retained Migration Rules
 
-- Keep MySQL marker tests until production no longer needs database parity or
-  rollback confidence from the legacy engine.
-- Keep the MySQL Compose profile until production rollback no longer depends on
-  quickly starting a local MySQL parity stack.
-- Keep the MySQL-to-Postgres backup import tool and MySQL driver dependency
-  until migration from an existing MySQL server backup is no longer required.
+- Keep the MySQL-to-Postgres backup import tool and its optional driver extra
+  until migration from existing MySQL backups is no longer required.
 - Keep Alembic and `server/setup_database.py` as the only schema setup paths.
-- Remove the legacy `MYSQL_*` ORM fallback only after production deployment no
-  longer needs the application to connect to MySQL during rollback.
+- Do not add MySQL connection settings, Compose services, marker fixtures, or
+  drivers back to the normal application runtime.
 
-## Open Decisions
+## Current Limitations
 
-- Postgres driver selection is complete for the current migration baseline:
-  `psycopg` 3 is used for Docker-backed marker tests.
+- The Postgres runtime uses `psycopg` 3.
 - The production import command has been validated against the available
   staging backup rehearsal for game-history rows and stats read paths. The
   staging source contained the required `rating` and `record` tables but no
   rows in either, so persisted rating/record evidence is explicitly unavailable
-  for the current server. Production cutover still requires a fresh backup, a
-  selected maintenance window, and final pre-cutover validation.
+  for the current server. A future backup import still requires a fresh backup,
+  a selected maintenance window, and final pre-deployment validation.
 - The backup rehearsal runbook is documented in
   `docs/postgres-backup-rehearsal.md`; repeat it for any newer staging or
-  production-like backup before cutover.
-- The rollback owner and maintenance window must be selected before production
-  deployment.
+  production-like backup before deployment.
+- The deployment and rollback owners must be selected before importing a
+  production backup.

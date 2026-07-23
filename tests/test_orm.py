@@ -78,12 +78,6 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_sqlalchemy.Text = lambda *args, **kwargs: ("text", args, kwargs)
     fake_sqlalchemy.UniqueConstraint = lambda *args, **kwargs: ("unique", args, kwargs)
 
-    fake_mysql = types.ModuleType("sqlalchemy.dialects.mysql")
-    fake_mysql.FLOAT = lambda *args, **kwargs: FakeType("mysql-float", args, kwargs)
-    fake_mysql.INTEGER = lambda *args, **kwargs: FakeType("mysql-integer", args, kwargs)
-    fake_mysql.SMALLINT = lambda *args, **kwargs: FakeType("mysql-smallint", args, kwargs)
-    fake_mysql.TINYINT = lambda *args, **kwargs: FakeType("mysql-tinyint", args, kwargs)
-
     fake_postgresql = types.ModuleType("sqlalchemy.dialects.postgresql")
     fake_postgresql.REAL = lambda *args, **kwargs: FakeType("postgres-real", args, kwargs)
 
@@ -96,15 +90,12 @@ def install_fake_sqlalchemy(monkeypatch):
     fake_orm.relationship = lambda *args, **kwargs: ("relationship", args, kwargs)
     fake_orm.sessionmaker = lambda bind=None: lambda autoflush=False: None
 
-    fake_sqlalchemy.dialects = types.SimpleNamespace(
-        mysql=fake_mysql, postgresql=fake_postgresql
-    )
+    fake_sqlalchemy.dialects = types.SimpleNamespace(postgresql=fake_postgresql)
     fake_sqlalchemy.engine = types.SimpleNamespace(url=fake_engine_url)
     fake_sqlalchemy.orm = fake_orm
 
     monkeypatch.setitem(sys.modules, "sqlalchemy", fake_sqlalchemy)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects", fake_sqlalchemy.dialects)
-    monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.mysql", fake_mysql)
     monkeypatch.setitem(sys.modules, "sqlalchemy.dialects.postgresql", fake_postgresql)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine", fake_engine)
     monkeypatch.setitem(sys.modules, "sqlalchemy.engine.url", fake_engine_url)
@@ -115,11 +106,6 @@ def install_fake_sqlalchemy(monkeypatch):
 def orm_module(monkeypatch):
     monkeypatch.delitem(sys.modules, "orm", raising=False)
     monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
-    monkeypatch.delenv("MYSQL_DATABASE", raising=False)
-    monkeypatch.delenv("MYSQL_PASSWORD", raising=False)
-    monkeypatch.delenv("MYSQL_SOCKET", raising=False)
-    monkeypatch.delenv("MYSQL_USER", raising=False)
-    monkeypatch.delenv("MYSQL_AUTH_PLUGIN", raising=False)
     monkeypatch.delenv("POSTGRES_DB", raising=False)
     monkeypatch.delenv("POSTGRES_HOST", raising=False)
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
@@ -161,59 +147,27 @@ def test_session_scope_commits_and_closes(orm_module, monkeypatch):
     assert session.closed is True
 
 
-def test_engine_uses_default_mysql_settings(orm_module):
+def test_engine_uses_default_postgres_settings(orm_module):
     url = orm_module.engine[1][0]
 
-    assert url.drivername == "mysql+mysqlconnector"
+    assert url.drivername == "postgresql+psycopg"
     assert url.kwargs == {
         "username": "acquire",
         "password": "acquire",
         "host": "localhost",
+        "port": 5432,
         "database": "acquire",
-        "query": {"unix_socket": "/var/run/mysqld/mysqld.sock"},
     }
     assert orm_module.engine == (
         "engine",
         (url,),
-        {"connect_args": {"auth_plugin": "mysql_native_password"}},
+        {},
     )
-
-
-def test_engine_uses_mysql_environment(monkeypatch):
-    monkeypatch.delitem(sys.modules, "orm", raising=False)
-    monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
-    monkeypatch.setenv("MYSQL_DATABASE", "custom db")
-    monkeypatch.setenv("MYSQL_PASSWORD", "custom password")
-    monkeypatch.setenv("MYSQL_SOCKET", "/tmp/mysql.sock")
-    monkeypatch.setenv("MYSQL_USER", "custom_user")
-    monkeypatch.setenv("MYSQL_AUTH_PLUGIN", "")
-    install_fake_sqlalchemy(monkeypatch)
-
-    try:
-        orm = importlib.import_module("orm")
-        url = orm.engine[1][0]
-
-        assert url.drivername == "mysql+mysqlconnector"
-        assert url.kwargs == {
-            "username": "custom_user",
-            "password": "custom password",
-            "host": "localhost",
-            "database": "custom db",
-            "query": {"unix_socket": "/tmp/mysql.sock"},
-        }
-        assert orm.engine == (
-            "engine",
-            (url,),
-            {"connect_args": {}},
-        )
-    finally:
-        sys.modules.pop("orm", None)
 
 
 def test_engine_uses_postgres_environment(monkeypatch):
     monkeypatch.delitem(sys.modules, "orm", raising=False)
     monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
-    monkeypatch.setenv("MYSQL_DATABASE", "ignored")
     monkeypatch.setenv("POSTGRES_DB", "custom db")
     monkeypatch.setenv("POSTGRES_HOST", "postgres")
     monkeypatch.setenv("POSTGRES_PASSWORD", "custom password")
@@ -245,8 +199,6 @@ def test_engine_uses_postgres_environment(monkeypatch):
 def test_engine_uses_explicit_database_url(monkeypatch):
     monkeypatch.delitem(sys.modules, "orm", raising=False)
     monkeypatch.setenv("ACQUIRE_DATABASE_URL", "postgresql+psycopg://u:p@localhost/acquire")
-    monkeypatch.setenv("MYSQL_DATABASE", "ignored")
-    monkeypatch.setenv("MYSQL_AUTH_PLUGIN", "ignored")
     install_fake_sqlalchemy(monkeypatch)
 
     try:
