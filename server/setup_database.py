@@ -2,11 +2,12 @@
 
 from pathlib import Path
 
-import orm
 import sqlalchemy
 from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine.reflection import Inspector
+
+from acquire import orm
 
 REPO_DIR = Path(__file__).resolve().parents[1]
 BASELINE_REVISION = "20260622_0001"

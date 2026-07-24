@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Literal, TextIO
 
 import auth
-import orm
 import ujson
 import uvicorn
 import websocket_gateway
@@ -30,7 +29,7 @@ from pydantic import BaseModel
 from starlette import status
 from starlette.concurrency import run_in_threadpool
 
-from acquire import enums
+from acquire import enums, orm
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MAIN_STATIC_ROOT = PROJECT_ROOT / "client" / "main"

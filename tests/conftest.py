@@ -11,6 +11,8 @@ from urllib.parse import quote
 import pytest
 import sqlalchemy
 
+import acquire
+
 REPO_DIR = Path(__file__).resolve().parents[1]
 SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
 if str(SERVER_DIR) not in sys.path:
@@ -200,7 +202,9 @@ def logs_to_games_without_database(monkeypatch):
 
     sqlalchemy = types.ModuleType("sqlalchemy")
     sqlalchemy.sql = types.SimpleNamespace(text=lambda query: query)
-    monkeypatch.setitem(sys.modules, "orm", types.ModuleType("orm"))
+    orm = types.ModuleType("acquire.orm")
+    monkeypatch.setitem(sys.modules, "acquire.orm", orm)
+    monkeypatch.setattr(acquire, "orm", orm, raising=False)
     monkeypatch.setitem(sys.modules, "sqlalchemy", sqlalchemy)
     monkeypatch.setitem(sys.modules, "sqlalchemy.sql", sqlalchemy.sql)
 

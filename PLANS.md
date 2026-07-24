@@ -3,7 +3,7 @@
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
-- The Packaging milestone is active.
+- The Packaging milestone is active. Work is currently at issue #105.
 
 This document preserves the agreed modernization record and documents the
 delivery order for active milestone work. GitHub issues remain the source of
@@ -11,8 +11,10 @@ truth for issue scope and acceptance criteria.
 
 ## Active Packaging Milestone
 
-Status: ready to start with
-[#103](https://github.com/sfelf/acquire/issues/103).
+Status: issues
+[#103](https://github.com/sfelf/acquire/issues/103) and
+[#104](https://github.com/sfelf/acquire/issues/104) are complete. Issue
+[#105](https://github.com/sfelf/acquire/issues/105) is in progress.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.
@@ -94,6 +96,18 @@ change reviewable and minimizes conflicts in package configuration, imports,
 tests, CI, Docker, and documentation. Parallel delivery may use the two tracks
 in wave 4, but each issue must still satisfy its declared dependencies before
 merge.
+
+Issue #105 is delivered as three stand-alone PR slices so its large module
+moves remain reviewable:
+
+1. Move ORM models and the session boundary, and make Alembic load packaged
+   metadata without `server/` path injection.
+2. Move authentication after the packaged ORM boundary is available.
+3. Move database setup and complete the idempotency, installed-package, and
+   dependency-isolation verification for the issue.
+
+These slices do not change the milestone issue order. Issue #105 remains open
+until all three are merged and its full acceptance criteria pass.
 
 ### Issue Verification Gates
 

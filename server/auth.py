@@ -13,10 +13,9 @@ import re
 from collections.abc import Callable
 from typing import Protocol
 
-import orm
 from sqlalchemy.exc import SQLAlchemyError
 
-from acquire import enums
+from acquire import enums, orm
 
 PASSWORD_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 

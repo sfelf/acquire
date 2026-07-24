@@ -6,7 +6,7 @@ existing backup into Postgres.
 
 ## Current State
 
-- Python database models live in `server/orm.py`.
+- Python database models live in the installed `acquire.orm` module.
 - Alembic migrations live in `migrations/`.
 - The initial Alembic revision creates the current Postgres schema and required
   lookup rows.
@@ -38,7 +38,7 @@ existing backup into Postgres.
 - The `mysql-migration` optional uv extra installs
   `mysql-connector-python`; normal development and production runtime
   dependencies do not install a MySQL driver.
-- `server/orm.py` uses `ACQUIRE_DATABASE_URL` or structured `POSTGRES_*`
+- `acquire.orm` uses `ACQUIRE_DATABASE_URL` or structured `POSTGRES_*`
   environment variables for application connections. It has no MySQL runtime
   fallback.
 - `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable

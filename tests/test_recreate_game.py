@@ -5,6 +5,7 @@ import types
 
 import pytest
 
+import acquire
 import server
 from acquire.enums import GameActions, GameBoardTypes, GameModes, GameStates
 
@@ -34,7 +35,7 @@ class SessionScope:
 def recreate_game_without_database(monkeypatch):
     monkeypatch.delitem(sys.modules, "recreate_game", raising=False)
 
-    orm = types.ModuleType("orm")
+    orm = types.ModuleType("acquire.orm")
     orm.Game = types.SimpleNamespace(log_time="log_time_column", number="number_column")
     orm.rows = []
     orm.session = None
@@ -44,7 +45,8 @@ def recreate_game_without_database(monkeypatch):
         return orm.session
 
     orm.session_scope = session_scope
-    monkeypatch.setitem(sys.modules, "orm", orm)
+    monkeypatch.setitem(sys.modules, "acquire.orm", orm)
+    monkeypatch.setattr(acquire, "orm", orm, raising=False)
 
     try:
         yield importlib.import_module("recreate_game")

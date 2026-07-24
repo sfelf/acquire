@@ -21,12 +21,11 @@ import traceback
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol, TextIO, cast
 
-import orm
 import sqlalchemy
 import ujson
 
 import server
-from acquire import enums, util
+from acquire import enums, orm, util
 from acquire import username_to_user_id as username_to_user_id_module
 
 username_to_user_id = username_to_user_id_module.username_to_user_id

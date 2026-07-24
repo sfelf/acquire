@@ -14,14 +14,13 @@ import traceback
 from pathlib import Path
 from typing import Protocol, cast
 
-import orm
 import sqlalchemy.orm
 import sqlalchemy.sql
 import sqlalchemy.types
 import trueskill
 import ujson
 
-from acquire import util
+from acquire import orm, util
 
 RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
 DEFAULT_STATS_DATA_ROOT = (

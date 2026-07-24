@@ -7,6 +7,8 @@ import types
 import pytest
 import ujson
 
+import acquire
+
 pytestmark = pytest.mark.unit
 
 
@@ -29,12 +31,13 @@ class FakeRecord:
 def cron_module(monkeypatch):
     monkeypatch.delitem(sys.modules, "cron", raising=False)
 
-    fake_orm = types.ModuleType("orm")
+    fake_orm = types.ModuleType("acquire.orm")
     fake_orm.Rating = FakeRating
     fake_orm.Record = FakeRecord
     fake_orm.Lookup = lambda session: None
     fake_orm.session_scope = contextlib.nullcontext
-    monkeypatch.setitem(sys.modules, "orm", fake_orm)
+    monkeypatch.setitem(sys.modules, "acquire.orm", fake_orm)
+    monkeypatch.setattr(acquire, "orm", fake_orm, raising=False)
 
     fake_sqlalchemy = types.ModuleType("sqlalchemy")
     fake_sqlalchemy.orm = types.ModuleType("sqlalchemy.orm")

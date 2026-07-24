@@ -8,10 +8,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-import orm
 import sqlalchemy
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.sql.schema import Table
+
+from acquire import orm
 
 TABLE_ORDER = (
     "game_mode",
