@@ -17,13 +17,15 @@ def test_readme_identifies_independent_fork_and_hosted_original() -> None:
     assert "not the source currently deployed at\n`acquire.tlstyer.com`" in readme
 
 
-def test_completed_modernization_docs_point_to_issue_tracking() -> None:
+def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
 
-    assert plans.startswith("# Completed Modernization Plan\n")
-    assert "Status: complete as of July 23, 2026." in plans
-    assert "New work is tracked through GitHub issues and milestones." in plans
+    assert plans.startswith("# Modernization And Packaging Plan\n")
+    assert "The six-phase modernization plan is complete as of July 23, 2026." in plans
+    assert "The Packaging milestone is active." in plans
+    assert "ready to start with\n[#103](https://github.com/sfelf/acquire/issues/103)" in plans
+    assert "GitHub issues remain the source of\ntruth for issue scope" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
     assert "The six-phase modernization plan is complete." in agent_notes
     assert "Complete packaging and import restructuring" in agent_notes
