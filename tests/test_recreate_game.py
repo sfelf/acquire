@@ -6,7 +6,7 @@ import types
 import pytest
 
 import acquire
-import server
+from acquire import game_server as server
 from acquire.enums import GameActions, GameBoardTypes, GameModes, GameStates
 
 pytestmark = pytest.mark.unit
@@ -33,7 +33,7 @@ class SessionScope:
 
 @pytest.fixture
 def recreate_game_without_database(monkeypatch):
-    monkeypatch.delitem(sys.modules, "recreate_game", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.recreate_game", raising=False)
 
     orm = types.ModuleType("acquire.orm")
     orm.Game = types.SimpleNamespace(log_time="log_time_column", number="number_column")
@@ -49,9 +49,9 @@ def recreate_game_without_database(monkeypatch):
     monkeypatch.setattr(acquire, "orm", orm, raising=False)
 
     try:
-        yield importlib.import_module("recreate_game")
+        yield importlib.import_module("acquire.recreate_game")
     finally:
-        sys.modules.pop("recreate_game", None)
+        sys.modules.pop("acquire.recreate_game", None)
 
 
 def make_saved_game_data(tile_racks=None):

@@ -198,7 +198,7 @@ def e2e_base_url(pytestconfig):
 
 @pytest.fixture
 def logs_to_games_without_database(monkeypatch):
-    monkeypatch.delitem(sys.modules, "logs_to_games", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.log_tools", raising=False)
 
     sqlalchemy = types.ModuleType("sqlalchemy")
     sqlalchemy.sql = types.SimpleNamespace(text=lambda query: query)
@@ -209,6 +209,6 @@ def logs_to_games_without_database(monkeypatch):
     monkeypatch.setitem(sys.modules, "sqlalchemy.sql", sqlalchemy.sql)
 
     try:
-        yield importlib.import_module("logs_to_games")
+        yield importlib.import_module("acquire.log_tools")
     finally:
-        sys.modules.pop("logs_to_games", None)
+        sys.modules.pop("acquire.log_tools", None)

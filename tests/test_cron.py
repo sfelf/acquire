@@ -29,7 +29,7 @@ class FakeRecord:
 
 @pytest.fixture
 def cron_module(monkeypatch):
-    monkeypatch.delitem(sys.modules, "cron", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.stats", raising=False)
 
     fake_orm = types.ModuleType("acquire.orm")
     fake_orm.Rating = FakeRating
@@ -74,9 +74,9 @@ def cron_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "trueskill", fake_trueskill)
 
     try:
-        yield importlib.import_module("cron")
+        yield importlib.import_module("acquire.stats")
     finally:
-        sys.modules.pop("cron", None)
+        sys.modules.pop("acquire.stats", None)
 
 
 class FakeUser:
@@ -775,7 +775,7 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
     class FakeStatsGen:
         def __init__(self, session_arg, output_dir):
             assert session_arg is session
-            assert output_dir == "stats_temp"
+            assert output_dir == cron_module.DEFAULT_STATS_TEMP_ROOT
 
         def output_ratings(self):
             stats_calls.append(("ratings",))
@@ -828,6 +828,7 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
         encoded=ujson.encode([[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]]),
     )
     subprocess_calls = []
+    stats_temp_root = tmp_path / "server" / "stats_temp"
 
     class FakeLogs2DB:
         def __init__(self, session_arg, lookup_arg):
@@ -840,7 +841,7 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
     class FakeStatsGen:
         def __init__(self, session_arg, output_dir):
             assert session_arg is session
-            assert output_dir == "stats_temp"
+            assert output_dir == stats_temp_root
 
         def output_ratings(self):
             return None
@@ -870,8 +871,10 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
         cron_module.glob,
         "glob",
         lambda pattern: {
-            "stats_temp/*.json": ["stats_temp/ratings.json"],
-            "stats_temp/users/*.json": ["stats_temp/users/alice.json"],
+            str(stats_temp_root / "*.json"): [str(stats_temp_root / "ratings.json")],
+            str(stats_temp_root / "users" / "*.json"): [
+                str(stats_temp_root / "users" / "alice.json")
+            ],
         }[pattern],
     )
     monkeypatch.setattr(
@@ -884,31 +887,36 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
     cron_module.process_logs(
         write_stats_files=True,
         stats_data_root=stats_data_root,
+        stats_temp_root=stats_temp_root,
     )
 
     assert stats_data_root.is_dir()
     assert (stats_data_root / "users").is_dir()
     assert subprocess_calls == [
-        ["zopfli", "stats_temp/ratings.json", "stats_temp/users/alice.json"],
+        [
+            "zopfli",
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "users" / "alice.json"),
+        ],
         [
             "touch",
             "-r",
-            "stats_temp/ratings.json",
-            "stats_temp/ratings.json",
-            "stats_temp/ratings.json.gz",
-            "stats_temp/users/alice.json",
-            "stats_temp/users/alice.json.gz",
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "ratings.json") + ".gz",
+            str(stats_temp_root / "users" / "alice.json"),
+            str(stats_temp_root / "users" / "alice.json") + ".gz",
         ],
         [
             "mv",
-            "stats_temp/ratings.json",
-            "stats_temp/ratings.json.gz",
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "ratings.json") + ".gz",
             str(stats_data_root),
         ],
         [
             "mv",
-            "stats_temp/users/alice.json",
-            "stats_temp/users/alice.json.gz",
+            str(stats_temp_root / "users" / "alice.json"),
+            str(stats_temp_root / "users" / "alice.json") + ".gz",
             str(stats_data_root / "users"),
         ],
     ]

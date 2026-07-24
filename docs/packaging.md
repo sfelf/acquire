@@ -74,6 +74,15 @@ resolved explicitly from the shared `src/acquire/` source layout to
 `client/main` and `client/stats`; this is the same layout used by editable
 installs and the production image.
 
+Issue #107 makes `acquire.log_tools`, `acquire.recreate_game`, and
+`acquire.stats` authoritative for historical parsing and replay, snapshot
+restoration, database log ingestion, ratings, and stats publication. Their
+legacy files under `server/` remain minimal aliases or direct-file entry points
+until issues #110 and #111 replace command paths and remove the wrappers. Stats
+publication and staging roots resolve explicitly from the shared
+`src/acquire/` layout, preserving the former `client/stats/data` and
+`server/stats_temp` locations regardless of the current working directory.
+
 Issue #111 owns the final wheel and source-distribution manifests after the
 runtime modules and their tests have migrated into the installed-package
 layout. It also owns final project scripts and removal of all transitional

@@ -34,11 +34,11 @@ def real_auth_module(real_orm_module):
 
 @pytest.fixture
 def real_cron_module(real_orm_module):
-    sys.modules.pop("cron", None)
+    sys.modules.pop("acquire.stats", None)
     try:
-        yield importlib.import_module("cron")
+        yield importlib.import_module("acquire.stats")
     finally:
-        sys.modules.pop("cron", None)
+        sys.modules.pop("acquire.stats", None)
 
 
 @pytest.fixture
