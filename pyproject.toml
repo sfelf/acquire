@@ -49,10 +49,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["server"]
-omit = [
-    "server/settings.py",
-]
+source = ["server", "src/acquire"]
 
 [tool.coverage.report]
 show_missing = true
@@ -94,7 +91,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["server"]
+files = ["server", "src/acquire"]
 ignore_missing_imports = true
 show_error_codes = true
 warn_unused_configs = true

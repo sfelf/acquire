@@ -1,7 +1,8 @@
 import io
 
 import pytest
-from enums import CommandsToClient
+
+from acquire.enums import CommandsToClient
 
 pytestmark = pytest.mark.unit
 

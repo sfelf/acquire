@@ -4,12 +4,13 @@ import urllib.parse
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-import enums
 import http_server
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
+
+from acquire import enums
 
 pytestmark = pytest.mark.unit
 

@@ -1,6 +1,9 @@
+import hashlib
+
 import enumsgen
 import pytest
-from enums import CommandsToClient, GameModes, Options
+
+from acquire.enums import CommandsToClient, GameModes, Options
 
 pytestmark = pytest.mark.unit
 
@@ -52,6 +55,16 @@ def test_generate_enums_js_development_outputs_all_enum_names(capsys):
     assert "\tOptions: {\n\t\tEnablePageTitleNotifications: 0," in output
     assert "\tPubSub: {" in output
     assert output.endswith("};\n")
+
+
+def test_generate_enums_js_development_matches_migration_baseline(capsys):
+    enumsgen.generate_enums_js("development")
+
+    output = capsys.readouterr().out
+
+    assert hashlib.sha256(output.encode()).hexdigest() == (
+        "9227dd668fa8d71c8c0c7d701d2031bbe36aa5222de4b4f240363d80a950a35f"
+    )
 
 
 def test_generate_enums_js_release_limits_output_to_referenced_classes(

@@ -8,8 +8,8 @@ reviewable and generated diffs do not obscure runtime changes.
 
 - `client/main/css/main.scss` and `client/stats/css/stats.scss` are compiled by
   Dart Sass.
-- `server/enumsgen.py` generates `client/main/js/enums.js` from the Python enum
-  definitions.
+- `server/enumsgen.py` generates `client/main/js/enums.js` from the canonical
+  Python enum definitions in `src/acquire/enums.py`.
 - `client/main/js/app.js` is the browser JavaScript entrypoint. esbuild bundles
   that entrypoint and its CommonJS dependencies into `client/main/js/main.js`.
 
@@ -35,6 +35,10 @@ Both paths write the same gitignored files into the checkout:
 - `client/main/js/enums.js`
 - `client/main/js/main.js`
 - `client/main/js/main.js.map`
+
+The npm enum command temporarily adds `src/` to `PYTHONPATH` so the legacy
+generator executable can import `acquire.enums`. Issue #111 removes this
+transition after installed project scripts replace legacy executable paths.
 
 The separately gitignored `client/stats/data` directory is runtime data, not a
 client build output. The cron log processor publishes ratings and per-user JSON

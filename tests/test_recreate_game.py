@@ -4,9 +4,9 @@ import sys
 import types
 
 import pytest
-from enums import GameActions, GameBoardTypes, GameModes, GameStates
 
 import server
+from acquire.enums import GameActions, GameBoardTypes, GameModes, GameStates
 
 pytestmark = pytest.mark.unit
 

@@ -21,14 +21,15 @@ import traceback
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol, TextIO, cast
 
-import enums
 import orm
 import sqlalchemy
 import ujson
-import util
-from username_to_user_id import username_to_user_id
 
 import server
+from acquire import enums, util
+from acquire import username_to_user_id as username_to_user_id_module
+
+username_to_user_id = username_to_user_id_module.username_to_user_id
 
 ParsedLogData = tuple[Any, ...]
 LineMatchHandler = Callable[[re.Match[str]], ParsedLogData | str | None]
@@ -3343,7 +3344,7 @@ def output_username_to_user_id() -> None:
     last_user_id = 0
     lines_for_log: list[str] = []
 
-    with open("server/username_to_user_id.py") as file:
+    with open(username_to_user_id_module.__file__) as file:
         for line in file:
             line = line.rstrip()
 

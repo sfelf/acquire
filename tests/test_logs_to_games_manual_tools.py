@@ -1,9 +1,11 @@
 import io
 import pickle
 import types
+from pathlib import Path
 
 import pytest
-from enums import GameActions, GameBoardTypes, GameHistoryMessages
+
+from acquire.enums import GameActions, GameBoardTypes, GameHistoryMessages
 
 pytestmark = pytest.mark.unit
 
@@ -467,7 +469,13 @@ def test_log_file_size_and_username_id_tools_print_generated_data(
         "    'alice': 1,\n"
         "    # log_timestamp: 200\n"
     )
-    monkeypatch.setattr(logs_to_games, "open", lambda filename: username_file, raising=False)
+    opened_username_paths = []
+
+    def open_username_mapping(filename):
+        opened_username_paths.append(Path(filename).resolve())
+        return username_file
+
+    monkeypatch.setattr(logs_to_games, "open", open_username_mapping, raising=False)
     monkeypatch.setattr(logs_to_games, "LogParser", FakeLogParser)
     monkeypatch.setattr(logs_to_games, "username_to_user_id", {"alice": 1})
     monkeypatch.setattr(
@@ -482,6 +490,10 @@ def test_log_file_size_and_username_id_tools_print_generated_data(
     assert output.splitlines()[:2] == ["200", "300"]
     assert "    'Jos-dma': 2, # original non-ascii: José" in output
     assert "    'Temp': 3," in output
+    assert opened_username_paths == [
+        Path(logs_to_games.username_to_user_id_module.__file__).resolve()
+    ]
+    assert "src/acquire/username_to_user_id.py" in opened_username_paths[0].as_posix()
 
 
 def test_main_dispatches_supported_commands(logs_to_games_without_database, monkeypatch):

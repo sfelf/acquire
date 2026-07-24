@@ -4,6 +4,8 @@ FROM node:22-bookworm-slim AS client-assets
 
 WORKDIR /app
 
+ENV PYTHONPATH=/app/src
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
@@ -12,13 +14,15 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY client ./client
-COPY server/enums.py server/enumsgen.py ./server/
+COPY server/enumsgen.py ./server/
+COPY src/acquire/__init__.py src/acquire/enums.py ./src/acquire/
 RUN npm run build:client
 
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/src
 
 WORKDIR /app
 

@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
-from enums import GameStates, ScoreSheetIndexes
+
+from acquire.enums import GameStates, ScoreSheetIndexes
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "game_logs"
 LOG_TIMESTAMP = 1780589302

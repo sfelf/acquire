@@ -10,7 +10,7 @@ import re
 import sys
 from collections.abc import Sequence
 
-import enums
+from acquire import enums
 
 EnumLookup = collections.OrderedDict[str, int]
 EnumLookups = dict[str, EnumLookup]

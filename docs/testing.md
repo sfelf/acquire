@@ -29,7 +29,7 @@ All Python source included in the coverage target should count toward the covera
 Run coverage locally with:
 
 ```bash
-uv run pytest --cov=server --cov-report=term-missing:skip-covered
+uv run pytest --cov=server --cov=src/acquire --cov-report=term-missing:skip-covered
 ```
 
 ## Test Layout

@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Literal, TextIO
 
 import auth
-import enums
 import orm
 import ujson
 import uvicorn
@@ -30,6 +29,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from pydantic import BaseModel
 from starlette import status
 from starlette.concurrency import run_in_threadpool
+
+from acquire import enums
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MAIN_STATIC_ROOT = PROJECT_ROOT / "client" / "main"

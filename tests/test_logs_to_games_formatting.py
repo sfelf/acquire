@@ -1,7 +1,8 @@
 import types
 
 import pytest
-from enums import GameActions, GameBoardTypes, GameHistoryMessages
+
+from acquire.enums import GameActions, GameBoardTypes, GameHistoryMessages
 
 pytestmark = pytest.mark.unit
 

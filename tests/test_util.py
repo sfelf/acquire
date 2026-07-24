@@ -1,8 +1,8 @@
 import gzip
 
 import pytest
-import settings
-import util
+
+from acquire import settings, util
 
 pytestmark = pytest.mark.unit
 
