@@ -101,8 +101,8 @@ Issue #105 is delivered as three stand-alone PR slices so its large module
 moves remain reviewable:
 
 1. Move ORM models and the session boundary, and make Alembic load packaged
-   metadata without `server/` path injection.
-2. Move authentication after the packaged ORM boundary is available.
+   metadata without `server/` path injection. Complete.
+2. Move authentication after the packaged ORM boundary is available. Complete.
 3. Move database setup and complete the idempotency, installed-package, and
    dependency-isolation verification for the issue.
 
