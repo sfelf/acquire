@@ -29,6 +29,8 @@ def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
     assert "The six-phase modernization plan is complete." in agent_notes
     assert "Complete packaging and import restructuring" in agent_notes
+    assert "GitHub issues and milestones\nremain authoritative" in agent_notes
+    assert "update `PLANS.md` when an approved issue change" in agent_notes
     assert "Keep linting and type checking permissive" not in agent_notes
 
 
