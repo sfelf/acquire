@@ -54,6 +54,7 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert "import acquire.settings" in workflow_text
     assert "import acquire.username_to_user_id" in workflow_text
     assert "import acquire.util" in workflow_text
+    assert "find_spec('acquire.setup_database') is not None" in workflow_text
     assert "'site-packages' in Path(acquire.__file__).parts" in workflow_text
     assert "find_spec('mysql') is None" in workflow_text
 

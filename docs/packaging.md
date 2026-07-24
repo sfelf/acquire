@@ -52,6 +52,10 @@ and session lifecycle are authoritative in `acquire.orm`; `server/orm.py`
 temporarily aliases that same module object for unmigrated direct-file callers.
 Authentication is authoritative in `acquire.auth`; `server/auth.py` provides
 the equivalent temporary alias while the HTTP runtime remains under `server/`.
+Database setup is authoritative in `acquire.setup_database`;
+`server/setup_database.py` remains a temporary direct-file entry point for
+Docker and deployment callers until issue #110 replaces those calls with an
+installed project script.
 Alembic imports the packaged metadata directly and resolves its migration
 directory relative to `alembic.ini`, independent of the current working
 directory. Issue #111 removes the alias after every runtime and command path is

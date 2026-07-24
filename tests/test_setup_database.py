@@ -57,6 +57,8 @@ class Inspector:
 @pytest.fixture
 def setup_database_module(monkeypatch):
     monkeypatch.delitem(sys.modules, "setup_database", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.setup_database", raising=False)
+    monkeypatch.delattr(acquire, "setup_database", raising=False)
 
     alembic = types.ModuleType("alembic")
     command = types.ModuleType("alembic.command")
@@ -78,9 +80,11 @@ def setup_database_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "sqlalchemy", sqlalchemy)
 
     try:
-        yield importlib.import_module("setup_database"), command, sqlalchemy
+        yield importlib.import_module("acquire.setup_database"), command, sqlalchemy
     finally:
         sys.modules.pop("setup_database", None)
+        sys.modules.pop("acquire.setup_database", None)
+        monkeypatch.delattr(acquire, "setup_database", raising=False)
 
 
 def test_setup_database_uses_repository_alembic_config(setup_database_module):
@@ -163,6 +167,34 @@ def test_setup_database_does_not_stamp_empty_schema(setup_database_module, monke
     assert calls == [("upgrade", "head")]
 
 
+def test_setup_database_does_not_stamp_schema_with_extra_table(
+    setup_database_module,
+    monkeypatch,
+):
+    setup_database, command, sqlalchemy = setup_database_module
+    calls = []
+    table_names = [*setup_database.BASELINE_TABLES, "unexpected"]
+    monkeypatch.setattr(
+        sqlalchemy,
+        "inspect",
+        lambda engine: Inspector(table_names, setup_database.BASELINE_COLUMNS),
+    )
+    monkeypatch.setattr(
+        command,
+        "stamp",
+        lambda config, revision: calls.append(("stamp", revision)),
+    )
+    monkeypatch.setattr(
+        command,
+        "upgrade",
+        lambda config, revision: calls.append(("upgrade", revision)),
+    )
+
+    setup_database.main()
+
+    assert calls == [("upgrade", "head")]
+
+
 def test_setup_database_does_not_stamp_already_versioned_schema(
     setup_database_module,
     monkeypatch,
@@ -189,6 +221,29 @@ def test_setup_database_does_not_stamp_already_versioned_schema(
     setup_database.main()
 
     assert calls == [("upgrade", "head")]
+
+
+def test_setup_database_propagates_inspection_failure_without_upgrade(
+    setup_database_module,
+    monkeypatch,
+):
+    setup_database, command, sqlalchemy = setup_database_module
+    calls = []
+
+    def raise_inspection_error(engine):
+        raise RuntimeError("inspection failed")
+
+    monkeypatch.setattr(sqlalchemy, "inspect", raise_inspection_error)
+    monkeypatch.setattr(
+        command,
+        "upgrade",
+        lambda config, revision: calls.append(("upgrade", revision)),
+    )
+
+    with pytest.raises(RuntimeError, match="inspection failed"):
+        setup_database.main()
+
+    assert calls == []
 
 
 def test_setup_database_does_not_stamp_schema_with_missing_columns(

@@ -10,9 +10,10 @@ existing backup into Postgres.
 - Alembic migrations live in `migrations/`.
 - The initial Alembic revision creates the current Postgres schema and required
   lookup rows.
-- `server/setup_database.py` applies Alembic migrations for local Docker and
-  e2e setup without dropping data. Local Docker now runs this against
-  Postgres by default.
+- `acquire.setup_database` applies Alembic migrations for local Docker and e2e
+  setup without dropping data. Local Docker currently reaches it through the
+  temporary `server/setup_database.py` compatibility entry point and runs it
+  against Postgres by default.
 - `server/import_mysql_to_postgres.py` copies known application tables from a
   MySQL-compatible source into a migrated Postgres-compatible target for
   cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses
@@ -25,7 +26,7 @@ existing backup into Postgres.
   runtime stats reads do not rebuild historical win/place records from
   imported games.
 - The legacy MySQL reset command has been removed. Alembic and
-  `server/setup_database.py` are the supported schema setup paths.
+  `acquire.setup_database` are the supported schema setup paths.
 - Postgres marker tests cover connectivity, ORM metadata creation, the Alembic
   baseline, transaction behavior, auth persistence, runtime constraints,
   lookup persistence, and completed-game log import persistence.
@@ -162,7 +163,7 @@ dual-write, and this repository no longer provides a MySQL application runtime.
 
 - Keep the MySQL-to-Postgres backup import tool and its optional driver extra
   until migration from existing MySQL backups is no longer required.
-- Keep Alembic and `server/setup_database.py` as the only schema setup paths.
+- Keep Alembic and `acquire.setup_database` as the only schema setup paths.
 - Do not add MySQL connection settings, Compose services, marker fixtures, or
   drivers back to the normal application runtime.
 
