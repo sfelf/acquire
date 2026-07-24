@@ -1,11 +1,117 @@
-# Completed Modernization Plan
+# Modernization And Packaging Plan
 
-Status: complete as of July 23, 2026.
+Status:
 
-This document is the historical record of the agreed modernization path for
-the Acquire codebase. New work is tracked through GitHub issues and milestones.
+- The six-phase modernization plan is complete as of July 23, 2026.
+- The Packaging milestone is active.
 
-## Project Goal
+This document preserves the agreed modernization record and documents the
+delivery order for active milestone work. GitHub issues remain the source of
+truth for issue scope and acceptance criteria.
+
+## Active Packaging Milestone
+
+Status: ready to start with
+[#103](https://github.com/sfelf/acquire/issues/103).
+
+Goal: package the Python backend for uv-managed installation, normalize imports,
+and expose stable project scripts without changing application behavior.
+
+### Decisions
+
+- Use `uv_build` with a bounded compatible version as the build backend. Acquire
+  is a pure-Python, uv-managed application moving to the backend's conventional
+  `src/acquire/` layout and does not require native extensions or custom build
+  hooks.
+- Preserve the dependency boundary already present on `main`: SQLAlchemy and
+  Psycopg are normal runtime dependencies, while `mysql-connector-python`
+  remains isolated in the `mysql-migration` optional extra. Packaging work
+  verifies this boundary rather than introducing it.
+- Wheels contain only installable runtime modules, declared package data,
+  metadata, and entry points. They exclude tests and test fixtures.
+- Source distributions also contain the tracked test suite and its required
+  sanitized fixtures. They exclude generated assets, credentials, database
+  dumps, sockets, caches, bytecode, coverage output, and temporary reports.
+- Temporary `server/` compatibility wrappers may exist only while callers are
+  being migrated. They contain no application logic, identify
+  [#111](https://github.com/sfelf/acquire/issues/111) as their removal owner,
+  and are not a second supported API.
+
+### Dependency Waves
+
+Issues may be worked in the following dependency waves:
+
+1. Package foundation:
+   [#103](https://github.com/sfelf/acquire/issues/103) adds the installable
+   `src/acquire/` scaffold and `uv_build` configuration without moving
+   production modules.
+2. Foundational modules:
+   [#104](https://github.com/sfelf/acquire/issues/104) moves settings, enums,
+   utilities, and username lookup after #103.
+3. Persistence boundary:
+   [#105](https://github.com/sfelf/acquire/issues/105) moves ORM,
+   authentication, and database setup after #103 and #104.
+4. Two tracks become independently available after #105:
+   - Runtime and maintenance track:
+     [#106](https://github.com/sfelf/acquire/issues/106) moves the game and
+     realtime HTTP runtime, then
+     [#107](https://github.com/sfelf/acquire/issues/107) moves replay, stats,
+     and maintenance tooling.
+   - Backup migration track:
+     [#108](https://github.com/sfelf/acquire/issues/108) isolates the
+     MySQL-to-Postgres importer, then
+     [#109](https://github.com/sfelf/acquire/issues/109) adds its installed
+     project script while preserving the existing optional extra.
+5. Routine application commands:
+   [#110](https://github.com/sfelf/acquire/issues/110) follows #105, #106, and
+   #107. Coordinate it after #109 when working serially so project-script names,
+   package metadata, the lock file, and command documentation are reconciled
+   once.
+6. Package closeout:
+   [#111](https://github.com/sfelf/acquire/issues/111) follows #104 through
+   #110, removes all transitional wrappers and path assumptions, verifies
+   artifact contents, and records the final package and entry-point inventory.
+
+The recommended serial merge order is:
+
+1. #103
+2. #104
+3. #105
+4. #106
+5. #107
+6. #108
+7. #109
+8. #110
+9. #111
+
+The serial order is preferred for one-agent delivery because it keeps each
+change reviewable and minimizes conflicts in package configuration, imports,
+tests, CI, Docker, and documentation. Parallel delivery may use the two tracks
+in wave 4, but each issue must still satisfy its declared dependencies before
+merge.
+
+### Issue Verification Gates
+
+| Issue | Completion evidence |
+| --- | --- |
+| [#103](https://github.com/sfelf/acquire/issues/103) | Editable install, `uv_build` wheel and source distribution, import smoke test outside the repository, supported-Python CI coverage, and unchanged runtime validation. |
+| [#104](https://github.com/sfelf/acquire/issues/104) | Installed foundational imports, focused behavior tests, equivalent enum generation, and documented transitional wrappers. |
+| [#105](https://github.com/sfelf/acquire/issues/105) | Installed persistence/auth imports, working Alembic upgrade from another working directory, idempotent setup, preserved dependency isolation, and Postgres/auth regression coverage. |
+| [#106](https://github.com/sfelf/acquire/issues/106) | Installed FastAPI and game-runtime imports, explicit static-asset paths, and unchanged HTTP, WebSocket, protocol, integration, and e2e behavior. |
+| [#107](https://github.com/sfelf/acquire/issues/107) | Installed offline-tool imports, golden replay equivalence, preserved stats/rating/persistence behavior, and path-sensitive coverage outside `server/`. |
+| [#108](https://github.com/sfelf/acquire/issues/108) | Importer loading without a global runtime engine, an explicit legacy-source/current-target schema boundary, preserved rehearsal behavior, failure-path coverage, and sanitized reports. |
+| [#109](https://github.com/sfelf/acquire/issues/109) | Installed migration command, normal-sync/optional-extra isolation checks, command-level error and redaction tests, and a successful Docker-backed rehearsal. |
+| [#110](https://github.com/sfelf/acquire/issues/110) | Installed gateway and database-setup commands, Docker and enum-generation parity, command parsing tests, and Postgres/integration/e2e validation. |
+| [#111](https://github.com/sfelf/acquire/issues/111) | No legacy import shims or `server/` path injection, asserted wheel/sdist manifests, a wheel built from the sdist, clean-environment command smoke tests, complete repository validation, and current documentation. |
+
+Every issue must map its acceptance criteria to executable tests or explicit
+verification in its pull request. Before merge, run the repository-required
+formatting, lint, typing, test, pre-commit, and issue-specific package, Docker,
+database, integration, golden, or e2e checks. Runtime behavior, public
+protocols, persistence semantics, log formats, ratings, reports, and retained
+backup-migration behavior remain unchanged throughout this milestone.
+
+## Completed Modernization Goal
 
 The project modernized the repository in phases so the team can safely perform
 a major refactor, retire the Node.js server, keep the Python backend, preserve

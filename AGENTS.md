@@ -107,5 +107,8 @@ uv run pre-commit run --all-files
 3. Preserve the optional MySQL-backup import path until existing backups no
    longer need to be migrated.
 
-`PLANS.md` is the completed historical modernization record, not the active
-work tracker.
+`PLANS.md` preserves the completed modernization record and documents approved
+delivery order and decisions for active milestones. GitHub issues and milestones
+remain authoritative for current scope, status, dependencies, and acceptance
+criteria; update `PLANS.md` when an approved issue change alters the recorded
+sequence or decisions.
