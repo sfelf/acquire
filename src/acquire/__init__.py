@@ -1,0 +1,1 @@
+"""Acquire game server package."""
