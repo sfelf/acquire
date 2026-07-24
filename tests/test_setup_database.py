@@ -100,6 +100,21 @@ def test_setup_database_uses_repository_alembic_config(setup_database_module):
     ).resolve().parents[1]
 
 
+def test_setup_database_rejects_install_without_repository_migrations(
+    setup_database_module,
+    monkeypatch,
+    tmp_path,
+):
+    setup_database, _, _ = setup_database_module
+    monkeypatch.setattr(setup_database, "REPO_DIR", tmp_path)
+
+    with pytest.raises(
+        RuntimeError,
+        match="requires repository migration resources",
+    ):
+        setup_database.alembic_config()
+
+
 def test_setup_database_upgrades_to_head(setup_database_module, monkeypatch):
     setup_database, command, _ = setup_database_module
     calls = []

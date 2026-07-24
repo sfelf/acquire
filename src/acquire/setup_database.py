@@ -1,17 +1,24 @@
 """Apply database migrations for local development and deployment setup.
 
 This module owns the guarded legacy-schema stamp and Alembic upgrade workflow
-used by local, test, and production database setup.
+used by local, test, and production database setup. The module is importable
+from a normal installed package, while execution remains limited to repository
+environments with migration dependencies until issue #110 adds the installed
+command.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import sqlalchemy
-from alembic import command
-from alembic.config import Config
 from sqlalchemy.engine.reflection import Inspector
 
 from acquire import orm
+
+if TYPE_CHECKING:  # pragma: no cover
+    from alembic.config import Config
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 BASELINE_REVISION = "20260622_0001"
@@ -63,15 +70,30 @@ def alembic_config() -> Config:
 
     The current direct-file and editable-install commands use migrations stored
     at the repository root. Resolving them relative to the packaged source
-    module keeps setup independent of the current working directory. Issue
-    #110 owns the installed project command, and issue #111 owns the final
+    module keeps setup independent of the current working directory. A wheel
+    install can import this module, but setup execution fails explicitly until
+    issue #110 adds the installed project command and issue #111 owns the final
     artifact layout.
 
     Returns:
         Alembic config for the repository migration environment.
+
+    Raises:
+        RuntimeError: The repository migration resources are unavailable.
     """
-    config = Config(str(REPO_DIR / "alembic.ini"))
-    config.set_main_option("script_location", str(REPO_DIR / "migrations"))
+    config_path = REPO_DIR / "alembic.ini"
+    migrations_path = REPO_DIR / "migrations"
+    if not config_path.is_file() or not migrations_path.is_dir():
+        raise RuntimeError(
+            "Database setup requires repository migration resources; "
+            "use a repository environment with migration dependencies until "
+            "issue #110 adds the installed setup command."
+        )
+
+    from alembic.config import Config
+
+    config = Config(str(config_path))
+    config.set_main_option("script_location", str(migrations_path))
     return config
 
 
@@ -139,6 +161,8 @@ def stamp_legacy_schema(config: Config) -> None:
         config: Alembic configuration for the repository migration environment.
     """
     if is_unstamped_legacy_schema():
+        from alembic import command
+
         command.stamp(config, BASELINE_REVISION)
 
 
@@ -152,6 +176,8 @@ def main() -> None:
     """
     config = alembic_config()
     stamp_legacy_schema(config)
+    from alembic import command
+
     command.upgrade(config, "head")
 
 
