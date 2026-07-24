@@ -49,11 +49,11 @@ jobs:
             uv venv --python "${{ matrix.python-version }}" \
               "$artifact_test_dir/.venv"
             uv pip install --python "$artifact_test_dir/.venv/bin/python" \
-              --no-deps "$artifact"
+              "$artifact"
             (
               cd "$artifact_test_dir"
               .venv/bin/python -c \
-                "from pathlib import Path; import acquire; import acquire.enums; import acquire.settings; import acquire.username_to_user_id; import acquire.util; assert 'site-packages' in Path(acquire.__file__).parts"
+                "from pathlib import Path; import importlib.util; import acquire; import acquire.enums; import acquire.orm; import acquire.settings; import acquire.username_to_user_id; import acquire.util; assert 'site-packages' in Path(acquire.__file__).parts; assert importlib.util.find_spec('mysql') is None"
             )
           done
 

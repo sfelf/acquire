@@ -272,5 +272,5 @@ def test_python_quality_config_scopes_type_checker_exceptions() -> None:
         for override in mypy_overrides
     }
 
-    assert override_by_module[("orm",)] == {"misc", "valid-type"}
-    assert set(override_by_module) == {("orm",)}
+    assert override_by_module[("acquire.orm",)] == {"misc", "valid-type"}
+    assert set(override_by_module) == {("acquire.orm",)}

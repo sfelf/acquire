@@ -2,20 +2,14 @@
 
 from __future__ import annotations
 
-import sys
 from logging.config import fileConfig
-from pathlib import Path
 from typing import cast
 
 from alembic import context
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import Connection, Engine
 
-SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
-if str(SERVER_DIR) not in sys.path:
-    sys.path.insert(0, str(SERVER_DIR))
-
-import orm  # noqa: E402
+from acquire import orm
 
 config = context.config
 if config.config_file_name is not None:
@@ -28,7 +22,7 @@ def get_configured_url() -> str:
     """Return the configured database URL for Alembic commands.
 
     Tests can set `sqlalchemy.url` directly on the Alembic config. Normal local
-    commands fall back to the same Postgres URL assembled by `server/orm.py`.
+    commands fall back to the same Postgres URL assembled by `acquire.orm`.
 
     Returns:
         Configured Alembic URL or the ORM-derived runtime URL.
@@ -56,7 +50,7 @@ def get_connectable() -> Connection | Engine:
     """Return the injected connection or create an Alembic engine.
 
     The test suite injects a connection so migrations run against the same
-    Docker-backed database fixture. CLI commands use `server/orm.py`'s Postgres
+    Docker-backed database fixture. CLI commands use `acquire.orm`'s Postgres
     engine when no URL is supplied.
 
     Returns:

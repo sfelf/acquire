@@ -47,6 +47,14 @@ Until issue #111 removes legacy direct-file working directories, Docker images
 temporarily add `/app/src` to `PYTHONPATH` so those commands can import migrated
 modules. This is compatibility scaffolding, not an alternative package layout.
 
+Issue #105 moves the persistence boundary in reviewable slices. The ORM models
+and session lifecycle are authoritative in `acquire.orm`; `server/orm.py`
+temporarily aliases that same module object for unmigrated direct-file callers.
+Alembic imports the packaged metadata directly and resolves its migration
+directory relative to `alembic.ini`, independent of the current working
+directory. Issue #111 removes the alias after every runtime and command path is
+packaged.
+
 Issue #111 owns the final wheel and source-distribution manifests after the
 runtime modules and their tests have migrated into the installed-package
 layout. It also owns final project scripts and removal of all transitional

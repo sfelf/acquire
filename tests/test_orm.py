@@ -4,6 +4,8 @@ import types
 
 import pytest
 
+import acquire
+
 pytestmark = pytest.mark.unit
 
 
@@ -104,7 +106,8 @@ def install_fake_sqlalchemy(monkeypatch):
 
 @pytest.fixture
 def orm_module(monkeypatch):
-    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.orm", raising=False)
+    monkeypatch.delattr(acquire, "orm", raising=False)
     monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
     monkeypatch.delenv("POSTGRES_DB", raising=False)
     monkeypatch.delenv("POSTGRES_HOST", raising=False)
@@ -114,9 +117,9 @@ def orm_module(monkeypatch):
     install_fake_sqlalchemy(monkeypatch)
 
     try:
-        yield importlib.import_module("orm")
+        yield importlib.import_module("acquire.orm")
     finally:
-        sys.modules.pop("orm", None)
+        sys.modules.pop("acquire.orm", None)
 
 
 class TransactionSession:
@@ -166,7 +169,8 @@ def test_engine_uses_default_postgres_settings(orm_module):
 
 
 def test_engine_uses_postgres_environment(monkeypatch):
-    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.orm", raising=False)
+    monkeypatch.delattr(acquire, "orm", raising=False)
     monkeypatch.delenv("ACQUIRE_DATABASE_URL", raising=False)
     monkeypatch.setenv("POSTGRES_DB", "custom db")
     monkeypatch.setenv("POSTGRES_HOST", "postgres")
@@ -176,7 +180,7 @@ def test_engine_uses_postgres_environment(monkeypatch):
     install_fake_sqlalchemy(monkeypatch)
 
     try:
-        orm = importlib.import_module("orm")
+        orm = importlib.import_module("acquire.orm")
         url = orm.engine[1][0]
 
         assert url.drivername == "postgresql+psycopg"
@@ -193,16 +197,17 @@ def test_engine_uses_postgres_environment(monkeypatch):
             {},
         )
     finally:
-        sys.modules.pop("orm", None)
+        sys.modules.pop("acquire.orm", None)
 
 
 def test_engine_uses_explicit_database_url(monkeypatch):
-    monkeypatch.delitem(sys.modules, "orm", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.orm", raising=False)
+    monkeypatch.delattr(acquire, "orm", raising=False)
     monkeypatch.setenv("ACQUIRE_DATABASE_URL", "postgresql+psycopg://u:p@localhost/acquire")
     install_fake_sqlalchemy(monkeypatch)
 
     try:
-        orm = importlib.import_module("orm")
+        orm = importlib.import_module("acquire.orm")
 
         assert orm.engine == (
             "engine",
@@ -210,7 +215,7 @@ def test_engine_uses_explicit_database_url(monkeypatch):
             {},
         )
     finally:
-        sys.modules.pop("orm", None)
+        sys.modules.pop("acquire.orm", None)
 
 
 def test_session_scope_rolls_back_and_closes_on_error(orm_module, monkeypatch):

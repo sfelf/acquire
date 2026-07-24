@@ -9,9 +9,8 @@ import pickle
 import re
 from typing import cast
 
-import orm
-
 import server
+from acquire import orm
 
 server_dict: dict[str, object] = dict(inspect.getmembers(server))
 

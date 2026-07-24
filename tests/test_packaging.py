@@ -45,13 +45,16 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert 'cd "$artifact_test_dir"' in workflow_text
     assert 'uv venv --python "${{ matrix.python-version }}"' in workflow_text
     assert 'uv pip install --python "$artifact_test_dir/.venv/bin/python"' in workflow_text
-    assert '--no-deps "$artifact"' in workflow_text
+    assert '"$artifact"' in workflow_text
+    assert '--no-deps "$artifact"' not in workflow_text
     assert ".venv/bin/python -c" in workflow_text
     assert "import acquire.enums" in workflow_text
+    assert "import acquire.orm" in workflow_text
     assert "import acquire.settings" in workflow_text
     assert "import acquire.username_to_user_id" in workflow_text
     assert "import acquire.util" in workflow_text
     assert "'site-packages' in Path(acquire.__file__).parts" in workflow_text
+    assert "find_spec('mysql') is None" in workflow_text
 
 
 def test_packaging_docs_define_incremental_module_migration_rules() -> None:

@@ -16,11 +16,11 @@ REPO_DIR = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def real_orm_module():
-    sys.modules.pop("orm", None)
+    sys.modules.pop("acquire.orm", None)
     try:
-        yield importlib.import_module("orm")
+        yield importlib.import_module("acquire.orm")
     finally:
-        sys.modules.pop("orm", None)
+        sys.modules.pop("acquire.orm", None)
 
 
 @pytest.fixture

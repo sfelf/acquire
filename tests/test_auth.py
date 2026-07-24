@@ -1,9 +1,8 @@
 import auth
-import orm
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from acquire import enums
+from acquire import enums, orm
 
 pytestmark = pytest.mark.unit
 

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+import acquire
+
 pytestmark = pytest.mark.unit
 
 
@@ -63,7 +65,7 @@ def setup_database_module(monkeypatch):
     config = types.ModuleType("alembic.config")
     config.Config = Config
     alembic.command = command
-    orm = types.ModuleType("orm")
+    orm = types.ModuleType("acquire.orm")
     orm.engine = Engine()
     sqlalchemy = types.ModuleType("sqlalchemy")
     sqlalchemy.inspect = lambda engine: Inspector([])
@@ -71,7 +73,8 @@ def setup_database_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "alembic", alembic)
     monkeypatch.setitem(sys.modules, "alembic.command", command)
     monkeypatch.setitem(sys.modules, "alembic.config", config)
-    monkeypatch.setitem(sys.modules, "orm", orm)
+    monkeypatch.setitem(sys.modules, "acquire.orm", orm)
+    monkeypatch.setattr(acquire, "orm", orm, raising=False)
     monkeypatch.setitem(sys.modules, "sqlalchemy", sqlalchemy)
 
     try:

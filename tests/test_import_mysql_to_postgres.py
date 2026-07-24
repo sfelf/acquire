@@ -15,7 +15,7 @@ def import_module():
 
 @pytest.fixture
 def orm_module():
-    return importlib.import_module("orm")
+    return importlib.import_module("acquire.orm")
 
 
 @pytest.fixture
