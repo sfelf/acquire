@@ -24,8 +24,8 @@ from typing import Any, Protocol, TextIO, cast
 import sqlalchemy
 import ujson
 
-import server
 from acquire import enums, orm, util
+from acquire import game_server as server
 from acquire import username_to_user_id as username_to_user_id_module
 
 username_to_user_id = username_to_user_id_module.username_to_user_id

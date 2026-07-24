@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-import server
+from acquire import game_server as server
 
 pytestmark = pytest.mark.unit
 

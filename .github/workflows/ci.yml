@@ -53,7 +53,7 @@ jobs:
             (
               cd "$artifact_test_dir"
               .venv/bin/python -c \
-                "from pathlib import Path; import importlib.util; import acquire; import acquire.auth; import acquire.enums; import acquire.orm; import acquire.settings; import acquire.setup_database; import acquire.username_to_user_id; import acquire.util; assert 'site-packages' in Path(acquire.__file__).parts; assert importlib.util.find_spec('mysql') is None; assert importlib.util.find_spec('alembic') is None"
+                "from pathlib import Path; import importlib.util; import acquire; import acquire.auth; import acquire.enums; import acquire.game_server; import acquire.http_server; import acquire.orm; import acquire.realtime; import acquire.settings; import acquire.setup_database; import acquire.username_to_user_id; import acquire.util; assert 'site-packages' in Path(acquire.__file__).parts; assert importlib.util.find_spec('mysql') is None; assert importlib.util.find_spec('alembic') is None"
             )
           done
 
@@ -63,9 +63,10 @@ jobs:
           import importlib.util
           import sys
 
+          import acquire.http_server
+
           sys.path.insert(0, "server")
           import cron
-          import http_server
 
           assert importlib.util.find_spec("mysql") is None
           PY

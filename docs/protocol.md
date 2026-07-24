@@ -1,9 +1,9 @@
 # Protocol Notes
 
 The browser client now connects to the Python FastAPI gateway. The historical
-line-oriented gateway protocol remains documented because `server/server.py`
-still exposes the parser and `server/websocket_gateway.py` consumes the
-game-server outbound line format in process.
+line-oriented gateway protocol remains documented because
+`acquire.game_server` still exposes the parser and `acquire.realtime` consumes
+the game-engine outbound line format in process.
 
 ## Historical Gateway To Python
 

@@ -9,7 +9,7 @@ import pickle
 import re
 from typing import cast
 
-import server
+from acquire import game_server as server
 from acquire import orm
 
 server_dict: dict[str, object] = dict(inspect.getmembers(server))

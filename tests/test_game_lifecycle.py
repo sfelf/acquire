@@ -3,7 +3,7 @@ import types
 
 import pytest
 
-import server
+from acquire import game_server as server
 from acquire.enums import (
     CommandsToClient,
     GameActions,

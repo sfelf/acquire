@@ -33,7 +33,7 @@ def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None
 
     assert "uv run --isolated --frozen --no-dev python -" in workflow
     assert "import cron" in workflow
-    assert "import http_server" in workflow
+    assert "import acquire.http_server" in workflow
     assert 'assert importlib.util.find_spec("mysql") is None' in workflow
     assert (
         "uv run --isolated --frozen --no-dev --extra mysql-migration python -" in workflow
@@ -189,6 +189,9 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert publish_job["permissions"] == {"contents": "read", "id-token": "write"}
     assert "docker build -t acquire:production-test ." in workflow
     assert workflow.count("production image smoke ok") == 2
+    assert workflow.count("from acquire import http_server") == 2
+    assert workflow.count("http_server.DEFAULT_MAIN_STATIC_ROOT") == 6
+    assert workflow.count("http_server.DEFAULT_STATS_STATIC_ROOT") == 4
     assert "aws-actions/configure-aws-credentials@v4" in workflow
     assert "aws-actions/amazon-ecr-login@v2" in workflow
     assert "AWS_ROLE_TO_ASSUME" in workflow
