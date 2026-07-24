@@ -40,6 +40,14 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     ]
     assert 'uv run python -c "import acquire"' in workflow_text
     assert "uv build --no-sources" in workflow_text
+    assert 'artifacts=("$GITHUB_WORKSPACE"/dist/*)' in workflow_text
+    assert 'test "${#artifacts[@]}" -eq 2' in workflow_text
+    assert 'cd "$artifact_test_dir"' in workflow_text
+    assert 'uv venv --python "${{ matrix.python-version }}"' in workflow_text
+    assert 'uv pip install --python "$artifact_test_dir/.venv/bin/python"' in workflow_text
+    assert '--no-deps "$artifact"' in workflow_text
+    assert ".venv/bin/python -c" in workflow_text
+    assert "'site-packages' in Path(acquire.__file__).parts" in workflow_text
 
 
 def test_packaging_docs_define_incremental_module_migration_rules() -> None:
