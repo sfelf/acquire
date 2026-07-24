@@ -38,8 +38,9 @@ docker run --rm \
   python setup_database.py
 ```
 
-`server/setup_database.py` applies Alembic migrations and required lookup data
-without dropping existing data.
+`acquire.setup_database` applies Alembic migrations and required lookup data
+without dropping existing data. The direct-file command remains a temporary
+compatibility entry point until issue #110 adds the installed project script.
 
 ## Run The Gateway
 

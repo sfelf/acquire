@@ -25,8 +25,9 @@ def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     assert "The six-phase modernization plan is complete as of July 23, 2026." in plans
     assert "The Packaging milestone is active." in plans
     assert "[#103](https://github.com/sfelf/acquire/issues/103) and" in plans
-    assert "[#104](https://github.com/sfelf/acquire/issues/104) are complete" in plans
-    assert "[#105](https://github.com/sfelf/acquire/issues/105) is in progress" in plans
+    assert "[#104](https://github.com/sfelf/acquire/issues/104), and" in plans
+    assert "[#105](https://github.com/sfelf/acquire/issues/105) are complete" in plans
+    assert "[#106](https://github.com/sfelf/acquire/issues/106) is next" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
     assert "GitHub issues remain the source of\ntruth for issue scope" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
@@ -210,6 +211,7 @@ def test_local_database_setup_docs_use_alembic_command() -> None:
     assert not (REPOSITORY_ROOT / "server" / "initialize_database.py").exists()
     assert "python setup_database.py" in readme
     assert "python setup_database.py" in local_development
+    assert "`acquire.setup_database`" in database_notes
     assert "server/setup_database.py" in database_notes
     assert "The legacy MySQL reset command has been removed" in database_notes
     assert "python initialize_database.py" not in readme

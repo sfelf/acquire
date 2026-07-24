@@ -185,6 +185,30 @@ def test_alembic_baseline_runs_against_postgres(
     assert not _table_names(postgres_engine)
 
 
+def test_database_setup_is_idempotent_and_preserves_seeded_lookups(
+    postgres_engine,
+    real_orm_module,
+    empty_postgres_schema,
+    monkeypatch,
+):
+    sys.modules.pop("acquire.setup_database", None)
+    setup_database = importlib.import_module("acquire.setup_database")
+    monkeypatch.setattr(setup_database.orm, "engine", postgres_engine)
+
+    setup_database.main()
+    setup_database.main()
+
+    assert _app_table_names(postgres_engine) == setup_database.BASELINE_TABLES
+    with postgres_engine.connect() as connection:
+        version = connection.execute(sqlalchemy.text("select version_num from alembic_version"))
+        assert version.scalar_one() == setup_database.BASELINE_REVISION
+        for table_name, expected_names in setup_database.BASELINE_LOOKUP_ROWS.items():
+            rows = connection.execute(
+                sqlalchemy.text(f"select name from {table_name} order by name")
+            )
+            assert {row[0] for row in rows} == expected_names
+
+
 def test_alembic_baseline_preserves_mysql_numeric_contract_against_postgres(
     postgres_engine,
     empty_postgres_schema,

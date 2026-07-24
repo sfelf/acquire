@@ -118,8 +118,10 @@ lookup rows, mark the baseline as already applied instead:
 uv run alembic stamp head
 ```
 
-Local Docker setup uses Alembic through `server/setup_database.py`; future
-schema or required lookup-data changes should be added as Alembic revisions.
+Local Docker setup uses Alembic through `acquire.setup_database`; the current
+direct-file command is a temporary compatibility entry point until issue #110
+adds the installed project script. Future schema or required lookup-data
+changes should be added as Alembic revisions.
 
 ## Install dependencies
 
