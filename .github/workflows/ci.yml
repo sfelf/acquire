@@ -38,6 +38,11 @@ jobs:
       - name: Install tooling
         run: uv sync --group dev --frozen
 
+      - name: Verify package
+        run: |
+          uv run python -c "import acquire"
+          uv build --no-sources
+
       - name: Verify runtime dependency boundaries
         run: |
           uv run --isolated --frozen --no-dev python - <<'PY'

@@ -10,6 +10,8 @@ import restructuring before the major refactor.
 
 - `server/http_server.py` contains the FastAPI app for the default local HTTP and SockJS-compatible gateway.
 - `server/server.py` contains the Python game server and legacy socket protocol handling.
+- `docs/packaging.md` defines the incremental module-migration convention for
+  the active Packaging milestone.
 - Postgres is the only application runtime database. MySQL support is limited
   to `server/import_mysql_to_postgres.py`, installed with the
   `mysql-migration` optional uv extra for importing existing backups.
