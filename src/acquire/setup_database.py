@@ -131,6 +131,10 @@ def has_baseline_lookup_rows() -> bool:
 def stamp_legacy_schema(config: Config) -> None:
     """Stamp a matching legacy schema as the Alembic baseline when needed.
 
+    Only the exact legacy table, column, and lookup-row shape is stamped.
+    Empty, versioned, partial, and unknown schemas remain unstamped so Alembic
+    owns their normal upgrade or failure behavior.
+
     Args:
         config: Alembic configuration for the repository migration environment.
     """
