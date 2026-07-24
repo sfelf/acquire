@@ -65,6 +65,15 @@ directory relative to `alembic.ini`, independent of the current working
 directory. Issue #111 removes the alias after every runtime and command path is
 packaged.
 
+Issue #106 makes `acquire.game_server`, `acquire.realtime`, and
+`acquire.http_server` authoritative for the game engine, WebSocket adapter, and
+FastAPI app. The legacy files under `server/` delegate to those modules so
+existing Docker, shell, and offline-tool paths continue to work until issues
+#107, #110, and #111 migrate their respective callers. Static roots are
+resolved explicitly from the shared `src/acquire/` source layout to
+`client/main` and `client/stats`; this is the same layout used by editable
+installs and the production image.
+
 Issue #111 owns the final wheel and source-distribution manifests after the
 runtime modules and their tests have migrated into the installed-package
 layout. It also owns final project scripts and removal of all transitional

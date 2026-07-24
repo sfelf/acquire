@@ -15,7 +15,7 @@ Status: issues
 [#103](https://github.com/sfelf/acquire/issues/103) and
 [#104](https://github.com/sfelf/acquire/issues/104), and
 [#105](https://github.com/sfelf/acquire/issues/105) are complete. Issue
-[#106](https://github.com/sfelf/acquire/issues/106) is next.
+[#106](https://github.com/sfelf/acquire/issues/106) is in progress.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.

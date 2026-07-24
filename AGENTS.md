@@ -8,8 +8,13 @@ import restructuring before the major refactor.
 
 ## Current Architecture
 
-- `server/http_server.py` contains the FastAPI app for the default local HTTP and SockJS-compatible gateway.
-- `server/server.py` contains the Python game server and legacy socket protocol handling.
+- `src/acquire/http_server.py` contains the FastAPI app for the default local
+  HTTP gateway.
+- `src/acquire/realtime.py` contains the SockJS-compatible WebSocket adapter.
+- `src/acquire/game_server.py` contains the Python game engine and legacy
+  socket protocol handling.
+- The corresponding files under `server/` are temporary compatibility wrappers
+  for existing startup commands and unmigrated offline tooling.
 - `docs/packaging.md` defines the incremental module-migration convention for
   the active Packaging milestone.
 - Postgres is the only application runtime database. MySQL support is limited

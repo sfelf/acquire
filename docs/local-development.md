@@ -3,8 +3,10 @@
 The local development stack now uses the Python gateway as the default runtime:
 
 - Postgres stores local user and historical game data for the default Docker stack.
-- `server/http_server.py` runs the default FastAPI HTTP and SockJS-compatible gateway.
-- `server/server.py` owns the Python game state and gameplay command handling.
+- `acquire.http_server` runs the default FastAPI HTTP gateway.
+- `acquire.realtime` adapts SockJS-compatible WebSocket traffic.
+- `acquire.game_server` owns Python game state and gameplay command handling.
+- `server/http_server.py` remains the temporary direct-file startup wrapper.
 - Node.js is used only by the opt-in client asset build helper.
 
 Docker Compose provides the supported local development stack. The production

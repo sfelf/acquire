@@ -2,35 +2,36 @@ import asyncio
 from contextlib import suppress
 
 import pytest
-import websocket_gateway
+
+from acquire import realtime
 
 pytestmark = pytest.mark.unit
 
 
 def test_decode_sockjs_frame_returns_empty_messages_for_heartbeats_and_empty_frames():
-    assert websocket_gateway.decode_sockjs_frame("h") == []
-    assert websocket_gateway.decode_sockjs_frame("") == []
+    assert realtime.decode_sockjs_frame("h") == []
+    assert realtime.decode_sockjs_frame("") == []
 
 
 def test_decode_raw_websocket_frame_wraps_non_empty_frame_as_payload():
-    assert websocket_gateway.decode_raw_websocket_frame('[6,"hello"]') == ['[6,"hello"]']
-    assert websocket_gateway.decode_raw_websocket_frame("") == []
+    assert realtime.decode_raw_websocket_frame('[6,"hello"]') == ['[6,"hello"]']
+    assert realtime.decode_raw_websocket_frame("") == []
 
 
 @pytest.mark.parametrize("frame", ['{"message":"hello"}', "[1]", "not json"])
 def test_decode_sockjs_frame_rejects_invalid_application_frames(frame):
     with pytest.raises(ValueError):
-        websocket_gateway.decode_sockjs_frame(frame)
+        realtime.decode_sockjs_frame(frame)
 
 
 def test_normalize_client_payload_matches_legacy_gateway_whitespace_collapse():
-    assert websocket_gateway.normalize_client_payload('[6,\n"hello\tthere"]') == (
+    assert realtime.normalize_client_payload('[6,\n"hello\tthere"]') == (
         '[6, "hello there"]'
     )
 
 
 def test_sockjs_gateway_ignores_unmapped_transport_lines():
-    gateway = websocket_gateway.SockJSGateway()
+    gateway = realtime.SockJSGateway()
     connection = gateway.new_connection("socket-1", object())
 
     assert gateway.receive_client_payload(connection, '[6, "ignored before login"]') is False
@@ -43,7 +44,7 @@ def test_sockjs_gateway_ignores_unmapped_transport_lines():
 
 
 def test_sockjs_gateway_maps_connects_messages_and_disconnects():
-    gateway = websocket_gateway.SockJSGateway()
+    gateway = realtime.SockJSGateway()
     connection = gateway.new_connection("socket-1", object())
 
     gateway.write_from_game_server(
@@ -52,18 +53,18 @@ def test_sockjs_gateway_maps_connects_messages_and_disconnects():
 
     assert connection.client_id == 1
     assert gateway.client_id_to_connection[1] is connection
-    assert connection.outbound_frames.get_nowait() == websocket_gateway.encode_sockjs_messages(
+    assert connection.outbound_frames.get_nowait() == realtime.encode_sockjs_messages(
         '[[21,1,"hello"]]'
     )
     assert connection.outbound_frames.get_nowait() is None
 
 
 def test_sockjs_gateway_uses_connection_specific_outbound_encoding():
-    gateway = websocket_gateway.SockJSGateway()
+    gateway = realtime.SockJSGateway()
     connection = gateway.new_connection(
         "socket-1",
         object(),
-        encode_messages=websocket_gateway.encode_raw_websocket_message,
+        encode_messages=realtime.encode_raw_websocket_message,
     )
 
     gateway.write_from_game_server(b'connect ["socket-1",1]\n1 [[21,1,"hello"]]\n')
@@ -72,7 +73,7 @@ def test_sockjs_gateway_uses_connection_specific_outbound_encoding():
 
 
 def test_sockjs_gateway_rejects_payloads_after_client_is_unmapped():
-    gateway = websocket_gateway.SockJSGateway()
+    gateway = realtime.SockJSGateway()
     connection = gateway.new_connection("socket-1", object())
     received_payloads = []
 
@@ -89,7 +90,7 @@ def test_sockjs_gateway_rejects_payloads_after_client_is_unmapped():
 
 def test_sockjs_gateway_cleanup_loop_runs_for_owned_servers(monkeypatch):
     async def run_cleanup_smoke():
-        gateway = websocket_gateway.SockJSGateway()
+        gateway = realtime.SockJSGateway()
         cleanup_ran = asyncio.Event()
 
         def destroy_expired_games():
@@ -112,8 +113,8 @@ def test_sockjs_gateway_cleanup_loop_runs_for_owned_servers(monkeypatch):
 
 
 def test_sockjs_gateway_does_not_cleanup_externally_managed_servers():
-    game_server = websocket_gateway.game_server_module.Server()
-    gateway = websocket_gateway.SockJSGateway(game_server)
+    game_server = realtime.game_server_module.Server()
+    gateway = realtime.SockJSGateway(game_server)
 
     async def run_start():
         gateway.start_cleanup_loop(cleanup_interval=0)

@@ -5,8 +5,12 @@ tooling.
 
 ## Runtime Components
 
-- The FastAPI app in `server/http_server.py` owns the default local browser gateway, SockJS-compatible connections, Python-migrated HTTP routes, and static asset serving.
-- The Python server in `server/server.py` owns game state and the gameplay protocol.
+- The FastAPI app in `acquire.http_server` owns the default local browser
+  gateway, Python-migrated HTTP routes, and static asset serving.
+- `acquire.realtime` owns SockJS-compatible WebSocket adaptation.
+- `acquire.game_server` owns game state and the gameplay protocol.
+- Files with the former names under `server/` are temporary compatibility
+  wrappers for existing startup commands and unmigrated offline tooling.
 - Postgres is the application runtime database. MySQL support is limited to the
   optional backup-import tool.
 - Client assets are built from files under `client/` using npm scripts or the
@@ -58,23 +62,23 @@ path now routes browser and e2e traffic through the FastAPI gateway.
 ### Historical Socket Protocol
 
 The removed Node gateway connected to `python.sock` and sent newline-delimited
-records. `server/server.py` still contains this parser and the in-process
+records. `acquire.game_server` still contains this parser and the in-process
 FastAPI gateway still consumes the same outbound line format from the game
 server, so this contract remains useful test documentation until the game
 server API is refactored.
 
 | Direction | Record shape | Historical behavior | Current migration note |
 | --- | --- | --- | --- |
-| Gateway to Python | `connect [username, ip_address, socket_id, replace_existing_user]\n` | Creates a Python `Client`, allocates a client id, emits the gateway connect mapping, and sends initial lobby/game state. | FastAPI now constructs `Client` in-process through `websocket_gateway.SockJSGateway`. |
+| Gateway to Python | `connect [username, ip_address, socket_id, replace_existing_user]\n` | Creates a Python `Client`, allocates a client id, emits the gateway connect mapping, and sends initial lobby/game state. | FastAPI now constructs `Client` in-process through `acquire.realtime.SockJSGateway`. |
 | Gateway to Python | `disconnect <client_id>\n` | Disconnects the Python client if it still exists. | FastAPI calls gateway disconnect behavior directly. |
 | Gateway to Python | `<client_id> <command-json>\n` | Dispatches `CommandsToServer` payloads to the connected Python client. | FastAPI dispatches mapped payloads to `Client.on_message`. |
-| Python to gateway | `connect [socket_id, client_id]\n` | Teaches the gateway which browser socket maps to the allocated Python client id. | `websocket_gateway.SockJSGateway` consumes this in-process. |
-| Python to gateway | `disconnect <client_id>\n` | Tells the gateway to close the browser socket for a disconnected client. | `websocket_gateway.SockJSGateway` closes the websocket directly. |
-| Python to gateway | `<client-id-list> <command-json>\n` | Sends one command batch to one or more browser sockets. | `websocket_gateway.SockJSGateway` queues the same payloads as SockJS frames. |
+| Python to gateway | `connect [socket_id, client_id]\n` | Teaches the gateway which browser socket maps to the allocated Python client id. | `acquire.realtime.SockJSGateway` consumes this in-process. |
+| Python to gateway | `disconnect <client_id>\n` | Tells the gateway to close the browser socket for a disconnected client. | `acquire.realtime.SockJSGateway` closes the websocket directly. |
+| Python to gateway | `<client-id-list> <command-json>\n` | Sends one command batch to one or more browser sockets. | `acquire.realtime.SockJSGateway` queues the same payloads as SockJS frames. |
 
 ### Gameplay Commands Already Owned By Python
 
-After login, gameplay commands are already handled by `server/server.py`:
+After login, gameplay commands are handled by `acquire.game_server`:
 
 - `CreateGame`
 - `JoinGame`

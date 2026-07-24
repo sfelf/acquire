@@ -4,13 +4,12 @@ import urllib.parse
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-import http_server
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from acquire import enums
+from acquire import enums, http_server
 
 pytestmark = pytest.mark.unit
 
@@ -551,7 +550,7 @@ def test_python_http_server_sockjs_websocket_closes_when_server_disconnects(
         return http_server.auth.LoginResult(None, "alice", "", False)
 
     monkeypatch.setattr(http_server.auth, "check_login", check_login)
-    gateway = http_server.websocket_gateway.SockJSGateway()
+    gateway = http_server.realtime.SockJSGateway()
     client, _main_root, _stats_root = make_client(tmp_path, realtime_gateway=gateway)
 
     with (
@@ -654,7 +653,7 @@ def test_python_http_server_sockjs_websocket_stops_batch_after_disconnect(
         return http_server.auth.LoginResult(None, "alice", "", False)
 
     monkeypatch.setattr(http_server.auth, "check_login", check_login)
-    gateway = http_server.websocket_gateway.SockJSGateway()
+    gateway = http_server.realtime.SockJSGateway()
     client, _main_root, _stats_root = make_client(tmp_path, realtime_gateway=gateway)
 
     with (
@@ -692,7 +691,7 @@ def test_python_http_server_sockjs_websocket_stops_queued_frames_after_disconnec
         return http_server.auth.LoginResult(None, "alice", "", False)
 
     monkeypatch.setattr(http_server.auth, "check_login", check_login)
-    gateway = http_server.websocket_gateway.SockJSGateway()
+    gateway = http_server.realtime.SockJSGateway()
     client, _main_root, _stats_root = make_client(tmp_path, realtime_gateway=gateway)
 
     with (

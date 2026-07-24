@@ -50,7 +50,10 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert ".venv/bin/python -c" in workflow_text
     assert "import acquire.auth" in workflow_text
     assert "import acquire.enums" in workflow_text
+    assert "import acquire.game_server" in workflow_text
+    assert "import acquire.http_server" in workflow_text
     assert "import acquire.orm" in workflow_text
+    assert "import acquire.realtime" in workflow_text
     assert "import acquire.settings" in workflow_text
     assert "import acquire.setup_database" in workflow_text
     assert "import acquire.username_to_user_id" in workflow_text
