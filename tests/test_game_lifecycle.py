@@ -2,7 +2,9 @@ import json
 import types
 
 import pytest
-from enums import (
+
+import server
+from acquire.enums import (
     CommandsToClient,
     GameActions,
     GameBoardTypes,
@@ -11,8 +13,6 @@ from enums import (
     GameStates,
     ScoreSheetIndexes,
 )
-
-import server
 
 pytestmark = pytest.mark.unit
 

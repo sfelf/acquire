@@ -43,6 +43,10 @@ Follow these rules when a later Packaging issue moves a module:
 7. Do not edit generated client assets. Update their source or generation
    command only when the owning issue requires it.
 
+Until issue #111 removes legacy direct-file working directories, Docker images
+temporarily add `/app/src` to `PYTHONPATH` so those commands can import migrated
+modules. This is compatibility scaffolding, not an alternative package layout.
+
 Issue #111 owns the final wheel and source-distribution manifests after the
 runtime modules and their tests have migrated into the installed-package
 layout. It also owns final project scripts and removal of all transitional

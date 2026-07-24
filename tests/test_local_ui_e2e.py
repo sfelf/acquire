@@ -11,7 +11,8 @@ import uuid
 
 import pytest
 import ujson
-from enums import (
+
+from acquire.enums import (
     CommandsToClient,
     CommandsToServer,
     GameActions,

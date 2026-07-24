@@ -3,7 +3,8 @@ import pickle
 import types
 
 import pytest
-from enums import CommandsToClient, CommandsToServer, GameBoardTypes, GameHistoryMessages
+
+from acquire.enums import CommandsToClient, CommandsToServer, GameBoardTypes, GameHistoryMessages
 
 pytestmark = pytest.mark.unit
 

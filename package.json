@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build:css": "sass --style=expanded --no-source-map client/main/css/main.scss client/main/css/main.css && sass --style=expanded --no-source-map client/stats/css/stats.scss client/stats/css/stats.css",
-    "build:enums": "python server/enumsgen.py js development > client/main/js/enums.js",
+    "build:enums": "PYTHONPATH=src python server/enumsgen.py js development > client/main/js/enums.js",
     "build:js": "esbuild client/main/js/app.js --bundle --format=iife --platform=browser --sourcemap --outfile=client/main/js/main.js",
     "build:client": "npm run build:css && npm run build:enums && npm run build:js",
     "format": "prettier --write '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,scss}' --loglevel warn"

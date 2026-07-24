@@ -1,7 +1,7 @@
 import pytest
-from enums import CommandsToClient, GameBoardTypes, GameHistoryMessages
 
 import server
+from acquire.enums import CommandsToClient, GameBoardTypes, GameHistoryMessages
 
 pytestmark = pytest.mark.unit
 

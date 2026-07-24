@@ -1,14 +1,14 @@
 import pytest
 import ujson
-from enums import (
+
+import server
+from acquire.enums import (
     CommandsToClient,
     CommandsToServer,
     Errors,
     GameModes,
     GameStates,
 )
-
-import server
 
 pytestmark = pytest.mark.unit
 

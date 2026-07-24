@@ -20,7 +20,8 @@ import sqlalchemy.sql
 import sqlalchemy.types
 import trueskill
 import ujson
-import util
+
+from acquire import util
 
 RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
 DEFAULT_STATS_DATA_ROOT = (

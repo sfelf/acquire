@@ -17,8 +17,9 @@ import traceback
 from collections.abc import Callable
 from typing import cast
 
-import enums
 import ujson
+
+from acquire import enums
 
 BoardCoordinate = tuple[int, int]
 ClientMessage = list[object]

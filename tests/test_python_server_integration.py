@@ -2,9 +2,9 @@ import asyncio
 
 import pytest
 import ujson
-from enums import CommandsToClient, CommandsToServer, GameActions, GameModes, GameStates
 
 import server
+from acquire.enums import CommandsToClient, CommandsToServer, GameActions, GameModes, GameStates
 
 pytestmark = pytest.mark.integration
 

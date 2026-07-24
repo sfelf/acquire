@@ -1,6 +1,8 @@
-"""Store historical username-to-user-id mappings for replay tooling.
+"""Compatibility exports for :mod:`acquire.username_to_user_id`.
 
-This module is part of the legacy Python runtime and replay tooling.
+Remove this wrapper in issue #111 after all callers use the installed package.
 """
 
-username_to_user_id: dict[str, int] = {}
+from acquire.username_to_user_id import username_to_user_id
+
+__all__ = ["username_to_user_id"]

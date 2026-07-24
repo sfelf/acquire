@@ -47,6 +47,10 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert 'uv pip install --python "$artifact_test_dir/.venv/bin/python"' in workflow_text
     assert '--no-deps "$artifact"' in workflow_text
     assert ".venv/bin/python -c" in workflow_text
+    assert "import acquire.enums" in workflow_text
+    assert "import acquire.settings" in workflow_text
+    assert "import acquire.username_to_user_id" in workflow_text
+    assert "import acquire.util" in workflow_text
     assert "'site-packages' in Path(acquire.__file__).parts" in workflow_text
 
 
