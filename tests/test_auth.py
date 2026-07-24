@@ -1,8 +1,7 @@
-import auth
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from acquire import enums, orm
+from acquire import auth, enums, orm
 
 pytestmark = pytest.mark.unit
 
@@ -64,6 +63,18 @@ def make_user(name="alice", password=None):
 )
 def test_normalize_form_value_matches_legacy_whitespace_rules(value, expected):
     assert auth.normalize_form_value(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        r"alice\nsmith",
+        "alice%20smith",
+        "alice%2520smith",
+    ],
+)
+def test_normalize_form_value_preserves_escaped_and_encoded_text(value):
+    assert auth.normalize_form_value(value) == value
 
 
 def test_normalize_login_value_rejects_non_string_fields():
@@ -181,6 +192,8 @@ def test_check_login_preserves_legacy_password_decisions(
         ("VERSION", "", PASSWORD_HASH, enums.Errors.InvalidUsername),
         ("VERSION", "punyçode", PASSWORD_HASH, enums.Errors.InvalidUsername),
         ("VERSION", "alice", "A" * 64, enums.Errors.GenericError),
+        ("VERSION", "alice", "%61" * 64, enums.Errors.GenericError),
+        ("VERSION", "alice", "%2561" * 64, enums.Errors.GenericError),
         ("VERSION", "alice", "short", enums.Errors.GenericError),
         ("VERSION", "alice", "", enums.Errors.GenericError),
     ],

@@ -25,11 +25,11 @@ def real_orm_module():
 
 @pytest.fixture
 def real_auth_module(real_orm_module):
-    sys.modules.pop("auth", None)
+    sys.modules.pop("acquire.auth", None)
     try:
-        yield importlib.import_module("auth")
+        yield importlib.import_module("acquire.auth")
     finally:
-        sys.modules.pop("auth", None)
+        sys.modules.pop("acquire.auth", None)
 
 
 @pytest.fixture

@@ -48,6 +48,7 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert '"$artifact"' in workflow_text
     assert '--no-deps "$artifact"' not in workflow_text
     assert ".venv/bin/python -c" in workflow_text
+    assert "import acquire.auth" in workflow_text
     assert "import acquire.enums" in workflow_text
     assert "import acquire.orm" in workflow_text
     assert "import acquire.settings" in workflow_text
