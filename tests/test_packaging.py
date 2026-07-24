@@ -52,12 +52,20 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
 
 def test_packaging_docs_define_incremental_module_migration_rules() -> None:
     packaging_notes = (REPOSITORY_ROOT / "docs" / "packaging.md").read_text()
+    plan_notes = (REPOSITORY_ROOT / "PLANS.md").read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
     normalized_packaging_notes = " ".join(packaging_notes.split())
+    normalized_plan_notes = " ".join(plan_notes.split())
 
     assert "`src/acquire/`" in packaging_notes
     assert "must not contain application logic" in normalized_packaging_notes
     assert "`acquire.*` imports" in packaging_notes
     assert "must not add `server/` to `sys.path`" in normalized_packaging_notes
-    assert "#111" in packaging_notes
+    assert "not the final distribution inventory" in normalized_packaging_notes
+    assert "Issue #111 owns the final wheel and source-distribution manifests" in (
+        normalized_packaging_notes
+    )
+    assert "These are package-closeout requirements, not an instruction for #103" in (
+        normalized_plan_notes
+    )
     assert "docs/packaging.md" in agent_notes

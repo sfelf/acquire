@@ -27,11 +27,16 @@ and expose stable project scripts without changing application behavior.
   Psycopg are normal runtime dependencies, while `mysql-connector-python`
   remains isolated in the `mysql-migration` optional extra. Packaging work
   verifies this boundary rather than introducing it.
-- Wheels contain only installable runtime modules, declared package data,
-  metadata, and entry points. They exclude tests and test fixtures.
-- Source distributions also contain the tracked test suite and its required
-  sanitized fixtures. They exclude generated assets, credentials, database
-  dumps, sockets, caches, bytecode, coverage output, and temporary reports.
+- At package closeout in
+  [#111](https://github.com/sfelf/acquire/issues/111), wheels contain only
+  installable runtime modules, declared package data, metadata, and entry
+  points. They exclude tests and test fixtures.
+- At package closeout in #111, source distributions also contain the tracked
+  test suite and its required sanitized fixtures. They exclude generated
+  assets, credentials, database dumps, sockets, caches, bytecode, coverage
+  output, and temporary reports.
+- These are package-closeout requirements, not an instruction for #103 to
+  include tests that still depend on unmigrated modules under `server/`.
 - Temporary `server/` compatibility wrappers may exist only while callers are
   being migrated. They contain no application logic, identify
   [#111](https://github.com/sfelf/acquire/issues/111) as their removal owner,

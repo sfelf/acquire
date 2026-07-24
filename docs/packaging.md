@@ -15,7 +15,8 @@ project-specific uv source overrides.
 
 Issue #103 adds only the package scaffold and build configuration. Runtime
 modules remain under `server/`, and existing commands continue to behave as
-before.
+before. Its artifacts validate the build and installation boundary; they are
+not the final distribution inventory.
 
 ## Incremental Module Migration
 
@@ -42,5 +43,7 @@ Follow these rules when a later Packaging issue moves a module:
 7. Do not edit generated client assets. Update their source or generation
    command only when the owning issue requires it.
 
-Final project scripts, artifact manifests, and removal of all transitional
-paths remain owned by their later Packaging issues.
+Issue #111 owns the final wheel and source-distribution manifests after the
+runtime modules and their tests have migrated into the installed-package
+layout. It also owns final project scripts and removal of all transitional
+paths.
