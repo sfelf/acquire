@@ -149,7 +149,12 @@ pre-uv installation path. New development should use `uv`.
 python3 -m venv venv
 source venv/bin/activate
 pip3 install -r requirements.txt
+pip3 install --no-deps -e .
 ```
+
+The editable project install exposes the `acquire` package while
+`requirements.txt` remains the source of dependencies for this transitional
+workflow.
 
 ## Download libraries for development use:
 
