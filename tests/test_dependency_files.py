@@ -243,9 +243,10 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert "docker build -t acquire:production-test ." in workflow
     assert workflow.count("production image smoke ok") == 2
     assert workflow.count("acquire-http-server --help") == 2
-    assert workflow.count("from acquire import http_server") == 2
-    assert workflow.count("http_server.DEFAULT_MAIN_STATIC_ROOT") == 6
-    assert workflow.count("http_server.DEFAULT_STATS_STATIC_ROOT") == 4
+    assert workflow.count("assert '/opt/acquire/' in acquire.__file__") == 2
+    assert workflow.count("Path('/app/client/main/js/main.js').is_file()") == 2
+    assert workflow.count("Path('/app/client/main/css/main.css').is_file()") == 2
+    assert workflow.count("Path('/app/client/stats/css/stats.css').is_file()") == 2
     assert "aws-actions/configure-aws-credentials@v4" in workflow
     assert "aws-actions/amazon-ecr-login@v2" in workflow
     assert "AWS_ROLE_TO_ASSUME" in workflow
