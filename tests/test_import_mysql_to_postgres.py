@@ -3,26 +3,132 @@ import json
 
 import pytest
 import sqlalchemy
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import mysql, postgresql
 
 pytestmark = pytest.mark.unit
+
+EXPECTED_LEGACY_SOURCE_SCHEMA = {
+    "game_mode": (
+        ("game_mode_id", "TINYINT UNSIGNED", False, True),
+        ("name", "VARCHAR(8)", False, False),
+    ),
+    "game_state": (
+        ("game_state_id", "TINYINT UNSIGNED", False, True),
+        ("name", "VARCHAR(16)", False, False),
+    ),
+    "rating_type": (
+        ("rating_type_id", "TINYINT UNSIGNED", False, True),
+        ("name", "VARCHAR(8)", False, False),
+    ),
+    "user": (
+        ("user_id", "INTEGER UNSIGNED", False, True),
+        ("name", "VARCHAR(32)", False, False),
+        ("password", "VARCHAR(64)", True, False),
+    ),
+    "game": (
+        ("game_id", "INTEGER UNSIGNED", False, True),
+        ("log_time", "INTEGER UNSIGNED", False, False),
+        ("number", "INTEGER UNSIGNED", False, False),
+        ("begin_time", "INTEGER UNSIGNED", True, False),
+        ("end_time", "INTEGER UNSIGNED", True, False),
+        ("game_state_id", "TINYINT UNSIGNED", False, False),
+        ("game_mode_id", "TINYINT UNSIGNED", False, False),
+    ),
+    "game_player": (
+        ("game_player_id", "INTEGER UNSIGNED", False, True),
+        ("game_id", "INTEGER UNSIGNED", False, False),
+        ("player_index", "TINYINT UNSIGNED", False, False),
+        ("user_id", "INTEGER UNSIGNED", False, False),
+        ("score", "SMALLINT UNSIGNED", True, False),
+    ),
+    "key_value": (
+        ("key_value_id", "TINYINT UNSIGNED", False, True),
+        ("key", "VARCHAR(32)", False, False),
+        ("value", "TEXT", False, False),
+    ),
+    "rating": (
+        ("rating_id", "INTEGER UNSIGNED", False, True),
+        ("user_id", "INTEGER UNSIGNED", False, False),
+        ("rating_type_id", "TINYINT UNSIGNED", False, False),
+        ("time", "INTEGER UNSIGNED", False, False),
+        ("mu", "FLOAT", False, False),
+        ("sigma", "FLOAT", False, False),
+    ),
+    "record": (
+        ("user_id", "INTEGER UNSIGNED", False, True),
+        ("encoded", "VARCHAR(255)", False, False),
+    ),
+}
+
+EXPECTED_CURRENT_TARGET_SCHEMA = {
+    "game_mode": (
+        ("game_mode_id", "SMALLINT", False, True),
+        ("name", "VARCHAR(8)", False, False),
+    ),
+    "game_state": (
+        ("game_state_id", "SMALLINT", False, True),
+        ("name", "VARCHAR(16)", False, False),
+    ),
+    "rating_type": (
+        ("rating_type_id", "SMALLINT", False, True),
+        ("name", "VARCHAR(8)", False, False),
+    ),
+    "user": (
+        ("user_id", "BIGINT", False, True),
+        ("name", "VARCHAR(32)", False, False),
+        ("password", "VARCHAR(64)", True, False),
+    ),
+    "game": (
+        ("game_id", "BIGINT", False, True),
+        ("log_time", "BIGINT", False, False),
+        ("number", "BIGINT", False, False),
+        ("begin_time", "BIGINT", True, False),
+        ("end_time", "BIGINT", True, False),
+        ("game_state_id", "SMALLINT", False, False),
+        ("game_mode_id", "SMALLINT", False, False),
+    ),
+    "game_player": (
+        ("game_player_id", "BIGINT", False, True),
+        ("game_id", "BIGINT", False, False),
+        ("player_index", "SMALLINT", False, False),
+        ("user_id", "BIGINT", False, False),
+        ("score", "INTEGER", True, False),
+    ),
+    "key_value": (
+        ("key_value_id", "SMALLINT", False, True),
+        ("key", "VARCHAR(32)", False, False),
+        ("value", "TEXT", False, False),
+    ),
+    "rating": (
+        ("rating_id", "BIGINT", False, True),
+        ("user_id", "BIGINT", False, False),
+        ("rating_type_id", "SMALLINT", False, False),
+        ("time", "BIGINT", False, False),
+        ("mu", "REAL", False, False),
+        ("sigma", "REAL", False, False),
+    ),
+    "record": (
+        ("user_id", "BIGINT", False, True),
+        ("encoded", "VARCHAR(255)", False, False),
+    ),
+}
 
 
 @pytest.fixture
 def import_module():
-    return importlib.import_module("import_mysql_to_postgres")
+    return importlib.import_module("acquire.migration.import_mysql_to_postgres")
 
 
 @pytest.fixture
-def orm_module():
-    return importlib.import_module("acquire.orm")
+def schema_module():
+    return importlib.import_module("acquire.migration.schema")
 
 
 @pytest.fixture
-def source_engine(orm_module):
+def source_engine(schema_module):
     engine = sqlalchemy.create_engine("sqlite:///:memory:")
-    orm_module.Base.metadata.create_all(engine)
-    seed_source_database(engine, orm_module)
+    schema_module.LEGACY_SOURCE_METADATA.create_all(engine)
+    seed_source_database(engine, schema_module.LEGACY_SOURCE_TABLES)
     try:
         yield engine
     finally:
@@ -30,17 +136,16 @@ def source_engine(orm_module):
 
 
 @pytest.fixture
-def target_engine(orm_module):
+def target_engine(schema_module):
     engine = sqlalchemy.create_engine("sqlite:///:memory:")
-    orm_module.Base.metadata.create_all(engine)
+    schema_module.CURRENT_TARGET_METADATA.create_all(engine)
     try:
         yield engine
     finally:
         engine.dispose()
 
 
-def seed_source_database(engine, orm_module):
-    tables = orm_module.Base.metadata.tables
+def seed_source_database(engine, tables):
     with engine.begin() as connection:
         connection.execute(
             tables["game_mode"].insert(),
@@ -119,8 +224,7 @@ def seed_source_database(engine, orm_module):
         )
 
 
-def seed_matching_lookup_rows(engine, orm_module):
-    tables = orm_module.Base.metadata.tables
+def seed_matching_lookup_rows(engine, tables):
     with engine.begin() as connection:
         connection.execute(
             tables["game_mode"].insert(),
@@ -145,21 +249,74 @@ def seed_matching_lookup_rows(engine, orm_module):
         )
 
 
-def table_rows(engine, orm_module, table_name):
-    table = orm_module.Base.metadata.tables[table_name]
+def table_rows(engine, tables, table_name):
+    table = tables[table_name]
     primary_key_columns = list(table.primary_key.columns)
     statement = sqlalchemy.select(table).order_by(*primary_key_columns)
     with engine.connect() as connection:
         return [dict(row._mapping) for row in connection.execute(statement)]
 
 
+def schema_contract(tables, dialect):
+    return {
+        table_name: tuple(
+            (
+                column.name,
+                str(column.type.compile(dialect=dialect)),
+                column.nullable,
+                column.primary_key,
+            )
+            for column in table.columns
+        )
+        for table_name, table in tables.items()
+    }
+
+
+def test_migration_schemas_preserve_explicit_source_and_target_contracts(
+    import_module,
+    schema_module,
+):
+    assert tuple(import_module.TABLE_ORDER) == (
+        "game_mode",
+        "game_state",
+        "rating_type",
+        "user",
+        "game",
+        "game_player",
+        "key_value",
+        "rating",
+        "record",
+    )
+    assert schema_contract(
+        schema_module.LEGACY_SOURCE_TABLES,
+        mysql.dialect(),
+    ) == EXPECTED_LEGACY_SOURCE_SCHEMA
+    assert schema_contract(
+        schema_module.CURRENT_TARGET_TABLES,
+        postgresql.dialect(),
+    ) == EXPECTED_CURRENT_TARGET_SCHEMA
+    assert schema_module.LEGACY_SOURCE_METADATA is not schema_module.CURRENT_TARGET_METADATA
+
+
+def test_current_target_schema_matches_runtime_orm_contract(schema_module):
+    orm_module = importlib.import_module("acquire.orm")
+
+    assert schema_contract(
+        schema_module.CURRENT_TARGET_TABLES,
+        postgresql.dialect(),
+    ) == schema_contract(
+        dict(orm_module.Base.metadata.tables),
+        postgresql.dialect(),
+    )
+
+
 def test_import_engines_copies_rows_into_migrated_postgres_shape(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
 ):
-    seed_matching_lookup_rows(target_engine, orm_module)
+    seed_matching_lookup_rows(target_engine, schema_module.CURRENT_TARGET_TABLES)
 
     report = import_module.import_engines(source_engine, target_engine)
 
@@ -180,27 +337,34 @@ def test_import_engines_copies_rows_into_migrated_postgres_shape(
         ("rating", 1, 1),
         ("record", 1, 1),
     ]
-    assert table_rows(target_engine, orm_module, "user") == table_rows(
-        source_engine, orm_module, "user"
+    assert table_rows(target_engine, schema_module.CURRENT_TARGET_TABLES, "user") == table_rows(
+        source_engine, schema_module.LEGACY_SOURCE_TABLES, "user"
     )
-    assert table_rows(target_engine, orm_module, "game_player") == table_rows(
-        source_engine, orm_module, "game_player"
+    assert table_rows(
+        target_engine,
+        schema_module.CURRENT_TARGET_TABLES,
+        "game_player",
+    ) == table_rows(
+        source_engine,
+        schema_module.LEGACY_SOURCE_TABLES,
+        "game_player",
     )
-    assert table_rows(target_engine, orm_module, "record") == table_rows(
-        source_engine, orm_module, "record"
+    assert table_rows(target_engine, schema_module.CURRENT_TARGET_TABLES, "record") == table_rows(
+        source_engine, schema_module.LEGACY_SOURCE_TABLES, "record"
     )
 
 
 def test_import_engines_rejects_non_empty_mutable_target_table(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
 ):
-    seed_matching_lookup_rows(target_engine, orm_module)
+    target_tables = schema_module.CURRENT_TARGET_TABLES
+    seed_matching_lookup_rows(target_engine, target_tables)
     with target_engine.begin() as connection:
         connection.execute(
-            orm_module.Base.metadata.tables["user"].insert(),
+            target_tables["user"].insert(),
             {"user_id": 99, "name": "Existing", "password": None},
         )
 
@@ -210,20 +374,20 @@ def test_import_engines_rejects_non_empty_mutable_target_table(
     ):
         import_module.import_engines(source_engine, target_engine)
 
-    assert table_rows(target_engine, orm_module, "user") == [
+    assert table_rows(target_engine, target_tables, "user") == [
         {"user_id": 99, "name": "Existing", "password": None}
     ]
 
 
 def test_import_engines_rejects_mismatched_lookup_rows(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
 ):
     with target_engine.begin() as connection:
         connection.execute(
-            orm_module.Base.metadata.tables["game_mode"].insert(),
+            schema_module.CURRENT_TARGET_TABLES["game_mode"].insert(),
             {"game_mode_id": 1, "name": "Different"},
         )
 
@@ -234,29 +398,88 @@ def test_import_engines_rejects_mismatched_lookup_rows(
         import_module.import_engines(source_engine, target_engine)
 
 
-def test_import_engines_dry_run_reports_counts_without_writing(
+def test_import_engines_rolls_back_rows_after_partial_insert_failure(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
 ):
-    seed_matching_lookup_rows(target_engine, orm_module)
+    target_tables = schema_module.CURRENT_TARGET_TABLES
+    seed_matching_lookup_rows(target_engine, target_tables)
+
+    def fail_game_insert(
+        _connection,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ):
+        if statement.startswith("INSERT INTO game "):
+            raise RuntimeError("simulated game insert failure")
+
+    sqlalchemy.event.listen(target_engine, "before_cursor_execute", fail_game_insert)
+
+    with pytest.raises(RuntimeError, match="simulated game insert failure"):
+        import_module.import_engines(source_engine, target_engine)
+
+    assert table_rows(target_engine, target_tables, "user") == []
+    assert table_rows(target_engine, target_tables, "game") == []
+    assert len(table_rows(target_engine, target_tables, "game_mode")) == 2
+
+
+def test_import_engines_rolls_back_target_count_mismatch(
+    import_module,
+    schema_module,
+    source_engine,
+    target_engine,
+    monkeypatch,
+):
+    target_tables = schema_module.CURRENT_TARGET_TABLES
+    seed_matching_lookup_rows(target_engine, target_tables)
+    count_rows = import_module._count_rows
+
+    def report_wrong_user_count(connection, table):
+        count = count_rows(connection, table)
+        if connection.engine is target_engine and table.name == "user":
+            return count - 1
+        return count
+
+    monkeypatch.setattr(import_module, "_count_rows", report_wrong_user_count)
+
+    with pytest.raises(
+        import_module.ImportValidationError,
+        match="user imported 1 rows; expected 2",
+    ):
+        import_module.import_engines(source_engine, target_engine)
+
+    assert table_rows(target_engine, target_tables, "user") == []
+
+
+def test_import_engines_dry_run_reports_counts_without_writing(
+    import_module,
+    schema_module,
+    source_engine,
+    target_engine,
+):
+    target_tables = schema_module.CURRENT_TARGET_TABLES
+    seed_matching_lookup_rows(target_engine, target_tables)
 
     report = import_module.import_engines(source_engine, target_engine, dry_run=True)
 
     assert report.dry_run is True
     assert report.total_rows == 13
-    assert table_rows(target_engine, orm_module, "user") == []
-    assert table_rows(target_engine, orm_module, "game") == []
+    assert table_rows(target_engine, target_tables, "user") == []
+    assert table_rows(target_engine, target_tables, "game") == []
 
 
 def test_import_engines_accepts_required_source_tables_with_rows(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
 ):
-    seed_matching_lookup_rows(target_engine, orm_module)
+    seed_matching_lookup_rows(target_engine, schema_module.CURRENT_TARGET_TABLES)
 
     report = import_module.import_engines(
         source_engine,
@@ -270,13 +493,14 @@ def test_import_engines_accepts_required_source_tables_with_rows(
 
 def test_import_engines_rejects_empty_required_source_table_before_writing(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
 ):
     with source_engine.begin() as connection:
         connection.execute(sqlalchemy.text("delete from rating"))
-    seed_matching_lookup_rows(target_engine, orm_module)
+    target_tables = schema_module.CURRENT_TARGET_TABLES
+    seed_matching_lookup_rows(target_engine, target_tables)
 
     with pytest.raises(
         import_module.ImportValidationError,
@@ -288,7 +512,7 @@ def test_import_engines_rejects_empty_required_source_table_before_writing(
             required_source_tables=["rating"],
         )
 
-    assert table_rows(target_engine, orm_module, "user") == []
+    assert table_rows(target_engine, target_tables, "user") == []
 
 
 def test_import_engines_rejects_unknown_required_source_table(
@@ -310,14 +534,14 @@ def test_import_engines_rejects_unknown_required_source_table(
 @pytest.mark.parametrize("table_name", ["key_value", "record"])
 def test_import_engines_rejects_missing_required_source_tables(
     import_module,
-    orm_module,
+    schema_module,
     source_engine,
     target_engine,
     table_name,
 ):
     with source_engine.begin() as connection:
         connection.execute(sqlalchemy.text(f"drop table {table_name}"))
-    seed_matching_lookup_rows(target_engine, orm_module)
+    seed_matching_lookup_rows(target_engine, schema_module.CURRENT_TARGET_TABLES)
 
     with pytest.raises(
         import_module.ImportValidationError,
@@ -326,16 +550,16 @@ def test_import_engines_rejects_missing_required_source_tables(
         import_module.import_engines(source_engine, target_engine)
 
 
-def test_import_database_builds_engines_from_urls(import_module, orm_module, tmp_path):
+def test_import_database_builds_engines_from_urls(import_module, schema_module, tmp_path):
     source_url = f"sqlite:///{tmp_path / 'source.db'}"
     target_url = f"sqlite:///{tmp_path / 'target.db'}"
     source_engine = sqlalchemy.create_engine(source_url)
     target_engine = sqlalchemy.create_engine(target_url)
     try:
-        orm_module.Base.metadata.create_all(source_engine)
-        orm_module.Base.metadata.create_all(target_engine)
-        seed_source_database(source_engine, orm_module)
-        seed_matching_lookup_rows(target_engine, orm_module)
+        schema_module.LEGACY_SOURCE_METADATA.create_all(source_engine)
+        schema_module.CURRENT_TARGET_METADATA.create_all(target_engine)
+        seed_source_database(source_engine, schema_module.LEGACY_SOURCE_TABLES)
+        seed_matching_lookup_rows(target_engine, schema_module.CURRENT_TARGET_TABLES)
     finally:
         source_engine.dispose()
         target_engine.dispose()
@@ -345,7 +569,7 @@ def test_import_database_builds_engines_from_urls(import_module, orm_module, tmp
     assert report.total_rows == 13
     verify_engine = sqlalchemy.create_engine(target_url)
     try:
-        assert table_rows(verify_engine, orm_module, "user") == [
+        assert table_rows(verify_engine, schema_module.CURRENT_TARGET_TABLES, "user") == [
             {"user_id": 1, "name": "Alice", "password": None},
             {"user_id": 2, "name": "Bob", "password": "b" * 64},
         ]
@@ -577,7 +801,28 @@ def test_main_fails_report_path_preflight_before_importing(
     assert import_calls == []
 
 
-def test_reset_postgres_sequence_advances_single_primary_key(import_module, orm_module):
+def test_read_rows_supports_table_without_primary_key(import_module):
+    metadata = sqlalchemy.MetaData()
+    table = sqlalchemy.Table(
+        "audit",
+        metadata,
+        sqlalchemy.Column("value", sqlalchemy.String()),
+    )
+    engine = sqlalchemy.create_engine("sqlite:///:memory:")
+    try:
+        metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(table.insert(), [{"value": "first"}, {"value": "second"}])
+        with engine.connect() as connection:
+            assert import_module._read_rows(connection, table) == [
+                {"value": "first"},
+                {"value": "second"},
+            ]
+    finally:
+        engine.dispose()
+
+
+def test_reset_postgres_sequence_advances_single_primary_key(import_module, schema_module):
     class ScalarResult:
         def scalar_one(self):
             return "user_user_id_seq"
@@ -595,7 +840,7 @@ def test_reset_postgres_sequence_advances_single_primary_key(import_module, orm_
 
     import_module._reset_postgres_sequence(
         connection,
-        orm_module.Base.metadata.tables["user"],
+        schema_module.CURRENT_TARGET_TABLES["user"],
     )
 
     assert connection.calls[0] == (
@@ -605,3 +850,45 @@ def test_reset_postgres_sequence_advances_single_primary_key(import_module, orm_
     assert "setval" in connection.calls[1][0]
     assert 'from "user"' in connection.calls[1][0]
     assert connection.calls[1][1] == {"sequence_name": "user_user_id_seq"}
+
+
+def test_reset_postgres_sequence_skips_composite_primary_key(import_module):
+    metadata = sqlalchemy.MetaData()
+    table = sqlalchemy.Table(
+        "composite",
+        metadata,
+        sqlalchemy.Column("left_id", sqlalchemy.Integer(), primary_key=True),
+        sqlalchemy.Column("right_id", sqlalchemy.Integer(), primary_key=True),
+    )
+
+    class FakeConnection:
+        dialect = postgresql.dialect()
+
+        def execute(self, _statement, _parameters=None):
+            raise AssertionError("composite keys must not query for a sequence")
+
+    import_module._reset_postgres_sequence(FakeConnection(), table)
+
+
+def test_reset_postgres_sequence_skips_table_without_sequence(import_module, schema_module):
+    class ScalarResult:
+        def scalar_one(self):
+            return None
+
+    class FakeConnection:
+        def __init__(self):
+            self.dialect = postgresql.dialect()
+            self.calls = []
+
+        def execute(self, statement, parameters=None):
+            self.calls.append((str(statement), parameters))
+            return ScalarResult()
+
+    connection = FakeConnection()
+
+    import_module._reset_postgres_sequence(
+        connection,
+        schema_module.CURRENT_TARGET_TABLES["record"],
+    )
+
+    assert len(connection.calls) == 1

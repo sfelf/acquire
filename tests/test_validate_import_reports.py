@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
-import validate_import_reports
+
+from acquire.migration import validate_import_reports
 
 pytestmark = pytest.mark.unit
 SOURCE_COUNTS = {

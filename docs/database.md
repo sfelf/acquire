@@ -14,7 +14,7 @@ existing backup into Postgres.
   setup without dropping data. Local Docker currently reaches it through the
   temporary `server/setup_database.py` compatibility entry point and runs it
   against Postgres by default.
-- `server/import_mysql_to_postgres.py` copies known application tables from a
+- `acquire.migration.import_mysql_to_postgres` copies known application tables from a
   MySQL-compatible source into a migrated Postgres-compatible target for
   cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses
   to merge user, game, rating, record, or key/value data into non-empty target
@@ -33,9 +33,11 @@ existing backup into Postgres.
 
 ## Retained MySQL Backup Surface
 
-- `server/import_mysql_to_postgres.py` and
-  `server/validate_import_reports.py` retain the backup import and sanitized
-  report-validation workflow.
+- `acquire.migration.import_mysql_to_postgres` and
+  `acquire.migration.validate_import_reports` retain the backup import and sanitized
+  report-validation workflow. Separate migration-owned metadata defines the
+  supported legacy MySQL source and current Postgres target contracts without
+  importing the runtime ORM or creating its global engine.
 - The `mysql-migration` optional uv extra installs
   `mysql-connector-python`; normal development and production runtime
   dependencies do not install a MySQL driver.
@@ -85,12 +87,12 @@ existing backup into Postgres.
 
 ## Import Rehearsal Command
 
-Use `server/import_mysql_to_postgres.py` only with disposable rehearsal
+Use `acquire.migration.import_mysql_to_postgres` only with disposable rehearsal
 databases until the production runbook has owners and a tested backup restore.
 The target database must already have the current Alembic schema applied:
 
 ```bash
-uv run --extra mysql-migration python server/import_mysql_to_postgres.py \
+uv run --extra mysql-migration python -m acquire.migration.import_mysql_to_postgres \
   --source-url mysql+mysqlconnector://user:password@host/source_db \
   --target-url postgresql+psycopg://user:password@host/target_db \
   --dry-run
@@ -109,6 +111,18 @@ Focused unit tests use synthetic source and target schemas to protect table
 validation, target safeguards, row copying, report output, and Postgres
 sequence repair. Run the backup rehearsal procedure for end-to-end evidence
 against a restored MySQL backup.
+
+### Migration Data Boundary
+
+| Field | Source and trust | Runtime use | Diagnostic policy |
+| --- | --- | --- | --- |
+| Source and target URLs | Operator-supplied, sensitive | Create short-lived migration engines | Never serialize or print |
+| Source rows | Legacy backup, private and untrusted | Validate and copy known columns only | Never include values or row representations |
+| Report path | Operator-supplied local path | Preflight and write the report file | Never include in report JSON |
+| Report mode, table names, and counts | Importer-generated, non-sensitive | Rehearsal evidence and pair validation | Preserve in the fixed sanitized schema |
+
+Report validation rejects unknown and duplicate fields so encoded URLs,
+credentials, paths, hostnames, or row contents cannot become accepted output.
 
 Use `docs/postgres-backup-rehearsal.md` when repeating the rehearsal with a new
 sanitized or staging MySQL backup. The runbook keeps backup files, credentials,

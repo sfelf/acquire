@@ -3,7 +3,7 @@
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
-- The Packaging milestone is active. Work is currently at issue #107.
+- The Packaging milestone is active. Work is currently at issue #108.
 
 This document preserves the agreed modernization record and documents the
 delivery order for active milestone work. GitHub issues remain the source of
@@ -12,11 +12,12 @@ truth for issue scope and acceptance criteria.
 ## Active Packaging Milestone
 
 Status: issues
-[#103](https://github.com/sfelf/acquire/issues/103) and
-[#104](https://github.com/sfelf/acquire/issues/104), and
-[#105](https://github.com/sfelf/acquire/issues/105), and
-[#106](https://github.com/sfelf/acquire/issues/106) are complete. Issue
-[#107](https://github.com/sfelf/acquire/issues/107) is in progress.
+[#103](https://github.com/sfelf/acquire/issues/103),
+[#104](https://github.com/sfelf/acquire/issues/104),
+[#105](https://github.com/sfelf/acquire/issues/105),
+[#106](https://github.com/sfelf/acquire/issues/106), and
+[#107](https://github.com/sfelf/acquire/issues/107) are complete. Issue
+[#108](https://github.com/sfelf/acquire/issues/108) is in progress.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.
