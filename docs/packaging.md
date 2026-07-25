@@ -87,6 +87,13 @@ and `ACQUIRE_STATS_TEMP_ROOT`; relative configuration is rejected to prevent
 working-directory-dependent writes. Stats generation creates missing staging
 and per-user directories so newly attached empty volumes are supported.
 
+Issue #108 moves the retained MySQL backup importer and sanitized report
+validator under `acquire.migration`. The migration package owns separate,
+explicit legacy-source and current-target SQLAlchemy metadata, so importing it
+does not load `acquire.orm` or create the application engine. Temporary
+direct-file wrappers remain under `server/` until issues #109 and #111 replace
+their callers and remove compatibility paths.
+
 Issue #111 owns the final wheel and source-distribution manifests after the
 runtime modules and their tests have migrated into the installed-package
 layout. It also owns final project scripts and removal of all transitional

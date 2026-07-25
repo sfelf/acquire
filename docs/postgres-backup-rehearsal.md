@@ -10,7 +10,7 @@ disposable local databases and keep backup files outside the repository.
   under `/tmp/acquire-rehearsal`.
 - Disposable MySQL database restored from that backup.
 - Disposable Postgres database with the current Alembic schema applied.
-- Current branch with `server/import_mysql_to_postgres.py`, its focused unit
+- Current branch with `acquire.migration.import_mysql_to_postgres`, its focused unit
   tests, and the Postgres/e2e marker suites passing.
 
 Do not use a production backup that contains secrets or private user data unless
@@ -64,12 +64,12 @@ persisted rating history or derived win/place stats.
      uv run alembic upgrade head
    ```
 
-5. Run `server/import_mysql_to_postgres.py` with explicit placeholder source and
+5. Run `acquire.migration.import_mysql_to_postgres` with explicit placeholder source and
    target URLs, `--dry-run`, and a report path outside the repository. Review
    the per-table source counts:
 
    ```bash
-   uv run --extra mysql-migration python server/import_mysql_to_postgres.py \
+   uv run --extra mysql-migration python -m acquire.migration.import_mysql_to_postgres \
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
      --dry-run \
@@ -83,7 +83,7 @@ persisted rating history or derived win/place stats.
    second report for the completed import:
 
    ```bash
-   uv run --extra mysql-migration python server/import_mysql_to_postgres.py \
+   uv run --extra mysql-migration python -m acquire.migration.import_mysql_to_postgres \
      --source-url mysql+mysqlconnector://user:password@host:3306/acquire_rehearsal \
      --target-url postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
      --require-source-rows rating \
@@ -100,7 +100,7 @@ persisted rating history or derived win/place stats.
 7. Validate the report pair before using it as rehearsal evidence:
 
    ```bash
-   uv run python server/validate_import_reports.py \
+   uv run python -m acquire.migration.validate_import_reports \
      --dry-run-report /tmp/acquire-rehearsal/dry-run-report.json \
      --import-report /tmp/acquire-rehearsal/import-report.json \
      --require-source-rows rating \
@@ -166,7 +166,7 @@ persisted rating history or derived win/place stats.
   expectations while non-lookup target tables remain empty.
 - The actual import JSON report matches source and target row counts for every
   copied table.
-- `server/validate_import_reports.py` accepts the dry-run/import report pair.
+- `acquire.migration.validate_import_reports` accepts the dry-run/import report pair.
 - Imported Postgres rows pass application-level checks through Python auth
   rules, ORM lookup helpers, stats checks, and historical replay checks.
 - Completed-game rating checks pass when the source generated persisted rating

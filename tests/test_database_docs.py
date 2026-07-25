@@ -24,10 +24,10 @@ def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     assert plans.startswith("# Modernization And Packaging Plan\n")
     assert "The six-phase modernization plan is complete as of July 23, 2026." in plans
     assert "The Packaging milestone is active." in plans
-    assert "[#103](https://github.com/sfelf/acquire/issues/103) and" in plans
-    assert "[#104](https://github.com/sfelf/acquire/issues/104), and" in plans
-    assert "[#106](https://github.com/sfelf/acquire/issues/106) are complete" in plans
-    assert "[#107](https://github.com/sfelf/acquire/issues/107) is in progress" in plans
+    assert "[#103](https://github.com/sfelf/acquire/issues/103)," in plans
+    assert "[#104](https://github.com/sfelf/acquire/issues/104)," in plans
+    assert "[#107](https://github.com/sfelf/acquire/issues/107) are complete" in plans
+    assert "[#108](https://github.com/sfelf/acquire/issues/108) is in progress" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
     assert "GitHub issues remain the source of\ntruth for issue scope" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
@@ -102,7 +102,7 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "retain\n     `--require-source-rows`" in plans
     assert "Keep the\n     MySQL-to-Postgres backup import tooling" in plans
     assert "`mysql-migration` optional uv extra" in plans
-    assert "server/import_mysql_to_postgres.py" in database_notes
+    assert "acquire.migration.import_mysql_to_postgres" in database_notes
     assert "requires every application table, including the derived `record` table" in (
         normalized_database_notes
     )
@@ -173,7 +173,7 @@ def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
     assert "fail before target rows are copied" in backup_runbook
     assert "must not include connection URLs, credentials" in backup_runbook
     assert "dry-run JSON report records source row counts" in backup_runbook
-    assert "server/validate_import_reports.py" in backup_runbook
+    assert "acquire.migration.validate_import_reports" in backup_runbook
     assert "--dry-run-report /tmp/acquire-rehearsal/dry-run-report.json" in backup_runbook
     assert "--import-report /tmp/acquire-rehearsal/import-report.json" in backup_runbook
     assert "--require-source-rows rating" in backup_runbook

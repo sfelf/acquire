@@ -39,7 +39,8 @@ def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None
         "uv run --isolated --frozen --no-dev --extra mysql-migration python -" in workflow
     )
     assert "import mysql.connector" in workflow
-    assert "import import_mysql_to_postgres" in workflow
+    assert "import acquire.migration.import_mysql_to_postgres" in workflow
+    assert 'assert "acquire.orm" not in sys.modules' in workflow
 
 
 def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> None:

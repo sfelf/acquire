@@ -15,7 +15,8 @@ tooling.
 - Files with the former names under `server/` are temporary compatibility
   wrappers for existing direct-file commands.
 - Postgres is the application runtime database. MySQL support is limited to the
-  optional backup-import tool.
+  optional backup-import tools under `acquire.migration`; loading that package
+  does not initialize the application ORM or runtime database engine.
 - Client assets are built from files under `client/` using npm scripts or the
   opt-in `client-build` Docker Compose profile. Generated asset files remain
   gitignored build outputs; see `docs/client-assets.md`.
