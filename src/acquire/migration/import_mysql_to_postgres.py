@@ -89,7 +89,13 @@ class ImportValidationError(RuntimeError):
 
 
 class UnsafeTargetError(ImportValidationError):
-    """Raised when existing target data does not match the safe import shape."""
+    """Raised when existing target data does not match the safe import shape.
+
+    This subtype distinguishes target-state safeguards from source or
+    post-import validation failures. The command boundary depends on that
+    distinction to return `EXIT_UNSAFE_TARGET`, allowing operators to identify
+    a target that must be replaced or emptied without exposing database details.
+    """
 
 
 def import_database(
@@ -493,6 +499,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parse_args(argv)
     except CommandArgumentError:
         return _command_error(EXIT_INVALID_INPUT, "invalid command arguments")
+
+    try:
+        sqlalchemy.engine.make_url(args.source_url)
+        sqlalchemy.engine.make_url(args.target_url)
+    except (sqlalchemy.exc.ArgumentError, ValueError):
+        return _command_error(EXIT_INVALID_INPUT, "invalid database connection arguments")
 
     if args.report_json is not None:
         try:

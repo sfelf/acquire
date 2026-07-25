@@ -58,8 +58,9 @@ Docker and deployment callers until issue #110 replaces those calls with an
 installed project script. Built artifacts can import the setup module without
 development dependencies, but running setup remains limited to repository
 environments that install Alembic while its configuration and migrations remain
-repository resources. Issue #110 owns the installed command and issue #111 owns
-the final artifact resource layout.
+repository resources. Issue #110 owns the installed command, issue #111 removes
+the transitional wrapper, and issue #127 owns the final artifact resource
+layout.
 Alembic imports the packaged metadata directly and resolves its migration
 directory relative to `alembic.ini`, independent of the current working
 directory. Issue #111 removes the alias after every runtime and command path is

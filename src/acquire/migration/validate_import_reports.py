@@ -88,7 +88,7 @@ def load_report(path: Path, *, context: str = "report") -> ImportReport:
     """
     try:
         payload = json.loads(path.read_text(), object_pairs_hook=_reject_duplicate_keys)
-    except json.JSONDecodeError as exc:
+    except ValueError as exc:
         raise ReportValidationError(f"{context}: invalid JSON") from exc
     if not isinstance(payload, Mapping):
         raise ReportValidationError(f"{context}: report must be a JSON object")

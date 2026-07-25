@@ -818,18 +818,42 @@ def test_main_returns_distinct_fixed_error_for_invalid_arguments(
     assert secret not in captured.err
 
 
-def test_main_returns_invalid_input_for_malformed_database_url(
+@pytest.mark.parametrize(
+    ("source_url", "target_url"),
+    [
+        (
+            "mysql+mysqlconnector://host:private-port/db",
+            "postgresql+psycopg://target/db",
+        ),
+        (
+            "mysql+mysqlconnector://source/db",
+            "postgresql+psycopg://host:private-port/db",
+        ),
+    ],
+)
+def test_main_returns_invalid_input_for_malformed_database_port_before_report_preflight(
     import_module,
     capsys,
+    monkeypatch,
+    tmp_path,
+    source_url,
+    target_url,
 ):
-    malformed_url = "not a database URL containing private-password"
+    preflight_calls = []
+    monkeypatch.setattr(
+        import_module,
+        "preflight_report_json_path",
+        lambda path: preflight_calls.append(path),
+    )
 
     exit_code = import_module.main(
         [
             "--source-url",
-            malformed_url,
+            source_url,
             "--target-url",
-            "postgresql+psycopg://target",
+            target_url,
+            "--report-json",
+            str(tmp_path / "report.json"),
         ]
     )
 
@@ -837,7 +861,8 @@ def test_main_returns_invalid_input_for_malformed_database_url(
     assert exit_code == import_module.EXIT_INVALID_INPUT
     assert captured.out == ""
     assert captured.err == "error: invalid database connection arguments\n"
-    assert malformed_url not in captured.err
+    assert "private-port" not in captured.err
+    assert preflight_calls == []
 
 
 @pytest.mark.parametrize(
@@ -930,6 +955,32 @@ def test_main_treats_unrelated_missing_module_as_import_failure(
     captured = capsys.readouterr()
     assert exit_code == import_module.EXIT_IMPORT_FAILED
     assert captured.err == "error: database import failed\n"
+    assert "private" not in captured.err
+
+
+def test_main_normalizes_late_database_argument_error(
+    import_module,
+    capsys,
+    monkeypatch,
+):
+    def fail_import(*args, **kwargs):
+        raise sqlalchemy.exc.ArgumentError("private connection details")
+
+    monkeypatch.setattr(import_module, "import_database", fail_import)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source/db",
+            "--target-url",
+            "postgresql+psycopg://target/db",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_INVALID_INPUT
+    assert captured.out == ""
+    assert captured.err == "error: invalid database connection arguments\n"
     assert "private" not in captured.err
 
 

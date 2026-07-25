@@ -1,5 +1,6 @@
 import base64
 import json
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
@@ -587,6 +588,36 @@ def test_main_returns_validation_exit_for_malformed_or_incomplete_report(
     dry_run_path = tmp_path / "dry-run-report.json"
     import_path = tmp_path / "import-report.json"
     dry_run_path.write_text(dry_run_payload)
+    write_json(import_path, report_payload(dry_run=False))
+
+    exit_code = validate_import_reports.main(
+        [
+            "--dry-run-report",
+            str(dry_run_path),
+            "--import-report",
+            str(import_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == validate_import_reports.EXIT_VALIDATION_FAILED
+    assert captured.out == ""
+    assert captured.err == "error: report validation failed\n"
+
+
+@pytest.mark.parametrize("malformed_kind", ["invalid-utf8", "oversized-integer"])
+def test_main_normalizes_decoder_value_errors_to_validation_failure(
+    tmp_path,
+    capsys,
+    malformed_kind,
+):
+    dry_run_path = tmp_path / "dry-run-report.json"
+    import_path = tmp_path / "import-report.json"
+    if malformed_kind == "invalid-utf8":
+        dry_run_path.write_bytes(b"\xff")
+    else:
+        digit_limit = max(sys.get_int_max_str_digits(), 4300)
+        dry_run_path.write_text("9" * (digit_limit + 1))
     write_json(import_path, report_payload(dry_run=False))
 
     exit_code = validate_import_reports.main(
