@@ -1,4 +1,4 @@
-"""Baseline Acquire schema.
+"""Packaged baseline Acquire schema.
 
 Revision ID: 20260622_0001
 Revises:
@@ -6,6 +6,8 @@ Create Date: 2026-06-22 00:00:00.000000
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -16,7 +18,7 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-MYSQL_TABLE_OPTIONS = {
+MYSQL_TABLE_OPTIONS: dict[str, Any] = {
     "mysql_charset": "utf8mb4",
     "mysql_collate": "utf8mb4_bin",
 }
@@ -25,7 +27,7 @@ UNSIGNED_SMALL_INTEGER_MAX = 65_535
 UNSIGNED_TINY_INTEGER_MAX = 255
 
 
-def _table_options() -> dict[str, str]:
+def _table_options() -> dict[str, Any]:
     """Return dialect-specific table options for the active migration bind.
 
     MySQL keeps the historical binary collation contract. Other database

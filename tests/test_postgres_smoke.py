@@ -1,4 +1,7 @@
 import importlib
+import os
+import shutil
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -195,8 +198,8 @@ def test_database_setup_is_idempotent_and_preserves_seeded_lookups(
     setup_database = importlib.import_module("acquire.setup_database")
     monkeypatch.setattr(setup_database.orm, "engine", postgres_engine)
 
-    setup_database.main()
-    setup_database.main()
+    setup_database.run_setup()
+    setup_database.run_setup()
 
     assert _app_table_names(postgres_engine) == setup_database.BASELINE_TABLES
     with postgres_engine.connect() as connection:
@@ -207,6 +210,45 @@ def test_database_setup_is_idempotent_and_preserves_seeded_lookups(
                 sqlalchemy.text(f"select name from {table_name} order by name")
             )
             assert {row[0] for row in rows} == expected_names
+
+
+def test_installed_database_setup_command_runs_outside_repository_and_is_idempotent(
+    postgres_engine,
+    postgres_test_url,
+    empty_postgres_schema,
+    tmp_path,
+):
+    command_path = shutil.which("acquire-setup-database")
+    assert command_path is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment["ACQUIRE_DATABASE_URL"] = postgres_test_url
+
+    for _ in range(2):
+        result = subprocess.run(
+            [command_path],
+            cwd=tmp_path,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    assert _app_table_names(postgres_engine) == {
+        "game",
+        "game_mode",
+        "game_player",
+        "game_state",
+        "key_value",
+        "rating",
+        "rating_type",
+        "record",
+        "user",
+    }
+    with postgres_engine.connect() as connection:
+        version = connection.execute(sqlalchemy.text("select version_num from alembic_version"))
+        assert version.scalar_one() == "20260622_0001"
 
 
 def test_alembic_baseline_preserves_mysql_numeric_contract_against_postgres(

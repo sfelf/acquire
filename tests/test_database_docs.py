@@ -26,9 +26,10 @@ def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     assert "The Packaging milestone is active." in plans
     assert "[#103](https://github.com/sfelf/acquire/issues/103)," in plans
     assert "[#104](https://github.com/sfelf/acquire/issues/104)," in plans
-    assert "[#108](https://github.com/sfelf/acquire/issues/108) are complete" in plans
-    assert "[#109](https://github.com/sfelf/acquire/issues/109) is in progress" in plans
+    assert "[#109](https://github.com/sfelf/acquire/issues/109) are complete" in plans
+    assert "[#110](https://github.com/sfelf/acquire/issues/110) is in progress" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
+    assert "Issue #110 is also delivered as three stand-alone PR slices" in plans
     assert "GitHub issues remain the source of\ntruth for issue scope" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
     assert "The six-phase modernization plan is complete." in agent_notes

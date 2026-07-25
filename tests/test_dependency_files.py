@@ -79,9 +79,17 @@ def test_runtime_images_do_not_install_mysql_dependencies() -> None:
 
 
 def test_local_docker_includes_alembic_for_database_setup() -> None:
+    requirements = _read_requirements("requirements.txt")
     local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
+    assert "alembic>=1.17,<2" in requirements
     assert "alembic>=1.17,<2" in local_docker_requirements
+    assert "alembic>=1.17,<2" in pyproject["project"]["dependencies"]
+    assert "alembic>=1.17,<2" not in pyproject["dependency-groups"]["dev"]
+    assert pyproject["project"]["scripts"]["acquire-setup-database"] == (
+        "acquire.setup_database:main"
+    )
 
 
 def test_local_docker_includes_postgres_driver_for_default_database() -> None:

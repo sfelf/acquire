@@ -54,17 +54,15 @@ Authentication is authoritative in `acquire.auth`; `server/auth.py` provides
 the equivalent temporary alias while the HTTP runtime remains under `server/`.
 Database setup is authoritative in `acquire.setup_database`;
 `server/setup_database.py` remains a temporary direct-file entry point for
-Docker and deployment callers until issue #110 replaces those calls with an
-installed project script. Built artifacts can import the setup module without
-development dependencies, but running setup remains limited to repository
-environments that install Alembic while its configuration and migrations remain
-repository resources. Issue #110 owns the installed command, issue #111 removes
-the transitional wrapper, and issue #127 owns the final artifact resource
-layout.
-Alembic imports the packaged metadata directly and resolves its migration
-directory relative to `alembic.ini`, independent of the current working
-directory. Issue #111 removes the alias after every runtime and command path is
-packaged.
+Docker and deployment callers until a later issue #110 slice migrates those
+calls. The installed `acquire-setup-database` command is available in a normal
+installation, and Alembic is an operational runtime dependency. Its
+configuration, environment, revision template, and revision scripts are package
+resources under `src/acquire/`, so the command works independently of the
+repository and current working directory. The root `alembic.ini` remains a
+developer-facing configuration that points to those same authoritative
+packaged revisions. Issue #111 removes the transitional wrapper, and issue #127
+owns the final artifact manifest closeout.
 
 Issue #106 makes `acquire.game_server`, `acquire.realtime`, and
 `acquire.http_server` authoritative for the game engine, WebSocket adapter, and
@@ -102,6 +100,11 @@ normal installation. Both commands run outside the repository, use stable
 exit-code categories, and replace unsafe diagnostic values with fixed markers.
 The compatibility wrappers remain until issue #111 removes the transitional
 layout.
+
+Issue #110 is delivered in three independently reviewable slices. The first
+adds the installed database-setup boundary and packaged Alembic resources; the
+following slices add build and maintenance commands, then migrate the gateway
+and runtime callers. The issue remains open until all three slices merge.
 
 Issue #111 removes all transitional paths. Issue #127 then owns the final wheel
 and source-distribution manifests and clean-wheel command verification.

@@ -27,7 +27,7 @@ def test_moved_orm_and_alembic_environment_do_not_mutate_sys_path() -> None:
     """Verify the migrated persistence boundary has no server-path injection."""
     for path in (
         REPOSITORY_ROOT / "src" / "acquire" / "orm.py",
-        REPOSITORY_ROOT / "migrations" / "env.py",
+        REPOSITORY_ROOT / "src" / "acquire" / "migrations" / "env.py",
     ):
         tree = ast.parse(path.read_text())
         assert not any(
