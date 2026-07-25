@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Never
 
 from acquire.migration.import_mysql_to_postgres import (
     BASELINE_LOOKUP_TABLES,
@@ -16,6 +18,31 @@ from acquire.migration.import_mysql_to_postgres import (
 REPORT_KEYS = frozenset({"dry_run", "total_rows", "tables"})
 TABLE_KEYS = frozenset({"table_name", "source_count", "target_count"})
 EXPECTED_TABLE_ORDER = tuple(TABLE_ORDER)
+
+EXIT_SUCCESS = 0
+EXIT_INVALID_INPUT = 2
+EXIT_VALIDATION_FAILED = 7
+
+
+class CommandArgumentError(ValueError):
+    """Raised when command arguments do not satisfy the validator contract."""
+
+
+class SafeArgumentParser(argparse.ArgumentParser):
+    """Reject invalid arguments without reflecting untrusted values."""
+
+    def error(self, message: str) -> Never:
+        """Raise a fixed argument error without projecting parser input.
+
+        Args:
+            message: Argparse's detailed error, intentionally excluded because
+                it may contain a private path or encoded sensitive value.
+
+        Raises:
+            CommandArgumentError: Always.
+        """
+        del message
+        raise CommandArgumentError("invalid command arguments")
 
 
 class ReportValidationError(RuntimeError):
@@ -40,7 +67,7 @@ class ImportReport:
     tables: tuple[TableCounts, ...]
 
 
-def load_report(path: Path) -> ImportReport:
+def load_report(path: Path, *, context: str = "report") -> ImportReport:
     """Load and validate a sanitized import rehearsal report.
 
     Report files are intended to be safe to reference from project notes or PR
@@ -50,6 +77,7 @@ def load_report(path: Path) -> ImportReport:
 
     Args:
         path: JSON report path to load.
+        context: Maintainer-controlled label used in validation diagnostics.
 
     Returns:
         Parsed import report.
@@ -60,28 +88,30 @@ def load_report(path: Path) -> ImportReport:
     """
     try:
         payload = json.loads(path.read_text(), object_pairs_hook=_reject_duplicate_keys)
-    except json.JSONDecodeError as exc:
-        raise ReportValidationError(f"{path}: invalid JSON") from exc
+    except ValueError as exc:
+        raise ReportValidationError(f"{context}: invalid JSON") from exc
     if not isinstance(payload, Mapping):
-        raise ReportValidationError(f"{path}: report must be a JSON object")
-    _validate_keys(path, payload, REPORT_KEYS)
+        raise ReportValidationError(f"{context}: report must be a JSON object")
+    _validate_keys(context, payload, REPORT_KEYS)
 
     dry_run = payload["dry_run"]
     total_rows = payload["total_rows"]
     tables = payload["tables"]
     if not isinstance(dry_run, bool):
-        raise ReportValidationError(f"{path}: dry_run must be a boolean")
+        raise ReportValidationError(f"{context}: dry_run must be a boolean")
     if not _is_nonnegative_int(total_rows):
-        raise ReportValidationError(f"{path}: total_rows must be a non-negative integer")
+        raise ReportValidationError(f"{context}: total_rows must be a non-negative integer")
     if not isinstance(tables, list):
-        raise ReportValidationError(f"{path}: tables must be a list")
+        raise ReportValidationError(f"{context}: tables must be a list")
 
-    parsed_tables = tuple(_parse_table(path, index, table) for index, table in enumerate(tables))
-    _validate_table_order(path, parsed_tables)
+    parsed_tables = tuple(
+        _parse_table(context, index, table) for index, table in enumerate(tables)
+    )
+    _validate_table_order(context, parsed_tables)
     source_total = sum(table.source_count for table in parsed_tables)
     if source_total != total_rows:
         raise ReportValidationError(
-            f"{path}: total_rows {total_rows} does not match source row total {source_total}"
+            f"{context}: total_rows {total_rows} does not match source row total {source_total}"
         )
     return ImportReport(dry_run=dry_run, total_rows=total_rows, tables=parsed_tables)
 
@@ -153,7 +183,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     Returns:
         Parsed command-line namespace.
     """
-    parser = argparse.ArgumentParser(
+    parser = SafeArgumentParser(
         description="Validate sanitized MySQL-to-Postgres import rehearsal reports."
     )
     parser.add_argument("--dry-run-report", required=True, type=Path)
@@ -170,7 +200,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the report validation command-line interface.
+    """Run report validation with fixed, non-sensitive diagnostics.
+
+    Report paths, unexpected fields, decoded data, and exception details are
+    excluded from stderr. Validation failures use one printable, single-line
+    marker so redaction is idempotent for raw and encoded unsafe inputs.
 
     Args:
         argv: Optional argument list for tests. Defaults to process arguments.
@@ -178,19 +212,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         Process exit code.
     """
-    args = parse_args(argv)
-    dry_run_report = load_report(args.dry_run_report)
-    import_report = load_report(args.import_report)
-    validate_report_pair(
-        dry_run_report,
-        import_report,
-        required_source_tables=args.require_source_rows,
-    )
+    try:
+        args = parse_args(argv)
+    except CommandArgumentError:
+        return _command_error(EXIT_INVALID_INPUT, "invalid command arguments")
+
+    try:
+        dry_run_report = load_report(args.dry_run_report, context="dry-run report")
+        import_report = load_report(args.import_report, context="import report")
+        validate_report_pair(
+            dry_run_report,
+            import_report,
+            required_source_tables=args.require_source_rows,
+        )
+    except (OSError, ReportValidationError):
+        return _command_error(EXIT_VALIDATION_FAILED, "report validation failed")
+
     print(
         "validated import reports for "
         f"{import_report.total_rows} rows across {len(import_report.tables)} tables"
     )
-    return 0
+    return EXIT_SUCCESS
+
+
+def _command_error(exit_code: int, marker: str) -> int:
+    """Write one fixed diagnostic marker and return its exit code.
+
+    Args:
+        exit_code: Stable nonzero command exit code.
+        marker: Maintainer-controlled diagnostic text.
+
+    Returns:
+        The supplied exit code.
+    """
+    print(f"error: {marker}", file=sys.stderr)
+    return exit_code
 
 
 def _validate_required_source_tables(
@@ -216,11 +272,11 @@ def _validate_required_source_tables(
             )
 
 
-def _parse_table(path: Path, index: int, payload: object) -> TableCounts:
+def _parse_table(context: str, index: int, payload: object) -> TableCounts:
     """Parse one table-count entry from a report.
 
     Args:
-        path: Report path used in validation messages.
+        context: Maintainer-controlled report label used in validation messages.
         index: Position of the table entry in the report.
         payload: Raw JSON value for the table entry.
 
@@ -231,21 +287,23 @@ def _parse_table(path: Path, index: int, payload: object) -> TableCounts:
         ReportValidationError: If the table entry is malformed.
     """
     if not isinstance(payload, Mapping):
-        raise ReportValidationError(f"{path}: tables[{index}] must be an object")
-    _validate_keys(path, payload, TABLE_KEYS, prefix=f"tables[{index}]")
+        raise ReportValidationError(f"{context}: tables[{index}] must be an object")
+    _validate_keys(context, payload, TABLE_KEYS, prefix=f"tables[{index}]")
 
     table_name = payload["table_name"]
     source_count = payload["source_count"]
     target_count = payload["target_count"]
     if not isinstance(table_name, str) or not table_name:
-        raise ReportValidationError(f"{path}: tables[{index}].table_name must be a string")
+        raise ReportValidationError(
+            f"{context}: tables[{index}].table_name must be a string"
+        )
     if not _is_nonnegative_int(source_count):
         raise ReportValidationError(
-            f"{path}: tables[{index}].source_count must be a non-negative integer"
+            f"{context}: tables[{index}].source_count must be a non-negative integer"
         )
     if not _is_nonnegative_int(target_count):
         raise ReportValidationError(
-            f"{path}: tables[{index}].target_count must be a non-negative integer"
+            f"{context}: tables[{index}].target_count must be a non-negative integer"
         )
     return TableCounts(
         table_name=table_name,
@@ -301,7 +359,7 @@ def _validate_dry_run_target_counts(dry_run_report: ImportReport) -> None:
 
 
 def _validate_keys(
-    path: Path,
+    context: str,
     payload: Mapping[object, object],
     expected_keys: frozenset[str],
     *,
@@ -310,7 +368,7 @@ def _validate_keys(
     """Validate that a JSON object has exactly the expected keys.
 
     Args:
-        path: Report path used in validation messages.
+        context: Maintainer-controlled report label used in validation messages.
         payload: JSON object to inspect.
         expected_keys: Exact key set required for the object.
         prefix: Human-readable object label for validation messages.
@@ -321,14 +379,13 @@ def _validate_keys(
     """
     keys = set(payload)
     if keys != expected_keys:
-        unexpected_keys = sorted(str(key) for key in keys - expected_keys)
         missing_keys = sorted(expected_keys - keys)
         details = []
-        if unexpected_keys:
-            details.append(f"unexpected keys: {', '.join(unexpected_keys)}")
+        if keys - expected_keys:
+            details.append("unexpected keys")
         if missing_keys:
             details.append(f"missing keys: {', '.join(missing_keys)}")
-        raise ReportValidationError(f"{path}: {prefix} has {'; '.join(details)}")
+        raise ReportValidationError(f"{context}: {prefix} has {'; '.join(details)}")
 
 
 def _reject_duplicate_keys(pairs: Sequence[tuple[str, object]]) -> dict[str, object]:
@@ -347,7 +404,7 @@ def _reject_duplicate_keys(pairs: Sequence[tuple[str, object]]) -> dict[str, obj
     result = {}
     for key, value in pairs:
         if key in result:
-            raise ReportValidationError(f"duplicate JSON key: {key}")
+            raise ReportValidationError("duplicate JSON key")
         result[key] = value
     return result
 

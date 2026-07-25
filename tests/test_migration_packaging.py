@@ -3,8 +3,10 @@
 import ast
 import importlib
 import os
+import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,21 @@ MIGRATION_MODULES = {
     "import_mysql_to_postgres": "import_mysql_to_postgres",
     "validate_import_reports": "validate_import_reports",
 }
+MIGRATION_COMMANDS = {
+    "acquire-migrate-mysql-to-postgres": (
+        "acquire.migration.import_mysql_to_postgres:main"
+    ),
+    "acquire-validate-migration-reports": (
+        "acquire.migration.validate_import_reports:main"
+    ),
+}
+
+
+def test_migration_project_scripts_match_the_supported_command_contract() -> None:
+    """Verify package metadata exposes exactly the issue-owned migration commands."""
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+
+    assert pyproject["project"]["scripts"] == MIGRATION_COMMANDS
 
 
 @pytest.mark.parametrize(("package_name", "legacy_name"), MIGRATION_MODULES.items())
@@ -106,6 +123,30 @@ def test_migration_modules_execute_outside_repository(
 
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout
+
+
+@pytest.mark.parametrize("command_name", MIGRATION_COMMANDS)
+def test_installed_migration_commands_execute_outside_repository(
+    command_name: str,
+    tmp_path: Path,
+) -> None:
+    """Verify installed command help has no repository or direct-file dependency."""
+    command_path = shutil.which(command_name)
+    assert command_path is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+
+    result = subprocess.run(
+        [command_path, "--help"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("usage:")
 
 
 @pytest.mark.parametrize(("package_name", "legacy_name"), MIGRATION_MODULES.items())

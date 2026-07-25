@@ -58,8 +58,9 @@ Docker and deployment callers until issue #110 replaces those calls with an
 installed project script. Built artifacts can import the setup module without
 development dependencies, but running setup remains limited to repository
 environments that install Alembic while its configuration and migrations remain
-repository resources. Issue #110 owns the installed command and issue #111 owns
-the final artifact resource layout.
+repository resources. Issue #110 owns the installed command, issue #111 removes
+the transitional wrapper, and issue #127 owns the final artifact resource
+layout.
 Alembic imports the packaged metadata directly and resolves its migration
 directory relative to `alembic.ini`, independent of the current working
 directory. Issue #111 removes the alias after every runtime and command path is
@@ -94,7 +95,13 @@ does not load `acquire.orm` or create the application engine. Temporary
 direct-file wrappers remain under `server/` until issues #109 and #111 replace
 their callers and remove compatibility paths.
 
-Issue #111 owns the final wheel and source-distribution manifests after the
-runtime modules and their tests have migrated into the installed-package
-layout. It also owns final project scripts and removal of all transitional
-paths.
+Issue #109 adds the installed `acquire-migrate-mysql-to-postgres` and
+`acquire-validate-migration-reports` commands. The importer remains operational
+only with the `mysql-migration` extra; the validator remains available in a
+normal installation. Both commands run outside the repository, use stable
+exit-code categories, and replace unsafe diagnostic values with fixed markers.
+The compatibility wrappers remain until issue #111 removes the transitional
+layout.
+
+Issue #111 removes all transitional paths. Issue #127 then owns the final wheel
+and source-distribution manifests and clean-wheel command verification.

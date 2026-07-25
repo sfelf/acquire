@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Never
 
 import sqlalchemy
 from sqlalchemy.engine import Connection, Engine
@@ -26,6 +28,34 @@ TABLE_ORDER = (
     "record",
 )
 BASELINE_LOOKUP_TABLES = frozenset({"game_mode", "game_state", "rating_type"})
+
+EXIT_SUCCESS = 0
+EXIT_INVALID_INPUT = 2
+EXIT_UNSAFE_TARGET = 3
+EXIT_MISSING_SOURCE_DRIVER = 4
+EXIT_IMPORT_FAILED = 5
+EXIT_REPORT_WRITE_FAILED = 6
+
+
+class CommandArgumentError(ValueError):
+    """Raised when command arguments do not satisfy the importer contract."""
+
+
+class SafeArgumentParser(argparse.ArgumentParser):
+    """Reject invalid arguments without reflecting untrusted values."""
+
+    def error(self, message: str) -> Never:
+        """Raise a fixed argument error without projecting parser input.
+
+        Args:
+            message: Argparse's detailed error, intentionally excluded from the
+                raised exception because it may contain a connection value.
+
+        Raises:
+            CommandArgumentError: Always.
+        """
+        del message
+        raise CommandArgumentError("invalid command arguments")
 
 
 @dataclass(frozen=True)
@@ -56,6 +86,16 @@ class TargetNotEmptyError(RuntimeError):
 
 class ImportValidationError(RuntimeError):
     """Raised when source and target counts do not match after import."""
+
+
+class UnsafeTargetError(ImportValidationError):
+    """Raised when existing target data does not match the safe import shape.
+
+    This subtype distinguishes target-state safeguards from source or
+    post-import validation failures. The command boundary depends on that
+    distinction to return `EXIT_UNSAFE_TARGET`, allowing operators to identify
+    a target that must be replaced or emptied without exposing database details.
+    """
 
 
 def import_database(
@@ -271,7 +311,7 @@ def _validate_target_table(
     if table.name not in BASELINE_LOOKUP_TABLES:
         raise TargetNotEmptyError(f"target table must be empty before import: {table.name}")
     if target_rows != source_rows:
-        raise ImportValidationError(
+        raise UnsafeTargetError(
             f"target lookup table {table.name} does not match source rows"
         )
 
@@ -363,7 +403,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     Returns:
         Parsed command-line namespace.
     """
-    parser = argparse.ArgumentParser(
+    parser = SafeArgumentParser(
         description="Copy Acquire application rows from MySQL into an empty Postgres database."
     )
     parser.add_argument("--source-url", required=True, help="SQLAlchemy URL for the MySQL source")
@@ -442,7 +482,12 @@ def preflight_report_json_path(path: Path) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the import command-line interface.
+    """Run the import command-line interface with fixed diagnostic projections.
+
+    Operator-supplied URLs, report paths, database exceptions, and row data are
+    never included in command diagnostics. Failures are projected as printable,
+    single-line fixed markers with stable exit codes so encoded or repeatedly
+    encoded sensitive values cannot gain information through decoding.
 
     Args:
         argv: Optional argument list for tests. Defaults to process arguments.
@@ -450,22 +495,68 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         Process exit code.
     """
-    args = parse_args(argv)
+    try:
+        args = parse_args(argv)
+    except CommandArgumentError:
+        return _command_error(EXIT_INVALID_INPUT, "invalid command arguments")
+
+    try:
+        sqlalchemy.engine.make_url(args.source_url)
+        sqlalchemy.engine.make_url(args.target_url)
+    except (sqlalchemy.exc.ArgumentError, ValueError):
+        return _command_error(EXIT_INVALID_INPUT, "invalid database connection arguments")
+
     if args.report_json is not None:
-        preflight_report_json_path(args.report_json)
-    report = import_database(
-        args.source_url,
-        args.target_url,
-        dry_run=args.dry_run,
-        required_source_tables=args.require_source_rows,
-    )
+        try:
+            preflight_report_json_path(args.report_json)
+        except OSError:
+            return _command_error(EXIT_REPORT_WRITE_FAILED, "report write failed")
+
+    try:
+        report = import_database(
+            args.source_url,
+            args.target_url,
+            dry_run=args.dry_run,
+            required_source_tables=args.require_source_rows,
+        )
+    except ModuleNotFoundError as exc:
+        if exc.name is not None and exc.name.split(".", 1)[0] == "mysql":
+            return _command_error(
+                EXIT_MISSING_SOURCE_DRIVER,
+                "MySQL source driver is not installed; install the mysql-migration extra",
+            )
+        return _command_error(EXIT_IMPORT_FAILED, "database import failed")
+    except sqlalchemy.exc.ArgumentError:
+        return _command_error(EXIT_INVALID_INPUT, "invalid database connection arguments")
+    except (TargetNotEmptyError, UnsafeTargetError):
+        return _command_error(EXIT_UNSAFE_TARGET, "target database is not safe to import")
+    except Exception:
+        return _command_error(EXIT_IMPORT_FAILED, "database import failed")
+
     mode = "dry run" if report.dry_run else "import"
     print(f"{mode} covered {report.total_rows} rows")
     for table in report.tables:
         print(f"{table.table_name}: source={table.source_count} target={table.target_count}")
     if args.report_json is not None:
-        write_report_json(report, args.report_json)
-    return 0
+        try:
+            write_report_json(report, args.report_json)
+        except OSError:
+            return _command_error(EXIT_REPORT_WRITE_FAILED, "report write failed")
+    return EXIT_SUCCESS
+
+
+def _command_error(exit_code: int, marker: str) -> int:
+    """Write one fixed diagnostic marker and return its exit code.
+
+    Args:
+        exit_code: Stable nonzero command exit code.
+        marker: Maintainer-controlled diagnostic text.
+
+    Returns:
+        The supplied exit code.
+    """
+    print(f"error: {marker}", file=sys.stderr)
+    return exit_code
 
 
 if __name__ == "__main__":

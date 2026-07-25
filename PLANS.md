@@ -3,7 +3,8 @@
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
-- The Packaging milestone is active. Work is currently at issue #108.
+- The Packaging milestone is active. Issues #103 through #108 are complete;
+  work is currently at issue #109.
 
 This document preserves the agreed modernization record and documents the
 delivery order for active milestone work. GitHub issues remain the source of
@@ -15,9 +16,10 @@ Status: issues
 [#103](https://github.com/sfelf/acquire/issues/103),
 [#104](https://github.com/sfelf/acquire/issues/104),
 [#105](https://github.com/sfelf/acquire/issues/105),
-[#106](https://github.com/sfelf/acquire/issues/106), and
-[#107](https://github.com/sfelf/acquire/issues/107) are complete. Issue
-[#108](https://github.com/sfelf/acquire/issues/108) is in progress.
+[#106](https://github.com/sfelf/acquire/issues/106),
+[#107](https://github.com/sfelf/acquire/issues/107), and
+[#108](https://github.com/sfelf/acquire/issues/108) are complete. Issue
+[#109](https://github.com/sfelf/acquire/issues/109) is in progress.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.
@@ -32,15 +34,15 @@ and expose stable project scripts without changing application behavior.
   Psycopg are normal runtime dependencies, while `mysql-connector-python`
   remains isolated in the `mysql-migration` optional extra. Packaging work
   verifies this boundary rather than introducing it.
-- At package closeout in
-  [#111](https://github.com/sfelf/acquire/issues/111), wheels contain only
+- At artifact closeout in
+  [#127](https://github.com/sfelf/acquire/issues/127), wheels contain only
   installable runtime modules, declared package data, metadata, and entry
   points. They exclude tests and test fixtures.
-- At package closeout in #111, source distributions also contain the tracked
+- At artifact closeout in #127, source distributions also contain the tracked
   test suite and its required sanitized fixtures. They exclude generated
   assets, credentials, database dumps, sockets, caches, bytecode, coverage
   output, and temporary reports.
-- These are package-closeout requirements, not an instruction for #103 to
+- These are artifact-closeout requirements, not an instruction for #103 to
   include tests that still depend on unmigrated modules under `server/`.
 - Temporary `server/` compatibility wrappers may exist only while callers are
   being migrated. They contain no application logic, identify
@@ -77,10 +79,13 @@ Issues may be worked in the following dependency waves:
    #107. Coordinate it after #109 when working serially so project-script names,
    package metadata, the lock file, and command documentation are reconciled
    once.
-6. Package closeout:
+6. Compatibility closeout:
    [#111](https://github.com/sfelf/acquire/issues/111) follows #104 through
-   #110, removes all transitional wrappers and path assumptions, verifies
-   artifact contents, and records the final package and entry-point inventory.
+   #110 and removes all transitional wrappers and path assumptions.
+7. Artifact closeout:
+   [#127](https://github.com/sfelf/acquire/issues/127) follows #109 through
+   #111, verifies final distribution contents and clean installed commands, and
+   records the final package and entry-point inventory.
 
 The recommended serial merge order is:
 
@@ -93,6 +98,7 @@ The recommended serial merge order is:
 7. #109
 8. #110
 9. #111
+10. #127
 
 The serial order is preferred for one-agent delivery because it keeps each
 change reviewable and minimizes conflicts in package configuration, imports,
@@ -122,9 +128,10 @@ after all three merged and its full acceptance criteria passed.
 | [#106](https://github.com/sfelf/acquire/issues/106) | Installed FastAPI and game-runtime imports, explicit static-asset paths, and unchanged HTTP, WebSocket, protocol, integration, and e2e behavior. |
 | [#107](https://github.com/sfelf/acquire/issues/107) | Installed offline-tool imports, golden replay equivalence, preserved stats/rating/persistence behavior, and path-sensitive coverage outside `server/`. |
 | [#108](https://github.com/sfelf/acquire/issues/108) | Importer loading without a global runtime engine, an explicit legacy-source/current-target schema boundary, preserved rehearsal behavior, failure-path coverage, and sanitized reports. |
-| [#109](https://github.com/sfelf/acquire/issues/109) | Installed migration command, normal-sync/optional-extra isolation checks, command-level error and redaction tests, and a successful Docker-backed rehearsal. |
+| [#109](https://github.com/sfelf/acquire/issues/109) | Both installed migration commands, normal-sync/optional-extra isolation checks, command-level error and redaction tests, and a successful Docker-backed rehearsal. |
 | [#110](https://github.com/sfelf/acquire/issues/110) | Installed gateway and database-setup commands, Docker and enum-generation parity, command parsing tests, and Postgres/integration/e2e validation. |
-| [#111](https://github.com/sfelf/acquire/issues/111) | No legacy import shims or `server/` path injection, asserted wheel/sdist manifests, a wheel built from the sdist, clean-environment command smoke tests, complete repository validation, and current documentation. |
+| [#111](https://github.com/sfelf/acquire/issues/111) | No legacy import shims, direct-file commands, or `server/` path injection; exactly six supported project scripts; complete repository validation; and current migration documentation. |
+| [#127](https://github.com/sfelf/acquire/issues/127) | Asserted wheel/sdist manifests, a wheel built from the sdist, clean-environment command smoke tests, packaged Alembic resources, complete repository validation, and final artifact documentation. |
 
 Every issue must map its acceptance criteria to executable tests or explicit
 verification in its pull request. Before merge, run the repository-required
