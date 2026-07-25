@@ -87,30 +87,46 @@ def setup_database_module(monkeypatch):
         monkeypatch.delattr(acquire, "setup_database", raising=False)
 
 
-def test_setup_database_uses_repository_alembic_config(setup_database_module):
+def test_setup_database_uses_packaged_alembic_config(setup_database_module):
     setup_database, _, _ = setup_database_module
 
     config = setup_database.alembic_config()
 
     assert Path(config.path).name == "alembic.ini"
-    assert Path(config.path).parent == Path(__file__).resolve().parents[1]
+    assert Path(config.path).parent == Path(acquire.__file__).resolve().parent
     assert Path(config.main_options["script_location"]).name == "migrations"
     assert Path(config.main_options["script_location"]).parent == Path(
-        __file__
-    ).resolve().parents[1]
+        acquire.__file__
+    ).resolve().parent
 
 
-def test_setup_database_rejects_install_without_repository_migrations(
+def test_setup_database_rejects_install_without_packaged_migrations(
     setup_database_module,
     monkeypatch,
     tmp_path,
 ):
     setup_database, _, _ = setup_database_module
-    monkeypatch.setattr(setup_database, "REPO_DIR", tmp_path)
+    monkeypatch.setattr(setup_database.resources, "files", lambda package: tmp_path)
 
     with pytest.raises(
         RuntimeError,
-        match="requires repository migration resources",
+        match="requires installed migration resources",
+    ):
+        setup_database.alembic_config()
+
+
+def test_setup_database_rejects_package_with_config_but_no_migrations(
+    setup_database_module,
+    monkeypatch,
+    tmp_path,
+):
+    setup_database, _, _ = setup_database_module
+    (tmp_path / "alembic.ini").write_text("[alembic]\n")
+    monkeypatch.setattr(setup_database.resources, "files", lambda package: tmp_path)
+
+    with pytest.raises(
+        RuntimeError,
+        match="requires installed migration resources",
     ):
         setup_database.alembic_config()
 
@@ -124,7 +140,7 @@ def test_setup_database_upgrades_to_head(setup_database_module, monkeypatch):
         lambda config, revision: calls.append((config, revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert len(calls) == 1
     config, revision = calls[0]
@@ -135,7 +151,7 @@ def test_setup_database_upgrades_to_head(setup_database_module, monkeypatch):
 def test_setup_database_stamps_unversioned_legacy_schema(setup_database_module, monkeypatch):
     setup_database, command, sqlalchemy = setup_database_module
     calls = []
-    setup_database.orm.engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
+    sys.modules["acquire.orm"].engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
     monkeypatch.setattr(
         sqlalchemy,
         "inspect",
@@ -155,7 +171,7 @@ def test_setup_database_stamps_unversioned_legacy_schema(setup_database_module, 
         lambda config, revision: calls.append(("upgrade", config, revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert [call[0] for call in calls] == ["stamp", "upgrade"]
     assert [call[2] for call in calls] == [setup_database.BASELINE_REVISION, "head"]
@@ -177,7 +193,7 @@ def test_setup_database_does_not_stamp_empty_schema(setup_database_module, monke
         lambda config, revision: calls.append(("upgrade", revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert calls == [("upgrade", "head")]
 
@@ -205,7 +221,7 @@ def test_setup_database_does_not_stamp_schema_with_extra_table(
         lambda config, revision: calls.append(("upgrade", revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert calls == [("upgrade", "head")]
 
@@ -233,7 +249,7 @@ def test_setup_database_does_not_stamp_already_versioned_schema(
         lambda config, revision: calls.append(("upgrade", revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert calls == [("upgrade", "head")]
 
@@ -256,7 +272,7 @@ def test_setup_database_propagates_inspection_failure_without_upgrade(
     )
 
     with pytest.raises(RuntimeError, match="inspection failed"):
-        setup_database.main()
+        setup_database.run_setup()
 
     assert calls == []
 
@@ -267,7 +283,7 @@ def test_setup_database_does_not_stamp_schema_with_missing_columns(
 ):
     setup_database, command, sqlalchemy = setup_database_module
     calls = []
-    setup_database.orm.engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
+    sys.modules["acquire.orm"].engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
     columns = {
         **setup_database.BASELINE_COLUMNS,
         "user": {"user_id", "name"},
@@ -288,7 +304,7 @@ def test_setup_database_does_not_stamp_schema_with_missing_columns(
         lambda config, revision: calls.append(("upgrade", revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert calls == [("upgrade", "head")]
 
@@ -299,7 +315,7 @@ def test_setup_database_does_not_stamp_schema_with_missing_lookup_rows(
 ):
     setup_database, command, sqlalchemy = setup_database_module
     calls = []
-    setup_database.orm.engine = Engine(
+    sys.modules["acquire.orm"].engine = Engine(
         {
             **setup_database.BASELINE_LOOKUP_ROWS,
             "rating_type": {"Singles2", "Singles3", "Singles4"},
@@ -324,6 +340,85 @@ def test_setup_database_does_not_stamp_schema_with_missing_lookup_rows(
         lambda config, revision: calls.append(("upgrade", revision)),
     )
 
-    setup_database.main()
+    setup_database.run_setup()
 
     assert calls == [("upgrade", "head")]
+
+
+def test_setup_database_main_returns_success(setup_database_module, monkeypatch):
+    setup_database, _, _ = setup_database_module
+    calls = []
+    monkeypatch.setattr(setup_database, "run_setup", lambda: calls.append("setup"))
+
+    result = setup_database.main([])
+
+    assert result == 0
+    assert calls == ["setup"]
+
+
+@pytest.mark.parametrize(
+    "sensitive_argument",
+    [
+        "postgresql://private-user:private-password@private-host/db",
+        r"postgresql:\/\/private-user\:private-password\@private-host\/db",
+        "postgresql%3A%2F%2Fprivate-user%3Aprivate-password%40private-host%2Fdb",
+        (
+            "postgresql%253A%252F%252Fprivate-user%253A"
+            "private-password%2540private-host%252Fdb"
+        ),
+    ],
+)
+def test_setup_database_main_rejects_arguments_without_reflecting_values(
+    setup_database_module,
+    capsys,
+    sensitive_argument,
+):
+    setup_database, _, _ = setup_database_module
+
+    with pytest.raises(SystemExit) as exit_info:
+        setup_database.main([sensitive_argument])
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid arguments\n"
+    assert sensitive_argument not in captured.err
+
+
+@pytest.mark.parametrize("abbreviated_help", ["--h", "--he", "--hel"])
+def test_setup_database_main_rejects_abbreviated_help(
+    setup_database_module,
+    capsys,
+    abbreviated_help,
+):
+    setup_database, _, _ = setup_database_module
+
+    with pytest.raises(SystemExit) as exit_info:
+        setup_database.main([abbreviated_help])
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid arguments\n"
+
+
+def test_setup_database_main_sanitizes_setup_failures(
+    setup_database_module,
+    monkeypatch,
+    capsys,
+):
+    setup_database, _, _ = setup_database_module
+    sensitive_error = "postgresql://private-user:private-password@private-host/db"
+
+    def fail_setup():
+        raise RuntimeError(sensitive_error)
+
+    monkeypatch.setattr(setup_database, "run_setup", fail_setup)
+
+    result = setup_database.main([])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert captured.err == "error: database setup failed\n"
+    assert sensitive_error not in captured.err

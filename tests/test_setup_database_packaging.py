@@ -3,8 +3,10 @@
 import ast
 import importlib
 import os
+import shutil
 import subprocess
 import sys
+from importlib import resources
 from pathlib import Path
 
 import pytest
@@ -56,8 +58,10 @@ def test_setup_database_imports_outside_repository_without_pythonpath(
                 "from pathlib import Path; import acquire.setup_database; "
                 "assert Path(acquire.setup_database.__file__).name == "
                 "'setup_database.py'; "
-                "assert acquire.setup_database.REPO_DIR == Path("
-                f"{str(REPOSITORY_ROOT)!r})"
+                "config = acquire.setup_database.alembic_config(); "
+                "assert Path(config.config_file_name).name == 'alembic.ini'; "
+                "assert Path(config.get_main_option('script_location')).name == "
+                "'migrations'"
             ),
         ],
         cwd=tmp_path,
@@ -68,3 +72,69 @@ def test_setup_database_imports_outside_repository_without_pythonpath(
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_setup_database_resources_are_part_of_the_acquire_package() -> None:
+    """Verify migration configuration and scripts use package resources."""
+    package_root = resources.files("acquire")
+
+    assert package_root.joinpath("alembic.ini").is_file()
+    assert package_root.joinpath("migrations", "env.py").is_file()
+    assert package_root.joinpath("migrations", "script.py.mako").is_file()
+    assert package_root.joinpath(
+        "migrations",
+        "versions",
+        "20260622_0001_baseline_mysql_schema.py",
+    ).is_file()
+
+
+def test_setup_database_command_help_runs_outside_repository_without_database(
+    tmp_path: Path,
+) -> None:
+    """Verify command discovery and help do not initialize a database."""
+    command = shutil.which("acquire-setup-database")
+    assert command is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.pop("ACQUIRE_DATABASE_URL", None)
+    environment["POSTGRES_PORT"] = "private-secret"
+
+    result = subprocess.run(
+        [command, "--help"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert "Upgrade the configured Acquire database" in result.stdout
+    assert "private-secret" not in result.stdout
+
+
+def test_setup_database_command_sanitizes_environment_configuration_failure(
+    tmp_path: Path,
+) -> None:
+    """Verify malformed sensitive environment values stay inside the boundary."""
+    command = shutil.which("acquire-setup-database")
+    assert command is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.pop("ACQUIRE_DATABASE_URL", None)
+    environment["POSTGRES_PORT"] = "private-secret"
+
+    result = subprocess.run(
+        [command],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "error: database setup failed\n"
+    assert "private-secret" not in result.stderr

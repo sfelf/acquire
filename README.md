@@ -119,9 +119,10 @@ uv run alembic stamp head
 ```
 
 Local Docker setup uses Alembic through `acquire.setup_database`; the current
-direct-file command is a temporary compatibility entry point until issue #110
-adds the installed project script. Future schema or required lookup-data
-changes should be added as Alembic revisions.
+direct-file command is a temporary compatibility entry point until a later
+issue #110 slice migrates Docker callers. Normal installations expose
+`acquire-setup-database`. Future schema or required lookup-data changes should
+be added as Alembic revisions.
 
 ## Install dependencies
 

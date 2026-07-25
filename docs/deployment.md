@@ -40,7 +40,8 @@ docker run --rm \
 
 `acquire.setup_database` applies Alembic migrations and required lookup data
 without dropping existing data. The direct-file command remains a temporary
-compatibility entry point until issue #110 adds the installed project script.
+compatibility entry point until a later issue #110 slice migrates production
+image callers to the installed `acquire-setup-database` project script.
 
 ## Run The Gateway
 

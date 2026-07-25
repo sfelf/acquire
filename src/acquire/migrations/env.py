@@ -1,4 +1,4 @@
-"""Configure Alembic for the Acquire database schema."""
+"""Configure packaged Alembic migrations for the Acquire database schema."""
 
 from __future__ import annotations
 

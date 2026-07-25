@@ -7,6 +7,7 @@ name = "acquire"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "alembic" },
     { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlalchemy" },
@@ -23,7 +24,6 @@ mysql-migration = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "alembic" },
     { name = "httpx" },
     { name = "mypy" },
     { name = "pre-commit" },
@@ -34,6 +34,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", specifier = ">=1.17,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "mysql-connector-python", marker = "extra == 'mysql-migration'", specifier = ">=9.3,<10" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
@@ -47,7 +48,6 @@ provides-extras = ["mysql-migration"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "alembic", specifier = ">=1.17,<2" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "mypy", specifier = ">=1.18,<2" },
     { name = "pre-commit", specifier = ">=4,<5" },

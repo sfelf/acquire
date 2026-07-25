@@ -7,13 +7,16 @@ existing backup into Postgres.
 ## Current State
 
 - Python database models live in the installed `acquire.orm` module.
-- Alembic migrations live in `migrations/`.
+- Alembic configuration and migrations live as installed resources under
+  `src/acquire/`.
 - The initial Alembic revision creates the current Postgres schema and required
   lookup rows.
 - `acquire.setup_database` applies Alembic migrations for local Docker and e2e
   setup without dropping data. Local Docker currently reaches it through the
   temporary `server/setup_database.py` compatibility entry point and runs it
-  against Postgres by default.
+  against Postgres by default. Normal installations expose the same boundary as
+  `acquire-setup-database`; a later issue #110 slice migrates Docker and
+  deployment callers to that command.
 - `acquire.migration.import_mysql_to_postgres` copies known application tables from a
   MySQL-compatible source into a migrated Postgres-compatible target for
   cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses
@@ -44,11 +47,34 @@ existing backup into Postgres.
 - `acquire.orm` uses `ACQUIRE_DATABASE_URL` or structured `POSTGRES_*`
   environment variables for application connections. It has no MySQL runtime
   fallback.
-- `migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
+- `src/acquire/migrations/versions/20260622_0001_baseline_mysql_schema.py` uses portable
   SQLAlchemy types and preserves the historical source schema contract needed
   to interpret legacy backups. It is not an application runtime connection
   path.
 - Docker Compose, CI marker suites, and local development are Postgres-only.
+
+## Installed Database Setup Command
+
+Configure the target with `ACQUIRE_DATABASE_URL` or the structured
+`POSTGRES_*` environment variables used by `acquire.orm`, then run:
+
+```bash
+uv run acquire-setup-database
+```
+
+The command discovers its Alembic configuration and revisions through installed
+package resources. It accepts no operational arguments: `--help` exits with
+status 0 without connecting to a database, unexpected arguments exit with
+status 2, successful fresh, guarded-legacy, already-versioned, and repeated
+setups exit with status 0, and resource, inspection, connection, or migration
+failures exit with status 1.
+
+| Field | Source and trust | Runtime use | Diagnostic policy |
+| --- | --- | --- | --- |
+| Database URL and structured connection settings | Operator environment, sensitive | Construct the application engine used for inspection and migrations | Never print or serialize |
+| Command arguments | Operator input, untrusted and unsupported except `--help` | Validate that no operational arguments were supplied | Reject with a fixed marker; never reflect input |
+| Packaged Alembic paths | Installed package metadata, trusted | Load configuration and revision scripts | Exclude paths from failure output |
+| Database and migration exceptions | Driver, SQLAlchemy, or Alembic, potentially sensitive | Determine failure status | Replace with the fixed `error: database setup failed` marker |
 
 ## Postgres Migration Sequence
 

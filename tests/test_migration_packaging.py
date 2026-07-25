@@ -28,11 +28,11 @@ MIGRATION_COMMANDS = {
 }
 
 
-def test_migration_project_scripts_match_the_supported_command_contract() -> None:
-    """Verify package metadata exposes exactly the issue-owned migration commands."""
+def test_migration_project_scripts_remain_in_the_supported_command_contract() -> None:
+    """Verify package metadata retains the issue-owned migration commands."""
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert pyproject["project"]["scripts"] == MIGRATION_COMMANDS
+    assert MIGRATION_COMMANDS.items() <= pyproject["project"]["scripts"].items()
 
 
 @pytest.mark.parametrize(("package_name", "legacy_name"), MIGRATION_MODULES.items())

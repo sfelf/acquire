@@ -1,26 +1,27 @@
-"""Apply database migrations for local development and deployment setup.
+"""Apply packaged database migrations for development and deployment setup.
 
-This module owns the guarded legacy-schema stamp and Alembic upgrade workflow
-used by local, test, and production database setup. The module is importable
-from a normal installed package, while execution remains limited to repository
-environments with migration dependencies until issue #110 adds the installed
-command.
+This module owns the installed command and guarded legacy-schema stamp used by
+local, test, and production database setup. Migration configuration and scripts
+are resolved from package resources, independent of the current working
+directory.
 """
 
 from __future__ import annotations
 
+import argparse
+import sys
+from collections.abc import Sequence
+from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 import sqlalchemy
 from sqlalchemy.engine.reflection import Inspector
 
-from acquire import orm
-
 if TYPE_CHECKING:  # pragma: no cover
     from alembic.config import Config
 
-REPO_DIR = Path(__file__).resolve().parents[2]
+RESOURCE_PACKAGE = "acquire"
 BASELINE_REVISION = "20260622_0001"
 BASELINE_TABLES = {
     "game",
@@ -66,29 +67,24 @@ BASELINE_LOOKUP_ROWS = {
 
 
 def alembic_config() -> Config:
-    """Return the repository Alembic configuration.
+    """Return the Alembic configuration from installed package resources.
 
-    The current direct-file and editable-install commands use migrations stored
-    at the repository root. Resolving them relative to the packaged source
-    module keeps setup independent of the current working directory. A wheel
-    install can import this module, but setup execution fails explicitly until
-    issue #110 adds the installed project command and issue #111 owns the final
-    artifact layout.
+    Configuration and revision scripts are resolved through the installed
+    `acquire` package rather than the repository or current working directory.
+    Both `alembic.ini` and the migrations directory must be available as
+    filesystem-backed package resources before setup can proceed.
 
     Returns:
-        Alembic config for the repository migration environment.
+        Alembic config for the packaged migration environment.
 
     Raises:
-        RuntimeError: The repository migration resources are unavailable.
+        RuntimeError: Required package resources are unavailable.
     """
-    config_path = REPO_DIR / "alembic.ini"
-    migrations_path = REPO_DIR / "migrations"
+    package_root = resources.files(RESOURCE_PACKAGE)
+    config_path = Path(str(package_root.joinpath("alembic.ini")))
+    migrations_path = Path(str(package_root.joinpath("migrations")))
     if not config_path.is_file() or not migrations_path.is_dir():
-        raise RuntimeError(
-            "Database setup requires repository migration resources; "
-            "use a repository environment with migration dependencies until "
-            "issue #110 adds the installed setup command."
-        )
+        raise RuntimeError("Database setup requires installed migration resources.")
 
     from alembic.config import Config
 
@@ -109,6 +105,8 @@ def is_unstamped_legacy_schema() -> bool:
         `True` when the baseline application tables, expected columns, and
         required lookup rows exist and `alembic_version` is absent.
     """
+    from acquire import orm
+
     inspector = sqlalchemy.inspect(orm.engine)
     table_names = set(inspector.get_table_names())
     return (
@@ -142,6 +140,8 @@ def has_baseline_lookup_rows() -> bool:
         `True` when the legacy schema contains exactly the lookup rows inserted
         by the baseline migration.
     """
+    from acquire import orm
+
     with orm.engine.connect() as connection:
         for table_name, expected_names in BASELINE_LOOKUP_ROWS.items():
             rows = connection.execute(sqlalchemy.text(f"select name from {table_name}"))
@@ -158,7 +158,7 @@ def stamp_legacy_schema(config: Config) -> None:
     owns their normal upgrade or failure behavior.
 
     Args:
-        config: Alembic configuration for the repository migration environment.
+        config: Alembic configuration for the packaged migration environment.
     """
     if is_unstamped_legacy_schema():
         from alembic import command
@@ -166,13 +166,13 @@ def stamp_legacy_schema(config: Config) -> None:
         command.stamp(config, BASELINE_REVISION)
 
 
-def main() -> None:
+def run_setup() -> None:
     """Upgrade the configured database to the latest Alembic revision.
 
     A precisely matching unstamped legacy schema is stamped at the baseline
     before upgrade. Empty, already versioned, partial, or unknown schemas are
     passed to Alembic without a synthetic stamp so migration errors remain
-    visible at the owning boundary. Repeated successful calls are safe.
+    visible to programmatic callers. Repeated successful calls are safe.
     """
     config = alembic_config()
     stamp_legacy_schema(config)
@@ -181,5 +181,63 @@ def main() -> None:
     command.upgrade(config, "head")
 
 
+class SetupArgumentParser(argparse.ArgumentParser):
+    """Parse command arguments while enforcing the diagnostic safety boundary.
+
+    Operator input and argparse-generated messages may contain credentials or
+    private identifiers. Invalid input must therefore exit with a fixed marker
+    and must never be reflected through usage or error output.
+    """
+
+    def error(self, message: str) -> Never:
+        """Exit with a fixed diagnostic for invalid command arguments.
+
+        Argument text is operator-controlled and may contain credentials or
+        private identifiers, so the parser never projects the input or the
+        generated argparse message.
+
+        Args:
+            message: Argparse-generated error text, intentionally ignored.
+        """
+        self.exit(2, "error: invalid arguments\n")
+
+
+def parse_args(argv: Sequence[str] | None = None) -> None:
+    """Validate the database-setup command arguments.
+
+    Args:
+        argv: Arguments to parse, or `None` to use the process arguments.
+    """
+    parser = SetupArgumentParser(
+        prog="acquire-setup-database",
+        description="Upgrade the configured Acquire database to the latest revision.",
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the installed database-setup command.
+
+    Database selection remains environment-driven through `acquire.orm`.
+    Invalid arguments exit through argparse with status 2. Resource, inspection,
+    connection, and migration failures return status 1 with a fixed diagnostic
+    so database URLs and exception representations cannot reach command output.
+
+    Args:
+        argv: Arguments to parse, or `None` to use the process arguments.
+
+    Returns:
+        `0` after a successful upgrade, or `1` after a setup failure.
+    """
+    parse_args(argv)
+    try:
+        run_setup()
+    except Exception:
+        print("error: database setup failed", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
