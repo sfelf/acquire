@@ -1,3 +1,4 @@
+import errno
 import io
 import time
 import urllib.parse
@@ -1001,27 +1002,70 @@ def test_main_rejects_file_static_root_before_starting_server(
     assert capsys.readouterr().err == "error: HTTP server configuration failed\n"
 
 
-def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
+class FakeListener:
+    def __init__(self, *, bind_error=None, close_error=None):
+        self.bind_error = bind_error
+        self.close_error = close_error
+        self.calls = []
+        self.closed = False
+
+    def setsockopt(self, level, option, value):
+        self.calls.append(("setsockopt", level, option, value))
+
+    def bind(self, address):
+        self.calls.append(("bind", address))
+        if self.bind_error is not None:
+            raise self.bind_error
+
+    def set_inheritable(self, inheritable):
+        self.calls.append(("set_inheritable", inheritable))
+
+    def close(self):
+        self.calls.append(("close",))
+        self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
+
+
+def test_run_http_server_resolves_and_binds_every_hostname_address(
+    monkeypatch,
+    tmp_path,
+):
     calls = []
+    ipv6_address = ("::1", 19001, 0, 0)
+    ipv4_address = ("127.0.0.1", 19001)
+    address_infos = [
+        (
+            http_server.socket.AF_INET6,
+            http_server.socket.SOCK_STREAM,
+            6,
+            "",
+            ipv6_address,
+        ),
+        (
+            http_server.socket.AF_INET,
+            http_server.socket.SOCK_STREAM,
+            6,
+            "",
+            ipv4_address,
+        ),
+        (
+            http_server.socket.AF_INET,
+            http_server.socket.SOCK_STREAM,
+            6,
+            "",
+            ipv4_address,
+        ),
+    ]
+    listeners = [FakeListener(), FakeListener()]
 
-    class Listener:
-        def setsockopt(self, level, option, value):
-            calls.append(("setsockopt", level, option, value))
+    def getaddrinfo(host, port, **kwargs):
+        calls.append(("getaddrinfo", host, port, kwargs))
+        return address_infos
 
-        def bind(self, address):
-            calls.append(("bind", address))
-
-        def set_inheritable(self, inheritable):
-            calls.append(("set_inheritable", inheritable))
-
-        def close(self):
-            calls.append(("close",))
-
-    listener = Listener()
-
-    def create_socket(*, family):
-        calls.append(("socket", family))
-        return listener
+    def create_socket(family, socktype, protocol):
+        calls.append(("socket", family, socktype, protocol))
+        return listeners.pop(0)
 
     class Server:
         def __init__(self, config):
@@ -1030,6 +1074,8 @@ def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
         def run(self, *, sockets):
             calls.append(("run", sockets))
 
+    bound_listeners = listeners.copy()
+    monkeypatch.setattr(http_server.socket, "getaddrinfo", getaddrinfo)
     monkeypatch.setattr(http_server.socket, "socket", create_socket)
     monkeypatch.setattr(
         http_server.uvicorn,
@@ -1039,45 +1085,76 @@ def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
     monkeypatch.setattr(http_server.uvicorn, "Server", Server)
 
     http_server.run_http_server(
-        host="127.0.0.1",
+        host="localhost",
         port=19001,
         main_static_root=tmp_path / "main",
         stats_static_root=tmp_path / "stats",
     )
 
     assert calls == [
-        ("socket", http_server.socket.AF_INET),
+        (
+            "getaddrinfo",
+            "localhost",
+            19001,
+            {
+                "family": http_server.socket.AF_UNSPEC,
+                "type": http_server.socket.SOCK_STREAM,
+                "flags": http_server.socket.AI_PASSIVE,
+            },
+        ),
+        (
+            "socket",
+            http_server.socket.AF_INET6,
+            http_server.socket.SOCK_STREAM,
+            6,
+        ),
+        (
+            "socket",
+            http_server.socket.AF_INET,
+            http_server.socket.SOCK_STREAM,
+            6,
+        ),
+        ("server", "Acquire Python HTTP", "localhost", 19001),
+        ("run", bound_listeners),
+    ]
+    assert bound_listeners[0].calls == [
         (
             "setsockopt",
             http_server.socket.SOL_SOCKET,
             http_server.socket.SO_REUSEADDR,
             1,
         ),
-        ("bind", ("127.0.0.1", 19001)),
+        (
+            "setsockopt",
+            http_server.socket.IPPROTO_IPV6,
+            http_server.socket.IPV6_V6ONLY,
+            1,
+        ),
+        ("bind", ipv6_address),
         ("set_inheritable", True),
-        ("server", "Acquire Python HTTP", "127.0.0.1", 19001),
-        ("run", [listener]),
+        ("close",),
+    ]
+    assert bound_listeners[1].calls == [
+        (
+            "setsockopt",
+            http_server.socket.SOL_SOCKET,
+            http_server.socket.SO_REUSEADDR,
+            1,
+        ),
+        ("bind", ipv4_address),
+        ("set_inheritable", True),
         ("close",),
     ]
 
 
-def test_run_http_server_closes_listener_after_server_failure(monkeypatch, tmp_path):
-    class Listener:
-        closed = False
-
-        def setsockopt(self, level, option, value):
-            pass
-
-        def bind(self, address):
-            pass
-
-        def set_inheritable(self, inheritable):
-            pass
-
-        def close(self):
-            self.closed = True
-
-    listener = Listener()
+def test_run_http_server_closes_all_listeners_after_server_failure(
+    monkeypatch,
+    tmp_path,
+):
+    listeners = [
+        FakeListener(close_error=OSError("private close failure")),
+        FakeListener(),
+    ]
 
     class Server:
         def __init__(self, config):
@@ -1086,63 +1163,178 @@ def test_run_http_server_closes_listener_after_server_failure(monkeypatch, tmp_p
         def run(self, *, sockets):
             raise RuntimeError("server failed")
 
-    monkeypatch.setattr(http_server.socket, "socket", lambda *, family: listener)
+    monkeypatch.setattr(
+        http_server,
+        "create_listener_sockets",
+        lambda host, port: listeners,
+    )
     monkeypatch.setattr(http_server.uvicorn, "Server", Server)
 
     with pytest.raises(RuntimeError, match="server failed"):
         http_server.run_http_server(
-            host="::1",
+            host="localhost",
             port=19001,
             main_static_root=tmp_path / "main",
             stats_static_root=tmp_path / "stats",
         )
 
-    assert listener.closed
+    assert all(listener.closed for listener in listeners)
 
 
-def test_run_http_server_sanitizes_listener_bind_failure(monkeypatch, tmp_path):
-    class Listener:
-        closed = False
+@pytest.mark.parametrize(
+    "resolution_error",
+    [
+        OSError("private resolution failure"),
+        UnicodeError("private host encoding failure"),
+    ],
+)
+def test_create_listener_sockets_sanitizes_resolution_failure(
+    resolution_error,
+    monkeypatch,
+):
+    def getaddrinfo(*args, **kwargs):
+        raise resolution_error
 
-        def setsockopt(self, level, option, value):
-            pass
-
-        def bind(self, address):
-            raise OSError(f"private bind failure for {address}")
-
-        def close(self):
-            self.closed = True
-
-    listener = Listener()
-    monkeypatch.setattr(http_server.socket, "socket", lambda *, family: listener)
+    monkeypatch.setattr(http_server.socket, "getaddrinfo", getaddrinfo)
 
     with pytest.raises(http_server.HttpServerBindError) as exit_info:
-        http_server.run_http_server(
-            host="private-host",
-            port=19001,
-            main_static_root=tmp_path / "main",
-            stats_static_root=tmp_path / "stats",
-        )
+        http_server.create_listener_sockets("private-host", 19001)
 
     assert str(exit_info.value) == ""
-    assert listener.closed
 
 
-def test_run_http_server_sanitizes_listener_creation_failure(monkeypatch, tmp_path):
-    def create_socket(*, family):
+def test_create_listener_sockets_sanitizes_listener_creation_failure(monkeypatch):
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            )
+        ],
+    )
+
+    def create_socket(family, socktype, protocol):
         raise OSError("private socket setup failure")
 
     monkeypatch.setattr(http_server.socket, "socket", create_socket)
 
     with pytest.raises(http_server.HttpServerBindError) as exit_info:
-        http_server.run_http_server(
-            host="private-host",
-            port=19001,
-            main_static_root=tmp_path / "main",
-            stats_static_root=tmp_path / "stats",
-        )
+        http_server.create_listener_sockets("private-host", 19001)
 
     assert str(exit_info.value) == ""
+
+
+def test_create_listener_sockets_skips_unavailable_address_family(monkeypatch):
+    unavailable = FakeListener(
+        bind_error=OSError(errno.EADDRNOTAVAIL, "private unavailable address")
+    )
+    available = FakeListener()
+    listeners = [unavailable, available]
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET6,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("::1", 19001, 0, 0),
+            ),
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listeners.pop(0),
+    )
+
+    result = http_server.create_listener_sockets("localhost", 19001)
+
+    assert result == [available]
+    assert unavailable.closed
+    assert not available.closed
+    available.close()
+
+
+def test_create_listener_sockets_closes_partial_set_after_fatal_bind(monkeypatch):
+    bound = FakeListener()
+    failed = FakeListener(
+        bind_error=OSError(errno.EADDRINUSE, "private address already in use")
+    )
+    listeners = [bound, failed]
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            ),
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.2", 19001),
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listeners.pop(0),
+    )
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("private-host", 19001)
+
+    assert str(exit_info.value) == ""
+    assert bound.closed
+    assert failed.closed
+
+
+def test_create_listener_sockets_uses_wildcard_and_rejects_empty_results(
+    monkeypatch,
+):
+    calls = []
+
+    def getaddrinfo(host, port, **kwargs):
+        calls.append((host, port, kwargs))
+        return []
+
+    monkeypatch.setattr(http_server.socket, "getaddrinfo", getaddrinfo)
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("", 19001)
+
+    assert str(exit_info.value) == ""
+    assert calls == [
+        (
+            None,
+            19001,
+            {
+                "family": http_server.socket.AF_UNSPEC,
+                "type": http_server.socket.SOCK_STREAM,
+                "flags": http_server.socket.AI_PASSIVE,
+            },
+        )
+    ]
 
 
 @pytest.mark.parametrize(

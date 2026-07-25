@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import mimetypes
 import posixpath
 import secrets
@@ -44,6 +45,71 @@ class InvalidWebsocketPayloadError(ValueError):
 
 class HttpServerBindError(OSError):
     """Signal that the configured listener address could not be bound."""
+
+
+def create_listener_sockets(host: str, port: int) -> list[socket.socket]:
+    """Resolve and bind every usable listener address without unsafe logging.
+
+    This follows the standard asyncio server boundary: duplicate resolution
+    results are ignored, IPv4 and IPv6 candidates are bound separately, and an
+    unavailable address family is skipped. Any other partial failure closes the
+    complete listener set before raising a fixed command-boundary exception.
+
+    Args:
+        host: Interface name, IP literal, or hostname to bind.
+        port: TCP port to bind.
+
+    Returns:
+        One or more bound listener sockets.
+
+    Raises:
+        HttpServerBindError: Resolution, socket setup, or binding cannot
+            produce a complete usable listener set.
+    """
+    listeners: list[socket.socket] = []
+    try:
+        address_infos = socket.getaddrinfo(
+            None if host == "" else host,
+            port,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+            flags=socket.AI_PASSIVE,
+        )
+        seen: set[tuple[object, ...]] = set()
+        for family, socktype, protocol, _canonical_name, address in address_infos:
+            address_key = (family, socktype, protocol, address)
+            if address_key in seen:
+                continue
+            seen.add(address_key)
+
+            try:
+                listener = socket.socket(family, socktype, protocol)
+            except OSError:
+                continue
+
+            try:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+                    listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                listener.bind(address)
+                listener.set_inheritable(True)
+            except OSError as exc:
+                with suppress(OSError):
+                    listener.close()
+                if exc.errno == errno.EADDRNOTAVAIL:
+                    continue
+                raise
+
+            listeners.append(listener)
+    except (OSError, UnicodeError):
+        for listener in listeners:
+            with suppress(OSError):
+                listener.close()
+        raise HttpServerBindError from None
+
+    if not listeners:
+        raise HttpServerBindError
+    return listeners
 
 
 class ReportErrorForm(BaseModel):
@@ -685,9 +751,9 @@ def run_http_server(
 ) -> None:
     """Run the FastAPI HTTP server until interrupted.
 
-    The listener is bound before Uvicorn starts so address failures can be
-    projected through the command's fixed diagnostic without a check-then-bind
-    race or Uvicorn logging the private bind value.
+    All resolved listeners are bound before Uvicorn starts so address failures
+    can be projected through the command's fixed diagnostic without a
+    check-then-bind race or Uvicorn logging the private bind value.
 
     Args:
         host: Interface to bind.
@@ -701,26 +767,15 @@ def run_http_server(
         stats_static_root=stats_static_root,
         log_output=log_output,
     )
-    family = socket.AF_INET6 if ":" in host else socket.AF_INET
-    listener: socket.socket | None = None
-    try:
-        listener = socket.socket(family=family)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind((host, port))
-        listener.set_inheritable(True)
-    except OSError:
-        if listener is not None:
-            with suppress(OSError):
-                listener.close()
-        raise HttpServerBindError from None
-
-    assert listener is not None
+    listeners = create_listener_sockets(host, port)
     config = uvicorn.Config(app, host=host, port=port)
     server = uvicorn.Server(config)
     try:
-        server.run(sockets=[listener])
+        server.run(sockets=listeners)
     finally:
-        listener.close()
+        for listener in listeners:
+            with suppress(OSError):
+                listener.close()
 
 
 class HttpServerArgumentParser(argparse.ArgumentParser):

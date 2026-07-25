@@ -120,7 +120,7 @@ and remaining runtime callers.
 
 | Field | Source and trust | Runtime use | Diagnostic policy |
 | --- | --- | --- | --- |
-| Host and port | Operator or container configuration, untrusted | Bind the Uvicorn listener | Validate the TCP port; use fixed invalid-argument output |
+| Host and port | Operator or container configuration, untrusted | Resolve hostnames across IPv4 and IPv6, then bind every usable Uvicorn listener | Validate the TCP port; use fixed invalid-argument output |
 | Main and stats static roots | Operator or container configuration, private and untrusted | Serve generated external client assets | Require absolute existing directories before startup; never print |
 
 `acquire-http-server` accepts `--host`, `--port`, `--main-static-root`, and
