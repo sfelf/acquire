@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tarfile
@@ -147,10 +148,11 @@ def expected_wheel_manifest() -> set[str]:
 def sdist_manifest(path: Path) -> set[str]:
     """Read normalized file names from a gzipped source distribution.
 
-    Every regular member must be below the exact versioned
-    `acquire-0.1.0/` root before that prefix is removed. A member at the archive
-    root or below another directory fails verification rather than being
-    normalized into the expected manifest.
+    Every member name must be unique and either name the exact
+    `acquire-0.1.0` root directory or live below its `acquire-0.1.0/` prefix.
+    Directories and regular files are the only accepted member types; links and
+    other special members fail before regular-file names are normalized into
+    the expected manifest.
 
     Args:
         path: Source-distribution archive.
@@ -159,30 +161,104 @@ def sdist_manifest(path: Path) -> set[str]:
         File paths relative to the versioned archive root.
 
     Raises:
-        VerificationError: A regular member is outside the required versioned
-            archive root.
+        VerificationError: Member names are duplicated, a member is outside
+            the versioned root, or a member has an unsupported type.
     """
     prefix = f"{SDIST_ROOT}/"
     with tarfile.open(path, "r:gz") as archive:
-        members = {member.name for member in archive.getmembers() if member.isfile()}
-    require(
-        all(member.startswith(prefix) for member in members),
-        "source distribution contains a file outside its versioned root",
+        archive_members = archive.getmembers()
+    member_names = unique_archive_names(
+        [member.name for member in archive_members],
+        "source distribution",
     )
-    return {member.removeprefix(prefix) for member in members}
+    require(
+        all(name == SDIST_ROOT or name.startswith(prefix) for name in member_names),
+        "source distribution contains a member outside its versioned root",
+    )
+    require(
+        all(member.isfile() or member.isdir() for member in archive_members),
+        "source distribution contains an unsupported member type",
+    )
+    return {
+        member.name.removeprefix(prefix)
+        for member in archive_members
+        if member.isfile()
+    }
 
 
 def wheel_manifest(path: Path) -> set[str]:
-    """Read file names from a wheel.
+    """Read unique regular-file names from a wheel.
+
+    Duplicate names are rejected before directory entries are omitted so an
+    installer cannot choose ambiguously between repeated members. Entries with
+    a declared Unix type must be regular files or directories; links and other
+    special members fail verification.
 
     Args:
         path: Wheel archive.
 
     Returns:
         Complete wheel file manifest.
+
+    Raises:
+        VerificationError: Member names are duplicated or a member has an
+            unsupported type.
     """
     with zipfile.ZipFile(path) as archive:
-        return {name for name in archive.namelist() if not name.endswith("/")}
+        archive_members = archive.infolist()
+    unique_archive_names(
+        [member.filename for member in archive_members],
+        "wheel",
+    )
+    require(
+        all(wheel_member_type_is_supported(member) for member in archive_members),
+        "wheel contains an unsupported member type",
+    )
+    return {member.filename for member in archive_members if not member.is_dir()}
+
+
+def unique_archive_names(names: list[str], artifact: str) -> set[str]:
+    """Require archive member names to be unique.
+
+    Duplicate names make installation ambiguous even when the deduplicated
+    inventory matches policy, so validation occurs before callers classify or
+    normalize members.
+
+    Args:
+        names: Archive member names in stored order.
+        artifact: Fixed artifact label for the failure diagnostic.
+
+    Returns:
+        Unique member names.
+
+    Raises:
+        VerificationError: Any member name occurs more than once.
+    """
+    unique_names = set(names)
+    require(
+        len(unique_names) == len(names),
+        f"{artifact} contains duplicate member names",
+    )
+    return unique_names
+
+
+def wheel_member_type_is_supported(member: zipfile.ZipInfo) -> bool:
+    """Return whether a wheel member is a regular file or directory.
+
+    Zip entries may omit a Unix file type, which is accepted for portability.
+    When a type is declared, it must agree with the entry's directory marker;
+    symbolic links and other special filesystem objects are rejected.
+
+    Args:
+        member: Wheel member metadata.
+
+    Returns:
+        Whether the member type is supported.
+    """
+    member_type = stat.S_IFMT(member.external_attr >> 16)
+    if member.is_dir():
+        return member_type in {0, stat.S_IFDIR}
+    return member_type in {0, stat.S_IFREG}
 
 
 def verify_manifest(actual: set[str], expected: set[str], artifact: str) -> None:
@@ -265,7 +341,14 @@ def build_wheel_from_sdist(sdist: Path, workspace: Path) -> Path:
 
 
 def clean_environment() -> dict[str, str]:
-    """Return an environment without repository import overrides.
+    """Return a sanitized environment for installed-artifact checks.
+
+    The child inherits the host environment except for `PYTHONPATH`, which
+    could import repository code instead of the installed wheel;
+    `ACQUIRE_ARTIFACT_POSTGRES_URL` and `ACQUIRE_DATABASE_URL`, which could
+    select ambient or verifier-owned databases; and `ACQUIRE_STATS_DATA_ROOT`
+    plus `ACQUIRE_STATS_TEMP_ROOT`, which could redirect filesystem behavior.
+    Individual checks add back only the database setting they explicitly own.
 
     Returns:
         Sanitized child-process environment.

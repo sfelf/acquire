@@ -1,9 +1,13 @@
 import ast
 import importlib
 import re
+import runpy
+import stat
 import subprocess
 import sys
+import tarfile
 import tomllib
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -132,6 +136,84 @@ def test_distribution_verifier_checks_survive_python_optimization() -> None:
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_distribution_verifier_rejects_duplicate_wheel_members(
+    tmp_path: Path,
+) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    wheel = tmp_path / "duplicate.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("acquire/__init__.py", "first")
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("acquire/__init__.py", "second")
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="wheel contains duplicate member names",
+    ):
+        verifier["wheel_manifest"](wheel)
+
+
+def test_distribution_verifier_rejects_duplicate_sdist_members(
+    tmp_path: Path,
+) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    sdist = tmp_path / "duplicate.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        member = tarfile.TarInfo("acquire-0.1.0/README.md")
+        archive.addfile(member)
+        archive.addfile(member)
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="source distribution contains duplicate member names",
+    ):
+        verifier["sdist_manifest"](sdist)
+
+
+def test_distribution_verifier_rejects_sdist_links(tmp_path: Path) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    sdist = tmp_path / "link.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        member = tarfile.TarInfo("acquire-0.1.0/src/acquire/linked.py")
+        member.type = tarfile.SYMTYPE
+        member.linkname = "__init__.py"
+        archive.addfile(member)
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="source distribution contains an unsupported member type",
+    ):
+        verifier["sdist_manifest"](sdist)
+
+
+def test_distribution_verifier_rejects_wheel_links(tmp_path: Path) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    wheel = tmp_path / "link.whl"
+    member = zipfile.ZipInfo("acquire/linked.py")
+    member.create_system = 3
+    member.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(member, "__init__.py")
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="wheel contains an unsupported member type",
+    ):
+        verifier["wheel_manifest"](wheel)
 
 
 def test_server_compatibility_layout_is_removed() -> None:

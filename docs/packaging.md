@@ -38,18 +38,21 @@ documentation, lockfile, and development-tooling resources, so it does not
 promise that the complete repository integration suite can run from the
 archive alone.
 
-From a repository checkout, `scripts/verify_distribution.py` asserts both
+From a repository checkout, `scripts/verify_distribution.py` verifies both
 complete manifests, builds a wheel from the unpacked source distribution,
 independently installs the direct and rebuilt wheels in clean temporary
 environments outside the repository, and exercises both installed resource and
-command boundaries. CI runs this verification on every supported Python
-version. All release conditions use explicit failures rather than Python
-assertions, so optimization cannot disable checks or skip their side effects.
+command boundaries. Archive inspection rejects duplicate member names, links,
+and other special member types before comparing regular-file inventories. CI
+runs this verification on every supported Python version. All release
+conditions use explicit failures rather than Python assertions, so optimization
+cannot disable checks or skip their side effects.
 
 | Verification state | Result |
 | --- | --- |
 | Both manifests exactly match and both wheels install | Continue to command and resource smoke tests |
 | An artifact is empty, missing a required file, or contains an unexpected file | Fail before installation |
+| An archive repeats a member name or contains a link or special member | Fail before manifest comparison or extraction |
 | Build, rebuild, installation, or command execution is partial or fails | Fail without treating partial output as releasable |
 | A dependency index or external service is temporarily unavailable | Rerun the complete verifier after the environment recovers |
 | Artifact or command outcome is unknown | Fail closed; never infer readiness from incomplete evidence |
