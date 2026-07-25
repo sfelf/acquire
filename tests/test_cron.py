@@ -514,12 +514,26 @@ def test_update_records_updates_existing_record_without_session_add(cron_module)
     assert lookup.get_record(user) not in session.added
 
 
-def test_update_records_ignores_unsupported_modes(cron_module):
+@pytest.mark.parametrize(
+    ("mode", "player_count"),
+    (("Casual", 1), ("Singles", 5)),
+)
+def test_update_records_ignores_unsupported_modes(
+    cron_module,
+    mode,
+    player_count,
+):
     lookup = FakeLookup()
     logs2db = cron_module.Logs2DB(FakeSession(), lookup)
-    game = FakeGame(mode="Casual")
+    game = FakeGame(mode=mode)
 
-    logs2db.update_records(game, [FakeGamePlayer(FakeUser(1, "alice"), score=100)])
+    logs2db.update_records(
+        game,
+        [
+            FakeGamePlayer(FakeUser(index, f"player-{index}"), score=100 - index)
+            for index in range(player_count)
+        ],
+    )
 
     assert lookup.added_records == []
 
@@ -775,7 +789,7 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
     class FakeStatsGen:
         def __init__(self, session_arg, output_dir):
             assert session_arg is session
-            assert output_dir == cron_module.DEFAULT_STATS_TEMP_ROOT
+            assert output_dir == cron_module.SOURCE_STATS_TEMP_ROOT
 
         def output_ratings(self):
             stats_calls.append(("ratings",))
@@ -813,6 +827,13 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
     assert lookup.get_key_value("cron last log timestamp").value == "200"
     assert lookup.get_key_value("cron last offset").value == "7"
     assert session.flushed is True
+    assert stats_calls == [
+        ("ratings",),
+        ("user", 1, "alice", cron_module.get_empty_records()),
+    ]
+
+    cron_module.process_logs(write_stats_files=False)
+
     assert stats_calls == [
         ("ratings",),
         ("user", 1, "alice", cron_module.get_empty_records()),

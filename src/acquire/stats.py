@@ -20,9 +20,84 @@ import ujson
 from acquire import orm, util
 
 RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STATS_DATA_ROOT = REPOSITORY_ROOT / "client" / "stats" / "data"
-DEFAULT_STATS_TEMP_ROOT = REPOSITORY_ROOT / "server" / "stats_temp"
+SOURCE_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SOURCE_STATS_DATA_ROOT = SOURCE_PROJECT_ROOT / "client" / "stats" / "data"
+SOURCE_STATS_TEMP_ROOT = SOURCE_PROJECT_ROOT / "server" / "stats_temp"
+STATS_DATA_ROOT_ENV = "ACQUIRE_STATS_DATA_ROOT"
+STATS_TEMP_ROOT_ENV = "ACQUIRE_STATS_TEMP_ROOT"
+
+
+def _resolve_stats_root(
+    explicit_root: Path | None,
+    environment_name: str,
+    source_root: Path,
+    source_anchor: Path,
+) -> Path:
+    """Resolve one stats root from an argument, configuration, or source layout.
+
+    Args:
+        explicit_root: Caller-supplied root, when available.
+        environment_name: Environment variable containing an installed root.
+        source_root: Default root for editable and container source layouts.
+        source_anchor: Existing source directory that validates the fallback.
+
+    Returns:
+        Resolved filesystem root.
+
+    Raises:
+        RuntimeError: If neither configuration nor a source layout is available.
+        ValueError: If an environment-provided root is not absolute.
+    """
+    if explicit_root is not None:
+        return explicit_root
+
+    configured_root = os.environ.get(environment_name)
+    if configured_root:
+        root = Path(configured_root)
+        if not root.is_absolute():
+            raise ValueError(f"{environment_name} must be an absolute path")
+        return root
+
+    if source_anchor.is_dir():
+        return source_root
+
+    raise RuntimeError(
+        f"{environment_name} must be set when acquire is installed outside its source layout"
+    )
+
+
+def resolve_stats_roots(
+    stats_data_root: Path | None = None,
+    stats_temp_root: Path | None = None,
+) -> tuple[Path, Path]:
+    """Resolve publication and staging roots for stats generation.
+
+    Installed artifacts do not contain the generated client tree or a staging
+    directory. Operators must configure both absolute roots in that layout;
+    editable installs and the production source-layout image retain their
+    existing repository-relative locations.
+
+    Args:
+        stats_data_root: Explicit published-data root, if supplied by a caller.
+        stats_temp_root: Explicit staging root, if supplied by a caller.
+
+    Returns:
+        Published-data and staging roots, in that order.
+    """
+    return (
+        _resolve_stats_root(
+            stats_data_root,
+            STATS_DATA_ROOT_ENV,
+            SOURCE_STATS_DATA_ROOT,
+            SOURCE_PROJECT_ROOT / "client" / "stats",
+        ),
+        _resolve_stats_root(
+            stats_temp_root,
+            STATS_TEMP_ROOT_ENV,
+            SOURCE_STATS_TEMP_ROOT,
+            SOURCE_PROJECT_ROOT / "server",
+        ),
+    )
 
 
 class MutableKeyValue(Protocol):
@@ -529,8 +604,8 @@ record_key_to_record_index: dict[str, int] = {
 def process_logs(
     write_stats_files: bool,
     *,
-    stats_data_root: Path = DEFAULT_STATS_DATA_ROOT,
-    stats_temp_root: Path = DEFAULT_STATS_TEMP_ROOT,
+    stats_data_root: Path | None = None,
+    stats_temp_root: Path | None = None,
 ) -> None:
     """Import new log records and optionally publish browser stats data.
 
@@ -541,8 +616,10 @@ def process_logs(
 
     Args:
         write_stats_files: Whether to generate public stats files after import.
-        stats_data_root: Directory where generated stats JSON is published.
-        stats_temp_root: Directory where stats files are staged before publishing.
+        stats_data_root: Directory where generated stats JSON is published, or
+            `None` to resolve it from installed configuration or the source layout.
+        stats_temp_root: Directory where stats files are staged before publishing,
+            or `None` to resolve it from configuration or the source layout.
     """
     with orm.session_scope() as session:
         lookup = orm.Lookup(session)
@@ -574,6 +651,10 @@ def process_logs(
         session.flush()
 
         if write_stats_files and completed_game_users:
+            stats_data_root, stats_temp_root = resolve_stats_roots(
+                stats_data_root,
+                stats_temp_root,
+            )
             statsgen = StatsGen(session, stats_temp_root)
             statsgen.output_ratings()
             for user in completed_game_users:

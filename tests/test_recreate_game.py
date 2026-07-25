@@ -166,6 +166,7 @@ def test_recreate_some_games_recreates_top_five_unrecreated_snapshots(
     game_server = server.Server()
     recreate_game_without_database.orm.rows = [
         types.SimpleNamespace(log_time=1700000000, number=3),
+        types.SimpleNamespace(log_time=1700000, number=999),
     ]
     monkeypatch.setattr(
         recreate_game_without_database.os,

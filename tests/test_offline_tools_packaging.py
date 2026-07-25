@@ -55,6 +55,10 @@ def test_offline_tools_run_outside_repository_without_pythonpath(tmp_path: Path)
     """Verify installed tools import and execute from an unrelated directory."""
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
+    stats_data_root = tmp_path / "published"
+    stats_temp_root = tmp_path / "staging"
+    environment["ACQUIRE_STATS_DATA_ROOT"] = str(stats_data_root)
+    environment["ACQUIRE_STATS_TEMP_ROOT"] = str(stats_temp_root)
 
     result = subprocess.run(
         [
@@ -67,10 +71,9 @@ def test_offline_tools_run_outside_repository_without_pythonpath(tmp_path: Path)
                 "== {0: 1, 1: 2, 2: 2}; "
                 "assert stats.decode_database_text(b'alice') == 'alice'; "
                 "assert recreate_game.server is log_tools.server; "
-                f"assert stats.DEFAULT_STATS_DATA_ROOT == "
-                f"Path({str(REPOSITORY_ROOT / 'client' / 'stats' / 'data')!r}); "
-                f"assert stats.DEFAULT_STATS_TEMP_ROOT == "
-                f"Path({str(REPOSITORY_ROOT / 'server' / 'stats_temp')!r})"
+                "stats_data_root, stats_temp_root = stats.resolve_stats_roots(); "
+                f"assert stats_data_root == Path({str(stats_data_root)!r}); "
+                f"assert stats_temp_root == Path({str(stats_temp_root)!r})"
             ),
         ],
         cwd=tmp_path,
@@ -108,15 +111,77 @@ def test_legacy_offline_tool_wrappers_are_minimal_and_owned_by_issue_111(
     )
 
 
-def test_stats_paths_match_editable_and_container_layouts() -> None:
-    """Verify stats roots cover both supported source layouts."""
-    editable_module = REPOSITORY_ROOT / "src" / "acquire" / "stats.py"
-    container_module = Path("/app/src/acquire/stats.py")
+def test_stats_roots_default_to_validated_source_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify editable installs retain the repository publication paths."""
+    stats = importlib.import_module("acquire.stats")
+    monkeypatch.delenv(stats.STATS_DATA_ROOT_ENV, raising=False)
+    monkeypatch.delenv(stats.STATS_TEMP_ROOT_ENV, raising=False)
 
-    assert editable_module.parents[2] / "client" == REPOSITORY_ROOT / "client"
-    assert container_module.parents[2] / "client" == Path("/app/client")
-    assert editable_module.parents[2] / "server" == REPOSITORY_ROOT / "server"
-    assert container_module.parents[2] / "server" == Path("/app/server")
+    assert stats.resolve_stats_roots() == (
+        REPOSITORY_ROOT / "client" / "stats" / "data",
+        REPOSITORY_ROOT / "server" / "stats_temp",
+    )
+
+
+def test_stats_roots_require_configuration_outside_source_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify an installed artifact cannot write beneath its package location."""
+    stats = importlib.import_module("acquire.stats")
+    monkeypatch.delenv(stats.STATS_DATA_ROOT_ENV, raising=False)
+    monkeypatch.delenv(stats.STATS_TEMP_ROOT_ENV, raising=False)
+    monkeypatch.setattr(stats, "SOURCE_PROJECT_ROOT", tmp_path / "site-packages")
+
+    with pytest.raises(RuntimeError, match=stats.STATS_DATA_ROOT_ENV):
+        stats.resolve_stats_roots()
+
+
+@pytest.mark.parametrize("environment_name", ("STATS_DATA_ROOT_ENV", "STATS_TEMP_ROOT_ENV"))
+def test_stats_roots_reject_relative_environment_configuration(
+    environment_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify configured installed roots do not reintroduce cwd dependence."""
+    stats = importlib.import_module("acquire.stats")
+    variable_name = getattr(stats, environment_name)
+    monkeypatch.setenv(variable_name, "relative/path")
+
+    with pytest.raises(ValueError, match=f"{variable_name} must be an absolute path"):
+        stats.resolve_stats_roots()
+
+
+def test_explicit_stats_roots_override_environment_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify embedding callers can provide both roots directly."""
+    stats = importlib.import_module("acquire.stats")
+    monkeypatch.setenv(stats.STATS_DATA_ROOT_ENV, "invalid-relative-path")
+    monkeypatch.setenv(stats.STATS_TEMP_ROOT_ENV, "invalid-relative-path")
+    stats_data_root = tmp_path / "published"
+    stats_temp_root = tmp_path / "staging"
+
+    assert stats.resolve_stats_roots(stats_data_root, stats_temp_root) == (
+        stats_data_root,
+        stats_temp_root,
+    )
+
+
+def test_stats_roots_use_absolute_environment_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify installed artifacts resolve both configured roots."""
+    stats = importlib.import_module("acquire.stats")
+    stats_data_root = tmp_path / "published"
+    stats_temp_root = tmp_path / "staging"
+    monkeypatch.setenv(stats.STATS_DATA_ROOT_ENV, str(stats_data_root))
+    monkeypatch.setenv(stats.STATS_TEMP_ROOT_ENV, str(stats_temp_root))
+
+    assert stats.resolve_stats_roots() == (stats_data_root, stats_temp_root)
 
 
 @pytest.mark.parametrize(
