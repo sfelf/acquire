@@ -1,4 +1,14 @@
-"""Verify Acquire distribution manifests and clean installed commands."""
+"""Verify final Acquire release artifacts from a repository checkout.
+
+This fail-closed release boundary derives exact manifests from tracked source,
+builds the sdist and direct wheel, safely extracts the sdist to rebuild its
+wheel, and independently exercises both wheels in clean environments outside
+the checkout. Verification coordinates Git inventory, package installation,
+subprocess and loopback-network checks, optional fresh-database mutation, and
+the MySQL-extra boundary. It requires Git, uv, index access for declared
+dependencies, loopback sockets, and optionally disposable Postgres; any
+missing, partial, failed, or unknown result terminates the workflow.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +38,27 @@ COMMANDS = (
     "acquire-update-stats",
     "acquire-validate-migration-reports",
 )
+
+
+class VerificationError(RuntimeError):
+    """Raised when an artifact or installed boundary violates its contract."""
+
+
+def require(condition: bool, message: str) -> None:
+    """Fail verification explicitly when a required condition is false.
+
+    This helper intentionally avoids Python assertions so optimization cannot
+    disable release checks or skip expressions with verification side effects.
+
+    Args:
+        condition: Whether the required release condition holds.
+        message: Fixed diagnostic describing the violated contract.
+
+    Raises:
+        VerificationError: The condition is false.
+    """
+    if not condition:
+        raise VerificationError(message)
 
 
 def run(
@@ -116,16 +147,28 @@ def expected_wheel_manifest() -> set[str]:
 def sdist_manifest(path: Path) -> set[str]:
     """Read normalized file names from a gzipped source distribution.
 
+    Every regular member must be below the exact versioned
+    `acquire-0.1.0/` root before that prefix is removed. A member at the archive
+    root or below another directory fails verification rather than being
+    normalized into the expected manifest.
+
     Args:
         path: Source-distribution archive.
 
     Returns:
         File paths relative to the versioned archive root.
+
+    Raises:
+        VerificationError: A regular member is outside the required versioned
+            archive root.
     """
     prefix = f"{SDIST_ROOT}/"
     with tarfile.open(path, "r:gz") as archive:
         members = {member.name for member in archive.getmembers() if member.isfile()}
-    assert all(member.startswith(prefix) for member in members), members
+    require(
+        all(member.startswith(prefix) for member in members),
+        "source distribution contains a file outside its versioned root",
+    )
     return {member.removeprefix(prefix) for member in members}
 
 
@@ -142,7 +185,7 @@ def wheel_manifest(path: Path) -> set[str]:
         return {name for name in archive.namelist() if not name.endswith("/")}
 
 
-def assert_manifest(actual: set[str], expected: set[str], artifact: str) -> None:
+def verify_manifest(actual: set[str], expected: set[str], artifact: str) -> None:
     """Require an artifact manifest to match its complete policy inventory.
 
     Args:
@@ -151,12 +194,14 @@ def assert_manifest(actual: set[str], expected: set[str], artifact: str) -> None
         artifact: Human-readable artifact kind for failures.
 
     Raises:
-        AssertionError: Required files are missing or unexpected files exist.
+        VerificationError: Required files are missing or unexpected files
+            exist.
     """
     missing = sorted(expected - actual)
     unexpected = sorted(actual - expected)
-    assert not missing and not unexpected, (
-        f"{artifact} manifest mismatch; missing={missing!r}; unexpected={unexpected!r}"
+    require(
+        not missing and not unexpected,
+        f"{artifact} manifest mismatch; missing={missing!r}; unexpected={unexpected!r}",
     )
 
 
@@ -267,7 +312,7 @@ def smoke_command_help(command: Path, cwd: Path, environment: dict[str, str]) ->
         environment=environment,
         capture_output=True,
     )
-    assert result.stderr == "", (command.name, result.stderr)
+    require(result.stderr == "", f"{command.name} wrote unexpected help stderr")
 
 
 def verify_editable_commands(workspace: Path) -> None:
@@ -283,7 +328,8 @@ def verify_editable_commands(workspace: Path) -> None:
     environment = clean_environment()
     for command in COMMANDS:
         resolved = shutil.which(command)
-        assert resolved is not None, command
+        if resolved is None:
+            raise VerificationError(f"editable command is unavailable: {command}")
         smoke_command_help(Path(resolved), workspace, environment)
 
 
@@ -311,7 +357,7 @@ def fetch_until_ready(url: str, process: subprocess.Popen[str]) -> bytes:
     Poll for at most 15 seconds, using one-second request timeouts and
     100-millisecond retry intervals. An early child exit fails immediately;
     otherwise failure to receive a response before the deadline is a readiness
-    timeout. Both terminal states raise `AssertionError`.
+    timeout. Both terminal states raise `VerificationError`.
 
     Args:
         url: Asset URL to request.
@@ -321,20 +367,23 @@ def fetch_until_ready(url: str, process: subprocess.Popen[str]) -> bytes:
         Response body.
 
     Raises:
-        AssertionError: The child exits early or readiness times out.
+        VerificationError: The child exits early or readiness times out.
     """
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise AssertionError(f"installed gateway exited with {process.returncode}")
+            raise VerificationError(
+                f"installed gateway exited with {process.returncode}"
+            )
         try:
             with urllib.request.urlopen(url, timeout=1) as response:
                 body = response.read()
-                assert isinstance(body, bytes)
+                if not isinstance(body, bytes):
+                    raise VerificationError("installed gateway response type is invalid")
                 return body
         except (OSError, urllib.error.URLError):
             time.sleep(0.1)
-    raise AssertionError("installed gateway did not become ready")
+    raise VerificationError("installed gateway did not become ready")
 
 
 def verify_installed_gateway(
@@ -356,8 +405,8 @@ def verify_installed_gateway(
         environment: Sanitized child environment.
 
     Raises:
-        AssertionError: Asset serving, cleanup, or a fixed diagnostic differs
-            from the installed gateway contract.
+        VerificationError: Asset serving or a fixed diagnostic differs from
+            the installed gateway contract.
     """
     main_root = workspace / "main-assets"
     stats_root = workspace / "stats-assets"
@@ -385,11 +434,15 @@ def verify_installed_gateway(
         text=True,
     )
     try:
-        assert fetch_until_ready(f"http://127.0.0.1:{port}/", process) == (
-            b"clean-wheel-main\n"
+        main_body = fetch_until_ready(f"http://127.0.0.1:{port}/", process)
+        require(
+            main_body == b"clean-wheel-main\n",
+            "installed gateway returned the wrong main asset",
         )
-        assert fetch_until_ready(f"http://127.0.0.1:{port}/stats/", process) == (
-            b"clean-wheel-stats\n"
+        stats_body = fetch_until_ready(f"http://127.0.0.1:{port}/stats/", process)
+        require(
+            stats_body == b"clean-wheel-stats\n",
+            "installed gateway returned the wrong stats asset",
         )
     finally:
         process.terminate()
@@ -410,9 +463,12 @@ def verify_installed_gateway(
         cwd=workspace,
         environment=environment,
     )
-    assert missing.returncode == 1
-    assert missing.stdout == ""
-    assert missing.stderr == "error: HTTP server configuration failed\n"
+    require(missing.returncode == 1, "missing static roots returned the wrong status")
+    require(missing.stdout == "", "missing static roots wrote unexpected stdout")
+    require(
+        missing.stderr == "error: HTTP server configuration failed\n",
+        "missing static roots returned the wrong diagnostic",
+    )
 
     invalid = run_failure(
         [
@@ -425,9 +481,12 @@ def verify_installed_gateway(
         cwd=workspace,
         environment=environment,
     )
-    assert invalid.returncode == 2
-    assert invalid.stdout == ""
-    assert invalid.stderr == "error: invalid arguments\n"
+    require(invalid.returncode == 2, "relative static roots returned the wrong status")
+    require(invalid.stdout == "", "relative static roots wrote unexpected stdout")
+    require(
+        invalid.stderr == "error: invalid arguments\n",
+        "relative static roots returned the wrong diagnostic",
+    )
 
 
 def run_failure(
@@ -488,20 +547,27 @@ def verify_clean_wheel(
     )
     environment = clean_environment()
     inspection = (
-        "import importlib.metadata, importlib.util; "
-        "from importlib import resources; "
-        "from pathlib import Path; "
-        "import acquire; "
-        "root = resources.files('acquire'); "
-        "assert 'site-packages' in Path(acquire.__file__).parts; "
-        "assert root.joinpath('alembic.ini').is_file(); "
-        "assert root.joinpath('migrations', 'env.py').is_file(); "
-        "assert root.joinpath('migrations', 'script.py.mako').is_file(); "
-        "assert root.joinpath('migrations', 'versions', "
-        "'20260622_0001_baseline_mysql_schema.py').is_file(); "
-        "assert importlib.util.find_spec('mysql') is None; "
-        f"assert set(importlib.metadata.distribution('acquire').entry_points.names) "
-        f"== {set(COMMANDS)!r}"
+        "import importlib.metadata, importlib.util\n"
+        "from importlib import resources\n"
+        "from pathlib import Path\n"
+        "import acquire\n"
+        "root = resources.files('acquire')\n"
+        "if 'site-packages' not in Path(acquire.__file__).parts:\n"
+        "    raise RuntimeError('acquire did not import from site-packages')\n"
+        "if not root.joinpath('alembic.ini').is_file():\n"
+        "    raise RuntimeError('installed alembic.ini is unavailable')\n"
+        "if not root.joinpath('migrations', 'env.py').is_file():\n"
+        "    raise RuntimeError('installed migration environment is unavailable')\n"
+        "if not root.joinpath('migrations', 'script.py.mako').is_file():\n"
+        "    raise RuntimeError('installed migration template is unavailable')\n"
+        "if not root.joinpath('migrations', 'versions', "
+        "'20260622_0001_baseline_mysql_schema.py').is_file():\n"
+        "    raise RuntimeError('installed baseline revision is unavailable')\n"
+        "if importlib.util.find_spec('mysql') is not None:\n"
+        "    raise RuntimeError('normal wheel unexpectedly installed MySQL')\n"
+        f"if set(importlib.metadata.distribution('acquire').entry_points.names) "
+        f"!= {set(COMMANDS)!r}:\n"
+        "    raise RuntimeError('installed entry points differ from policy')\n"
     )
     run([str(python), "-c", inspection], cwd=workspace, environment=environment)
 
@@ -509,7 +575,7 @@ def verify_clean_wheel(
         command: command_path(environment_root, command) for command in COMMANDS
     }
     for command in installed_commands.values():
-        assert command.is_file(), command
+        require(command.is_file(), f"installed command is unavailable: {command.name}")
         smoke_command_help(command, workspace, environment)
 
     verify_installed_gateway(
@@ -521,10 +587,12 @@ def verify_clean_wheel(
     data_root = workspace / "published"
     temp_root = workspace / "staging"
     stats_check = (
-        "from pathlib import Path; "
-        "from acquire.stats import resolve_stats_roots; "
-        f"data = Path({str(data_root)!r}); temp = Path({str(temp_root)!r}); "
-        "assert resolve_stats_roots(data, temp) == (data, temp)"
+        "from pathlib import Path\n"
+        "from acquire.stats import resolve_stats_roots\n"
+        f"data = Path({str(data_root)!r})\n"
+        f"temp = Path({str(temp_root)!r})\n"
+        "if resolve_stats_roots(data, temp) != (data, temp):\n"
+        "    raise RuntimeError('installed stats roots differ from explicit roots')\n"
     )
     run([str(python), "-c", stats_check], cwd=workspace, environment=environment)
 
@@ -570,9 +638,12 @@ def verify_clean_wheel(
         cwd=workspace,
         environment=environment,
     )
-    assert importer.returncode == 2
-    assert importer.stdout == ""
-    assert importer.stderr == "error: invalid database connection arguments\n"
+    require(importer.returncode == 2, "invalid importer URLs returned the wrong status")
+    require(importer.stdout == "", "invalid importer URLs wrote unexpected stdout")
+    require(
+        importer.stderr == "error: invalid database connection arguments\n",
+        "invalid importer URLs returned the wrong diagnostic",
+    )
 
 
 def main() -> None:
@@ -593,10 +664,10 @@ def main() -> None:
         sdist, direct_wheel = build_artifacts(artifacts)
         expected_source = expected_sdist_manifest()
         expected_wheel = expected_wheel_manifest()
-        assert_manifest(sdist_manifest(sdist), expected_source, "source distribution")
-        assert_manifest(wheel_manifest(direct_wheel), expected_wheel, "direct wheel")
+        verify_manifest(sdist_manifest(sdist), expected_source, "source distribution")
+        verify_manifest(wheel_manifest(direct_wheel), expected_wheel, "direct wheel")
         rebuilt_wheel = build_wheel_from_sdist(sdist, workspace)
-        assert_manifest(wheel_manifest(rebuilt_wheel), expected_wheel, "rebuilt wheel")
+        verify_manifest(wheel_manifest(rebuilt_wheel), expected_wheel, "rebuilt wheel")
         verify_editable_commands(workspace)
         direct_workspace = workspace / "direct-wheel-install"
         direct_workspace.mkdir()

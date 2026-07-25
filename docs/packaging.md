@@ -43,7 +43,8 @@ complete manifests, builds a wheel from the unpacked source distribution,
 independently installs the direct and rebuilt wheels in clean temporary
 environments outside the repository, and exercises both installed resource and
 command boundaries. CI runs this verification on every supported Python
-version.
+version. All release conditions use explicit failures rather than Python
+assertions, so optimization cannot disable checks or skip their side effects.
 
 | Verification state | Result |
 | --- | --- |

@@ -1,5 +1,8 @@
 import ast
 import importlib
+import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -89,6 +92,46 @@ def test_uv_build_manifest_policy_matches_distribution_contract() -> None:
             "/uv.lock",
         ],
     }
+
+
+def test_distribution_verifier_checks_survive_python_optimization() -> None:
+    verifier_path = REPOSITORY_ROOT / "scripts" / "verify_distribution.py"
+    verifier_source = verifier_path.read_text()
+    verifier_tree = ast.parse(verifier_source)
+
+    assert not any(isinstance(node, ast.Assert) for node in ast.walk(verifier_tree))
+    assert not any(
+        re.search(r"\bassert\b", node.value)
+        for node in ast.walk(verifier_tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-O",
+            "-c",
+            (
+                "import runpy; "
+                f"namespace = runpy.run_path({str(verifier_path)!r}, "
+                "run_name='distribution_verifier_test'); "
+                "require = namespace['require']; "
+                "error = namespace['VerificationError']; "
+                "\ntry:\n"
+                "    require(False, 'optimization-safe')\n"
+                "except error as exc:\n"
+                "    if str(exc) != 'optimization-safe':\n"
+                "        raise\n"
+                "else:\n"
+                "    raise RuntimeError('verification check was disabled')\n"
+            ),
+        ],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_server_compatibility_layout_is_removed() -> None:
