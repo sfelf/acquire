@@ -1003,8 +1003,9 @@ def test_main_rejects_file_static_root_before_starting_server(
 
 
 class FakeListener:
-    def __init__(self, *, bind_error=None, close_error=None):
+    def __init__(self, *, bind_error=None, listen_error=None, close_error=None):
         self.bind_error = bind_error
+        self.listen_error = listen_error
         self.close_error = close_error
         self.calls = []
         self.closed = False
@@ -1016,6 +1017,11 @@ class FakeListener:
         self.calls.append(("bind", address))
         if self.bind_error is not None:
             raise self.bind_error
+
+    def listen(self, backlog):
+        self.calls.append(("listen", backlog))
+        if self.listen_error is not None:
+            raise self.listen_error
 
     def set_inheritable(self, inheritable):
         self.calls.append(("set_inheritable", inheritable))
@@ -1069,7 +1075,15 @@ def test_run_http_server_resolves_and_binds_every_hostname_address(
 
     class Server:
         def __init__(self, config):
-            calls.append(("server", config.app.title, config.host, config.port))
+            calls.append(
+                (
+                    "server",
+                    config.app.title,
+                    config.host,
+                    config.port,
+                    config.backlog,
+                )
+            )
 
         def run(self, *, sockets):
             calls.append(("run", sockets))
@@ -1080,7 +1094,12 @@ def test_run_http_server_resolves_and_binds_every_hostname_address(
     monkeypatch.setattr(
         http_server.uvicorn,
         "Config",
-        lambda app, host, port: SimpleNamespace(app=app, host=host, port=port),
+        lambda app, host, port, backlog: SimpleNamespace(
+            app=app,
+            host=host,
+            port=port,
+            backlog=backlog,
+        ),
     )
     monkeypatch.setattr(http_server.uvicorn, "Server", Server)
 
@@ -1114,7 +1133,13 @@ def test_run_http_server_resolves_and_binds_every_hostname_address(
             http_server.socket.SOCK_STREAM,
             6,
         ),
-        ("server", "Acquire Python HTTP", "localhost", 19001),
+        (
+            "server",
+            "Acquire Python HTTP",
+            "localhost",
+            19001,
+            http_server.LISTEN_BACKLOG,
+        ),
         ("run", bound_listeners),
     ]
     assert bound_listeners[0].calls == [
@@ -1131,6 +1156,7 @@ def test_run_http_server_resolves_and_binds_every_hostname_address(
             1,
         ),
         ("bind", ipv6_address),
+        ("listen", http_server.LISTEN_BACKLOG),
         ("set_inheritable", True),
         ("close",),
     ]
@@ -1142,6 +1168,7 @@ def test_run_http_server_resolves_and_binds_every_hostname_address(
             1,
         ),
         ("bind", ipv4_address),
+        ("listen", http_server.LISTEN_BACKLOG),
         ("set_inheritable", True),
         ("close",),
     ]
@@ -1336,6 +1363,46 @@ def test_create_listener_sockets_closes_partial_set_after_fatal_bind(monkeypatch
     assert str(exit_info.value) == ""
     assert bound.closed
     assert failed.closed
+
+
+def test_create_listener_sockets_sanitizes_listen_conflict(monkeypatch):
+    first = FakeListener()
+    conflicted = FakeListener(
+        listen_error=OSError(errno.EADDRINUSE, "private concurrent startup")
+    )
+    listeners = [first, conflicted]
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            ),
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.2", 19001),
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listeners.pop(0),
+    )
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("private-host", 19001)
+
+    assert str(exit_info.value) == ""
+    assert first.closed
+    assert conflicted.closed
 
 
 def test_create_listener_sockets_uses_wildcard_and_rejects_empty_results(

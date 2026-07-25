@@ -35,6 +35,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MAIN_STATIC_ROOT = PROJECT_ROOT / "client" / "main"
 DEFAULT_STATS_STATIC_ROOT = PROJECT_ROOT / "client" / "stats"
 MAX_REPORT_ERROR_BODY_BYTES = 100 * 1024
+LISTEN_BACKLOG = 2048
 SERVER_VERSION = "VERSION"
 SessionScope = Callable[[], AbstractContextManager[auth.AuthSession]]
 
@@ -44,27 +45,29 @@ class InvalidWebsocketPayloadError(ValueError):
 
 
 class HttpServerBindError(OSError):
-    """Signal that the configured listener address could not be bound."""
+    """Signal that the configured listener could not be started."""
 
 
 def create_listener_sockets(host: str, port: int) -> list[socket.socket]:
-    """Resolve and bind every usable listener address without unsafe logging.
+    """Resolve and start every usable listener without unsafe logging.
 
     This follows the standard asyncio server boundary: duplicate resolution
-    results are ignored, IPv4 and IPv6 candidates are bound separately, and an
-    unavailable address family is skipped. Any other partial failure closes the
-    complete listener set before raising a fixed command-boundary exception.
+    results are ignored, IPv4 and IPv6 candidates are bound separately, and
+    unavailable address families are skipped. Listening also starts inside
+    this boundary so concurrent startup conflicts cannot escape through
+    Uvicorn. Any other partial failure closes the complete listener set before
+    raising a fixed command-boundary exception.
 
     Args:
         host: Interface name, IP literal, or hostname to bind.
         port: TCP port to bind.
 
     Returns:
-        One or more bound listener sockets.
+        One or more bound and listening sockets.
 
     Raises:
-        HttpServerBindError: Resolution, socket setup, or binding cannot
-            produce a complete usable listener set.
+        HttpServerBindError: Resolution, socket setup, binding, or listening
+            cannot produce a complete usable listener set.
     """
     listeners: list[socket.socket] = []
     try:
@@ -92,6 +95,7 @@ def create_listener_sockets(host: str, port: int) -> list[socket.socket]:
                 if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
                     listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
                 listener.bind(address)
+                listener.listen(LISTEN_BACKLOG)
                 listener.set_inheritable(True)
             except OSError as exc:
                 with suppress(OSError):
@@ -751,9 +755,9 @@ def run_http_server(
 ) -> None:
     """Run the FastAPI HTTP server until interrupted.
 
-    All resolved listeners are bound before Uvicorn starts so address failures
-    can be projected through the command's fixed diagnostic without a
-    check-then-bind race or Uvicorn logging the private bind value.
+    All resolved sockets are bound and listening before Uvicorn starts so
+    address failures can be projected through the command's fixed diagnostic
+    without a check-then-bind race or Uvicorn logging the private bind value.
 
     Args:
         host: Interface to bind.
@@ -768,7 +772,7 @@ def run_http_server(
         log_output=log_output,
     )
     listeners = create_listener_sockets(host, port)
-    config = uvicorn.Config(app, host=host, port=port)
+    config = uvicorn.Config(app, host=host, port=port, backlog=LISTEN_BACKLOG)
     server = uvicorn.Server(config)
     try:
         server.run(sockets=listeners)
@@ -842,14 +846,16 @@ def validate_static_roots(main_static_root: Path, stats_static_root: Path) -> No
 def main(argv: list[str] | None = None) -> int:
     """Run the installed HTTP gateway command.
 
-    Static roots are validated before Uvicorn starts. Missing roots return a
-    fixed operational diagnostic that excludes private filesystem paths.
+    Static roots and listener setup are validated before Uvicorn starts.
+    Failures return a fixed operational diagnostic that excludes private
+    filesystem paths and listener addresses.
 
     Args:
         argv: Optional argument list. Uses `sys.argv` when omitted.
 
     Returns:
-        `0` after a normal server shutdown or `1` for invalid static roots.
+        `0` after a normal server shutdown or `1` for invalid static roots,
+        address resolution failures, or listener setup failures.
     """
     args = parse_args(argv)
     try:
