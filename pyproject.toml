@@ -67,6 +67,24 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 ]
 
+[tool.uv.build-backend]
+source-include = ["tests/**"]
+source-exclude = [
+    "/.coverage",
+    "/.env",
+    "/.github",
+    "/client",
+    "/coverage.json",
+    "/coverage.xml",
+    "/dist",
+    "/docs",
+    "/lib",
+    "/node_modules",
+    "/scripts",
+    "/stats_temp",
+    "/uv.lock",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

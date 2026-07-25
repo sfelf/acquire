@@ -65,39 +65,30 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
         "3.13",
         "3.14",
     ]
-    assert 'uv run python -c "import acquire"' in workflow_text
-    assert "uv build --no-sources" in workflow_text
-    assert 'artifacts=("$GITHUB_WORKSPACE"/dist/*)' in workflow_text
-    assert 'test "${#artifacts[@]}" -eq 2' in workflow_text
-    assert 'cd "$artifact_test_dir"' in workflow_text
-    assert 'uv venv --python "${{ matrix.python-version }}"' in workflow_text
-    assert 'uv pip install --python "$artifact_test_dir/.venv/bin/python"' in workflow_text
-    assert '"$artifact"' in workflow_text
-    assert '--no-deps "$artifact"' not in workflow_text
-    assert ".venv/bin/python -c" in workflow_text
-    assert "import acquire.auth" in workflow_text
-    assert "import acquire.enums" in workflow_text
-    assert "import acquire.enumsgen" in workflow_text
-    assert "import acquire.game_server" in workflow_text
-    assert "import acquire.http_server" in workflow_text
-    assert "import acquire.log_tools" in workflow_text
-    assert "import acquire.orm" in workflow_text
-    assert "import acquire.realtime" in workflow_text
-    assert "import acquire.recreate_game" in workflow_text
-    assert "import acquire.settings" in workflow_text
-    assert "import acquire.setup_database" in workflow_text
-    assert "import acquire.stats" in workflow_text
-    assert "import acquire.username_to_user_id" in workflow_text
-    assert "import acquire.util" in workflow_text
-    assert "find_spec('alembic') is not None" in workflow_text
-    assert "'site-packages' in Path(acquire.__file__).parts" in workflow_text
-    assert "find_spec('mysql') is None" in workflow_text
-    assert "package_root.joinpath('alembic.ini').is_file()" in workflow_text
-    assert "package_root.joinpath('migrations', 'env.py').is_file()" in workflow_text
-    assert ".venv/bin/acquire-setup-database --help" in workflow_text
-    assert ".venv/bin/acquire-generate-enums --help" in workflow_text
-    assert ".venv/bin/acquire-http-server --help" in workflow_text
-    assert ".venv/bin/acquire-update-stats --help" in workflow_text
+    assert "uv run python scripts/verify_distribution.py" in workflow_text
+
+
+def test_uv_build_manifest_policy_matches_distribution_contract() -> None:
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+
+    assert pyproject["tool"]["uv"]["build-backend"] == {
+        "source-include": ["tests/**"],
+        "source-exclude": [
+            "/.coverage",
+            "/.env",
+            "/.github",
+            "/client",
+            "/coverage.json",
+            "/coverage.xml",
+            "/dist",
+            "/docs",
+            "/lib",
+            "/node_modules",
+            "/scripts",
+            "/stats_temp",
+            "/uv.lock",
+        ],
+    }
 
 
 def test_server_compatibility_layout_is_removed() -> None:
@@ -170,6 +161,10 @@ def test_packaging_docs_define_completed_source_layout() -> None:
     assert "`acquire.*` imports" in packaging_notes
     assert "sole production Python source boundary" in normalized_packaging_notes
     assert "exactly six supported project scripts" in normalized_packaging_notes
-    assert "Issue [#127]" in normalized_packaging_notes
-    assert "artifact closeout" in normalized_plan_notes
+    assert "Distribution Artifact Contract" in packaging_notes
+    assert "inventory contract" in normalized_packaging_notes
+    assert "scripts/verify_distribution.py" in packaging_notes
+    assert "Packaging milestone is complete" in normalized_plan_notes
+    assert "Issue #127 defines and verifies" in normalized_plan_notes
     assert "docs/packaging.md" in agent_notes
+    assert "completed source-layout, distribution" in " ".join(agent_notes.split())

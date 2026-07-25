@@ -3,14 +3,14 @@
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
-- The Packaging milestone is active. Issues #103 through #111 are complete;
-  issue #127 is the remaining artifact-closeout gate.
+- The Packaging milestone is complete. Issues #103 through #111 and #127
+  delivered the final source layout, command surface, and artifact contract.
 
 This document preserves the agreed modernization record and documents the
 delivery order for active milestone work. GitHub issues remain the source of
 truth for issue scope and acceptance criteria.
 
-## Active Packaging Milestone
+## Completed Packaging Milestone
 
 Status: issues
 [#103](https://github.com/sfelf/acquire/issues/103),
@@ -21,8 +21,8 @@ Status: issues
 [#108](https://github.com/sfelf/acquire/issues/108),
 [#109](https://github.com/sfelf/acquire/issues/109),
 [#110](https://github.com/sfelf/acquire/issues/110), and
-[#111](https://github.com/sfelf/acquire/issues/111) are complete. Issue
-[#127](https://github.com/sfelf/acquire/issues/127) is next.
+[#111](https://github.com/sfelf/acquire/issues/111), and
+[#127](https://github.com/sfelf/acquire/issues/127) are complete.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.
@@ -37,11 +37,11 @@ and expose stable project scripts without changing application behavior.
   Psycopg are normal runtime dependencies, while `mysql-connector-python`
   remains isolated in the `mysql-migration` optional extra. Packaging work
   verifies this boundary rather than introducing it.
-- At artifact closeout in
+- After artifact closeout in
   [#127](https://github.com/sfelf/acquire/issues/127), wheels contain only
   installable runtime modules, declared package data, metadata, and entry
   points. They exclude tests and test fixtures.
-- At artifact closeout in #127, source distributions also contain the tracked
+- Source distributions also contain the tracked
   test suite and its required sanitized fixtures. They exclude generated
   assets, credentials, database dumps, sockets, caches, bytecode, coverage
   output, and temporary reports.
@@ -135,8 +135,13 @@ closes the issue when it merges.
 
 Issue #111 removes the complete transitional `server/` layout, path injection,
 direct-file commands, and compatibility-oriented tool configuration. The
-source-layout migration is complete; #127 owns only distribution artifact
-inventory and clean-install verification.
+source-layout migration is complete.
+
+Issue #127 defines and verifies the exact wheel and source-distribution
+inventories. CI rebuilds a wheel from the source distribution, installs it
+outside the repository, exercises all six commands and external static roots,
+checks the optional MySQL dependency boundary, and runs packaged Alembic setup
+against fresh Postgres.
 
 ### Issue Verification Gates
 

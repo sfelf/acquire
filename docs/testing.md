@@ -12,6 +12,9 @@ Testing is the main safety mechanism for the planned refactor.
   creation, the Alembic baseline, session behavior, auth persistence, runtime
   constraints, lookup persistence, and completed-game log import persistence.
 - End-to-end smoke tests cover the default Python gateway stack.
+- Distribution verification asserts exact wheel and source-distribution
+  manifests, rebuilds and clean-installs the wheel outside the checkout, and
+  exercises every installed command.
 
 ## Pytest Markers
 
@@ -61,6 +64,9 @@ set. Set `ACQUIRE_E2E_URL` only when you want the tests to use an existing
 local stack.
 
 GitHub Actions runs the fast Python matrix on Python 3.12, 3.13, and 3.14.
+Each matrix job runs `uv run python scripts/verify_distribution.py` against
+that interpreter. The source-distribution tests are inventory-only because the
+archive intentionally omits repository integration and deployment resources.
 The Docker-backed `postgres` and `e2e` marker suites run in a separate Python
 3.13 job so pull requests exercise persistence and the local Python gateway
 without tripling Docker build time across the full version matrix.

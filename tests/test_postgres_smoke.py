@@ -251,6 +251,42 @@ def test_installed_database_setup_command_runs_outside_repository_and_is_idempot
         assert version.scalar_one() == "20260622_0001"
 
 
+def test_clean_wheel_database_setup_uses_packaged_resources(
+    postgres_engine,
+    postgres_test_url,
+    empty_postgres_schema,
+    tmp_path,
+):
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment["ACQUIRE_ARTIFACT_POSTGRES_URL"] = postgres_test_url
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_DIR / "scripts" / "verify_distribution.py")],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert _app_table_names(postgres_engine) == {
+        "game",
+        "game_mode",
+        "game_player",
+        "game_state",
+        "key_value",
+        "rating",
+        "rating_type",
+        "record",
+        "user",
+    }
+    with postgres_engine.connect() as connection:
+        version = connection.execute(sqlalchemy.text("select version_num from alembic_version"))
+        assert version.scalar_one() == "20260622_0001"
+
+
 def test_alembic_baseline_preserves_mysql_numeric_contract_against_postgres(
     postgres_engine,
     empty_postgres_schema,
