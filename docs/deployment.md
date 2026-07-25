@@ -16,6 +16,13 @@ The Dockerfile uses a Node 22 build stage for `npm run build:client`, then
 copies the generated CSS, enum JavaScript, and browser bundle into a slim Python
 runtime stage. Generated client assets stay untracked in git.
 
+The standalone Python wheel is a runtime-code artifact, not a complete browser
+deployment: it deliberately excludes generated client assets. Deployments that
+install the wheel directly must build or supply separate main and stats asset
+trees, then pass their absolute paths through `--main-static-root` and
+`--stats-static-root`. See `docs/packaging.md` for the exact distribution
+inventory and clean-install verification command.
+
 ## Configure The Database
 
 Production deployments should provide an explicit Postgres URL:

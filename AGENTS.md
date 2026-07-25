@@ -3,8 +3,7 @@
 The six-phase modernization plan is complete. Tooling, documentation, CI,
 Docker-backed development, pytest coverage, Python backend consolidation,
 Postgres migration support, and production image publishing are in place. New
-work should follow GitHub issues and milestones, beginning with packaging and
-import restructuring before the major refactor.
+work should follow GitHub issues and milestones for the major refactor.
 
 ## Current Architecture
 
@@ -18,8 +17,8 @@ import restructuring before the major refactor.
   maintenance tooling.
 - `src/acquire/` is the sole production Python source boundary; use installed
   project commands or `acquire.*` imports.
-- `docs/packaging.md` defines the canonical source-layout and installed-command
-  contract for the active Packaging milestone.
+- `docs/packaging.md` defines the completed source-layout, distribution, and
+  installed-command contract.
 - Postgres is the only application runtime database. MySQL support is limited
   to `acquire.migration`, installed with the `mysql-migration` optional uv extra
   for importing existing backups.
@@ -111,8 +110,7 @@ uv run pre-commit run --all-files
 
 ## Current Priorities
 
-1. Complete Packaging artifact closeout in issue #127 from the canonical
-   `src/acquire/` layout.
+1. Follow GitHub issues and milestones for the next major-refactor work.
 2. Keep characterization, integration, database, golden, and e2e tests green
    while preparing the major refactor.
 3. Preserve the optional MySQL-backup import path until existing backups no

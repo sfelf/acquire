@@ -14,12 +14,55 @@ The project uses `uv_build` with the conventional `src/acquire/` layout:
 uv sync --group dev
 uv run python -c "import acquire"
 uv build --no-sources
+uv run python scripts/verify_distribution.py
 ```
 
 Ruff, mypy, pytest coverage, pre-commit, Docker, Compose, and CI all measure or
 install this canonical package boundary. Generated client assets remain
 external build outputs under `client/`; they are not Python source or package
 data.
+
+## Distribution Artifact Contract
+
+The wheel contains only the tracked `src/acquire/` runtime package, its
+Alembic configuration and migrations, project metadata, and the six entry
+points below. It contains no tests, fixtures, client assets, repository
+tooling, credentials, database dumps, sockets, caches, bytecode, coverage
+output, or temporary reports.
+
+The source distribution contains `pyproject.toml`, `README.md`, the tracked
+`src/acquire/` package, the tracked `tests/` source, and the sanitized
+`tests/fixtures/game_logs/` fixtures. Those tests are an inventory contract:
+the source distribution intentionally omits repository CI, Docker, client,
+documentation, lockfile, and development-tooling resources, so it does not
+promise that the complete repository integration suite can run from the
+archive alone.
+
+From a repository checkout, `scripts/verify_distribution.py` verifies both
+complete manifests, builds a wheel from the unpacked source distribution,
+independently installs the direct and rebuilt wheels in clean temporary
+environments outside the repository, and exercises both installed resource and
+command boundaries. Archive inspection rejects duplicate member names, links,
+and other special member types before comparing regular-file inventories. CI
+runs this verification on every supported Python version. All release
+conditions use explicit failures rather than Python assertions, so optimization
+cannot disable checks or skip their side effects.
+
+Clean installed-command checks retain unrelated operational host settings such
+as `PATH`, but remove `PYTHONPATH`, `ACQUIRE_ARTIFACT_POSTGRES_URL`,
+`ACQUIRE_DATABASE_URL`, both `ACQUIRE_STATS_*_ROOT` settings, and all five
+`POSTGRES_*` connection fallbacks. This prevents ambient checkout, database,
+credential, and stats-root configuration from affecting artifact verification;
+checks add back only an explicit database URL they own.
+
+| Verification state | Result |
+| --- | --- |
+| Both manifests exactly match and both wheels install | Continue to command and resource smoke tests |
+| An artifact is empty, missing a required file, or contains an unexpected file | Fail before installation |
+| An archive repeats a member name or contains a link or special member | Fail before manifest comparison or extraction |
+| Build, rebuild, installation, or command execution is partial or fails | Fail without treating partial output as releasable |
+| A dependency index or external service is temporarily unavailable | Rerun the complete verifier after the environment recovers |
+| Artifact or command outcome is unknown | Fail closed; never infer readiness from incomplete evidence |
 
 ## Supported Project Commands
 
@@ -69,11 +112,18 @@ uv run --extra mysql-migration acquire-migrate-mysql-to-postgres --help
 uv run acquire-validate-migration-reports --help
 ```
 
-## Remaining Artifact Closeout
+## Clean-Install Verification
 
-Issue [#127](https://github.com/sfelf/acquire/issues/127) is the remaining
-Packaging milestone gate. It owns final wheel and source-distribution
-manifests, building a wheel from the unpacked source distribution, clean
-installation outside the repository, packaged Alembic-resource verification,
-and smoke tests for all six commands. It does not restore compatibility paths
-or expand the supported command inventory.
+The verifier confirms every command resolves from both the editable
+development install and the rebuilt clean wheel. For the installed gateway it
+serves representative files from temporary absolute main and stats roots, and
+checks that missing or relative roots fail with fixed diagnostics. It also
+confirms explicit stats publication and staging roots have no source-layout
+dependency.
+
+The Postgres marker layer runs the same clean-wheel verifier against a fresh
+database and calls `acquire-setup-database` twice. This proves the installed
+command locates its packaged Alembic resources, upgrades without a repository
+checkout, and remains idempotent. The verifier first confirms a normal wheel
+install has no MySQL connector, then installs the `mysql-migration` extra and
+imports the retained backup importer with `mysql.connector` available.

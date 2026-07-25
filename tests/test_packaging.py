@@ -1,6 +1,13 @@
 import ast
 import importlib
+import re
+import runpy
+import stat
+import subprocess
+import sys
+import tarfile
 import tomllib
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -65,39 +72,178 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
         "3.13",
         "3.14",
     ]
-    assert 'uv run python -c "import acquire"' in workflow_text
-    assert "uv build --no-sources" in workflow_text
-    assert 'artifacts=("$GITHUB_WORKSPACE"/dist/*)' in workflow_text
-    assert 'test "${#artifacts[@]}" -eq 2' in workflow_text
-    assert 'cd "$artifact_test_dir"' in workflow_text
-    assert 'uv venv --python "${{ matrix.python-version }}"' in workflow_text
-    assert 'uv pip install --python "$artifact_test_dir/.venv/bin/python"' in workflow_text
-    assert '"$artifact"' in workflow_text
-    assert '--no-deps "$artifact"' not in workflow_text
-    assert ".venv/bin/python -c" in workflow_text
-    assert "import acquire.auth" in workflow_text
-    assert "import acquire.enums" in workflow_text
-    assert "import acquire.enumsgen" in workflow_text
-    assert "import acquire.game_server" in workflow_text
-    assert "import acquire.http_server" in workflow_text
-    assert "import acquire.log_tools" in workflow_text
-    assert "import acquire.orm" in workflow_text
-    assert "import acquire.realtime" in workflow_text
-    assert "import acquire.recreate_game" in workflow_text
-    assert "import acquire.settings" in workflow_text
-    assert "import acquire.setup_database" in workflow_text
-    assert "import acquire.stats" in workflow_text
-    assert "import acquire.username_to_user_id" in workflow_text
-    assert "import acquire.util" in workflow_text
-    assert "find_spec('alembic') is not None" in workflow_text
-    assert "'site-packages' in Path(acquire.__file__).parts" in workflow_text
-    assert "find_spec('mysql') is None" in workflow_text
-    assert "package_root.joinpath('alembic.ini').is_file()" in workflow_text
-    assert "package_root.joinpath('migrations', 'env.py').is_file()" in workflow_text
-    assert ".venv/bin/acquire-setup-database --help" in workflow_text
-    assert ".venv/bin/acquire-generate-enums --help" in workflow_text
-    assert ".venv/bin/acquire-http-server --help" in workflow_text
-    assert ".venv/bin/acquire-update-stats --help" in workflow_text
+    assert "uv run python scripts/verify_distribution.py" in workflow_text
+
+
+def test_uv_build_manifest_policy_matches_distribution_contract() -> None:
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+
+    assert pyproject["tool"]["uv"]["build-backend"] == {
+        "source-include": ["tests/**"],
+        "source-exclude": [
+            "/.coverage",
+            "/.env",
+            "/.github",
+            "/client",
+            "/coverage.json",
+            "/coverage.xml",
+            "/dist",
+            "/docs",
+            "/lib",
+            "/node_modules",
+            "/scripts",
+            "/stats_temp",
+            "/uv.lock",
+        ],
+    }
+
+
+def test_distribution_verifier_checks_survive_python_optimization() -> None:
+    verifier_path = REPOSITORY_ROOT / "scripts" / "verify_distribution.py"
+    verifier_source = verifier_path.read_text()
+    verifier_tree = ast.parse(verifier_source)
+
+    assert not any(isinstance(node, ast.Assert) for node in ast.walk(verifier_tree))
+    assert not any(
+        re.search(r"\bassert\b", node.value)
+        for node in ast.walk(verifier_tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-O",
+            "-c",
+            (
+                "import runpy; "
+                f"namespace = runpy.run_path({str(verifier_path)!r}, "
+                "run_name='distribution_verifier_test'); "
+                "require = namespace['require']; "
+                "error = namespace['VerificationError']; "
+                "\ntry:\n"
+                "    require(False, 'optimization-safe')\n"
+                "except error as exc:\n"
+                "    if str(exc) != 'optimization-safe':\n"
+                "        raise\n"
+                "else:\n"
+                "    raise RuntimeError('verification check was disabled')\n"
+            ),
+        ],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_distribution_verifier_rejects_duplicate_wheel_members(
+    tmp_path: Path,
+) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    wheel = tmp_path / "duplicate.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("acquire/__init__.py", "first")
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("acquire/__init__.py", "second")
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="wheel contains duplicate member names",
+    ):
+        verifier["wheel_manifest"](wheel)
+
+
+def test_distribution_verifier_rejects_duplicate_sdist_members(
+    tmp_path: Path,
+) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    sdist = tmp_path / "duplicate.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        member = tarfile.TarInfo("acquire-0.1.0/README.md")
+        archive.addfile(member)
+        archive.addfile(member)
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="source distribution contains duplicate member names",
+    ):
+        verifier["sdist_manifest"](sdist)
+
+
+def test_distribution_verifier_rejects_sdist_links(tmp_path: Path) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    sdist = tmp_path / "link.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        member = tarfile.TarInfo("acquire-0.1.0/src/acquire/linked.py")
+        member.type = tarfile.SYMTYPE
+        member.linkname = "__init__.py"
+        archive.addfile(member)
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="source distribution contains an unsupported member type",
+    ):
+        verifier["sdist_manifest"](sdist)
+
+
+def test_distribution_verifier_rejects_wheel_links(tmp_path: Path) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    wheel = tmp_path / "link.whl"
+    member = zipfile.ZipInfo("acquire/linked.py")
+    member.create_system = 3
+    member.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(member, "__init__.py")
+
+    with pytest.raises(
+        verifier["VerificationError"],
+        match="wheel contains an unsupported member type",
+    ):
+        verifier["wheel_manifest"](wheel)
+
+
+def test_distribution_verifier_removes_all_command_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    sanitized_variables = {
+        "PYTHONPATH",
+        "ACQUIRE_ARTIFACT_POSTGRES_URL",
+        "ACQUIRE_DATABASE_URL",
+        "ACQUIRE_STATS_DATA_ROOT",
+        "ACQUIRE_STATS_TEMP_ROOT",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+    }
+    assert set(verifier["SANITIZED_ENVIRONMENT_VARIABLES"]) == sanitized_variables
+    for variable in sanitized_variables:
+        monkeypatch.setenv(variable, "private-secret")
+    monkeypatch.setenv("ACQUIRE_VERIFY_SENTINEL", "preserved")
+
+    environment = verifier["clean_environment"]()
+
+    assert sanitized_variables.isdisjoint(environment)
+    assert environment["ACQUIRE_VERIFY_SENTINEL"] == "preserved"
 
 
 def test_server_compatibility_layout_is_removed() -> None:
@@ -170,6 +316,10 @@ def test_packaging_docs_define_completed_source_layout() -> None:
     assert "`acquire.*` imports" in packaging_notes
     assert "sole production Python source boundary" in normalized_packaging_notes
     assert "exactly six supported project scripts" in normalized_packaging_notes
-    assert "Issue [#127]" in normalized_packaging_notes
-    assert "artifact closeout" in normalized_plan_notes
+    assert "Distribution Artifact Contract" in packaging_notes
+    assert "inventory contract" in normalized_packaging_notes
+    assert "scripts/verify_distribution.py" in packaging_notes
+    assert "Packaging milestone is complete" in normalized_plan_notes
+    assert "Issue #127 defines and verifies" in normalized_plan_notes
     assert "docs/packaging.md" in agent_notes
+    assert "completed source-layout, distribution" in " ".join(agent_notes.split())

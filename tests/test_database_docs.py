@@ -17,23 +17,25 @@ def test_readme_identifies_independent_fork_and_hosted_original() -> None:
     assert "not the source currently deployed at\n`acquire.tlstyer.com`" in readme
 
 
-def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
+def test_plans_preserve_completed_modernization_and_packaging_status() -> None:
     plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
 
     assert plans.startswith("# Modernization And Packaging Plan\n")
     assert "The six-phase modernization plan is complete as of July 23, 2026." in plans
-    assert "The Packaging milestone is active." in plans
+    assert "The Packaging milestone is complete." in plans
     assert "[#103](https://github.com/sfelf/acquire/issues/103)," in plans
     assert "[#104](https://github.com/sfelf/acquire/issues/104)," in plans
-    assert "[#111](https://github.com/sfelf/acquire/issues/111) are complete" in plans
-    assert "[#127](https://github.com/sfelf/acquire/issues/127) is next" in plans
+    assert "[#111](https://github.com/sfelf/acquire/issues/111), and" in plans
+    assert "[#127](https://github.com/sfelf/acquire/issues/127) are complete" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
     assert "Issue #110 is also delivered as three stand-alone PR slices" in plans
     assert "GitHub issues remain the source of\ntruth for issue scope" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
     assert "The six-phase modernization plan is complete." in agent_notes
-    assert "Complete Packaging artifact closeout in issue #127" in agent_notes
+    assert "Follow GitHub issues and milestones for the next major-refactor work" in (
+        agent_notes
+    )
     assert "GitHub issues and milestones\nremain authoritative" in agent_notes
     assert "update `PLANS.md` when an approved issue change" in agent_notes
     assert "Keep linting and type checking permissive" not in agent_notes

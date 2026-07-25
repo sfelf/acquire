@@ -63,6 +63,18 @@ service URL environment variables are not set. Use
 those tests at already-running services. Integration tests skip when the local
 environment blocks socket binding.
 
+From a repository checkout, verify the exact wheel and source-distribution
+manifests, rebuild a wheel from the source distribution, and exercise all six
+commands from clean installs outside the repository with:
+
+```bash
+uv run python scripts/verify_distribution.py
+```
+
+The Python wheel intentionally excludes generated browser assets. Deployments
+must build those assets separately and pass explicit main and stats roots to
+`acquire-http-server`.
+
 ## Local Docker Development
 
 Docker Compose support is available for local Postgres and the Python FastAPI gateway:
