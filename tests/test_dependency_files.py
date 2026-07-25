@@ -32,7 +32,7 @@ def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
     assert "uv run --isolated --frozen --no-dev python -" in workflow
-    assert "import cron" in workflow
+    assert "import acquire.stats" in workflow
     assert "import acquire.http_server" in workflow
     assert 'assert importlib.util.find_spec("mysql") is None' in workflow
     assert (

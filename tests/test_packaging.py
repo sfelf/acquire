@@ -52,10 +52,13 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert "import acquire.enums" in workflow_text
     assert "import acquire.game_server" in workflow_text
     assert "import acquire.http_server" in workflow_text
+    assert "import acquire.log_tools" in workflow_text
     assert "import acquire.orm" in workflow_text
     assert "import acquire.realtime" in workflow_text
+    assert "import acquire.recreate_game" in workflow_text
     assert "import acquire.settings" in workflow_text
     assert "import acquire.setup_database" in workflow_text
+    assert "import acquire.stats" in workflow_text
     assert "import acquire.username_to_user_id" in workflow_text
     assert "import acquire.util" in workflow_text
     assert "find_spec('alembic') is None" in workflow_text

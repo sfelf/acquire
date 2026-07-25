@@ -9,8 +9,11 @@ tooling.
   gateway, Python-migrated HTTP routes, and static asset serving.
 - `acquire.realtime` owns SockJS-compatible WebSocket adaptation.
 - `acquire.game_server` owns game state and the gameplay protocol.
+- `acquire.log_tools` owns historical parsing, replay, and manual reports;
+  `acquire.recreate_game` restores serialized in-progress games; and
+  `acquire.stats` owns database log ingestion, ratings, and published stats.
 - Files with the former names under `server/` are temporary compatibility
-  wrappers for existing startup commands and unmigrated offline tooling.
+  wrappers for existing direct-file commands.
 - Postgres is the application runtime database. MySQL support is limited to the
   optional backup-import tool.
 - Client assets are built from files under `client/` using npm scripts or the
@@ -41,7 +44,7 @@ path now routes browser and e2e traffic through the FastAPI gateway.
 | Route or listener | Current owner | Current behavior | Python migration target | Coverage |
 | --- | --- | --- | --- | --- |
 | `GET /` and generated `client/main` assets | FastAPI app | Serves the generated `client/main` tree, including `index.html`, `/css/main.css`, `/js/main.js`, supporting JavaScript modules, source maps, and `/static/*` media. | Keep FastAPI as the Python local runtime static route. | `tests/test_python_http_server.py` covers the FastAPI route; Docker-backed e2e covers the Python gateway default. |
-| `GET /stats/`, generated `client/stats` assets, and cron-generated stats data | FastAPI app | Serves the generated `client/stats` tree, including `index.html`, `/stats/css/stats.css`, `/stats/js/stats.js`, and JSON published by cron beneath `/stats/data/`. | Keep FastAPI as the Python local runtime stats route and publish cron output into the shared `client/stats/data` tree. | `tests/test_python_http_server.py` covers static assets and generated data; Docker-backed e2e covers the Python gateway default. |
+| `GET /stats/`, generated `client/stats` assets, and maintenance-generated stats data | FastAPI app | Serves the generated `client/stats` tree, including `index.html`, `/stats/css/stats.css`, `/stats/js/stats.js`, and JSON published by `acquire.stats` beneath `/stats/data/`. | Keep FastAPI as the Python local runtime stats route and publish maintenance output into the shared `client/stats/data` tree. | `tests/test_python_http_server.py` covers static assets and generated data; Docker-backed e2e covers the Python gateway default. |
 | `POST /server/report-error` | FastAPI app | Accepts form-encoded `message` and `trace`, validates the request size, normalizes embedded newlines for logging, writes request headers to stdout, and returns an empty `200` response. | Keep this route in FastAPI. | `tests/test_python_http_server.py` covers FastAPI behavior; `tests/test_local_ui_e2e.py::test_python_gateway_accepts_report_error_posts` covers the default gateway. |
 | `POST /server/set-password` | FastAPI app | Form-decodes `version`, `username`, and `password` with Pydantic payload models, then delegates legacy normalization and error-code decisions to `acquire.auth`. Malformed, uppercase, or non-64-character password hashes return `Errors.GenericError`, not a password-specific validation error. The response has a JSON content type and a stringified error id or `null`. | Keep password setup and user persistence in Python. | `tests/test_auth.py`, `tests/test_python_http_server.py`, and `tests/test_postgres_persistence.py` cover success, whitespace normalization, existing password, invalid username, invalid password hash returning `Errors.GenericError`, version mismatch, database error behavior, and real ORM persistence. |
 

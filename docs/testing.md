@@ -6,7 +6,8 @@ Testing is the main safety mechanism for the planned refactor.
 
 - Unit tests cover pure Python helpers and game-rule behavior.
 - Protocol tests cover the Python server input and output message format.
-- Golden replay tests use historical game logs to protect current gameplay behavior.
+- Golden replay tests exercise `acquire.log_tools` with historical game logs to
+  protect current gameplay behavior.
 - Postgres marker tests cover the Docker-backed Postgres fixture, ORM metadata
   creation, the Alembic baseline, session behavior, auth persistence, runtime
   constraints, lookup persistence, and completed-game log import persistence.

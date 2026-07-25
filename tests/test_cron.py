@@ -29,7 +29,7 @@ class FakeRecord:
 
 @pytest.fixture
 def cron_module(monkeypatch):
-    monkeypatch.delitem(sys.modules, "cron", raising=False)
+    monkeypatch.delitem(sys.modules, "acquire.stats", raising=False)
 
     fake_orm = types.ModuleType("acquire.orm")
     fake_orm.Rating = FakeRating
@@ -74,9 +74,9 @@ def cron_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "trueskill", fake_trueskill)
 
     try:
-        yield importlib.import_module("cron")
+        yield importlib.import_module("acquire.stats")
     finally:
-        sys.modules.pop("cron", None)
+        sys.modules.pop("acquire.stats", None)
 
 
 class FakeUser:
@@ -514,12 +514,26 @@ def test_update_records_updates_existing_record_without_session_add(cron_module)
     assert lookup.get_record(user) not in session.added
 
 
-def test_update_records_ignores_unsupported_modes(cron_module):
+@pytest.mark.parametrize(
+    ("mode", "player_count"),
+    (("Casual", 1), ("Singles", 5)),
+)
+def test_update_records_ignores_unsupported_modes(
+    cron_module,
+    mode,
+    player_count,
+):
     lookup = FakeLookup()
     logs2db = cron_module.Logs2DB(FakeSession(), lookup)
-    game = FakeGame(mode="Casual")
+    game = FakeGame(mode=mode)
 
-    logs2db.update_records(game, [FakeGamePlayer(FakeUser(1, "alice"), score=100)])
+    logs2db.update_records(
+        game,
+        [
+            FakeGamePlayer(FakeUser(index, f"player-{index}"), score=100 - index)
+            for index in range(player_count)
+        ],
+    )
 
     assert lookup.added_records == []
 
@@ -775,7 +789,7 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
     class FakeStatsGen:
         def __init__(self, session_arg, output_dir):
             assert session_arg is session
-            assert output_dir == "stats_temp"
+            assert output_dir == cron_module.SOURCE_STATS_TEMP_ROOT
 
         def output_ratings(self):
             stats_calls.append(("ratings",))
@@ -818,8 +832,21 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
         ("user", 1, "alice", cron_module.get_empty_records()),
     ]
 
+    cron_module.process_logs(write_stats_files=False)
 
-def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch, tmp_path):
+    assert stats_calls == [
+        ("ratings",),
+        ("user", 1, "alice", cron_module.get_empty_records()),
+    ]
+
+
+@pytest.mark.parametrize("staging_root_exists", (False, True))
+def test_process_logs_publishes_compressed_stats_files(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+    staging_root_exists,
+):
     session = FakeSession()
     lookup = FakeLookup()
     user = FakeUser(1, "alice")
@@ -828,6 +855,9 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
         encoded=ujson.encode([[1, 0], [0, 0, 0], [0, 0, 0, 0], [0, 0]]),
     )
     subprocess_calls = []
+    stats_temp_root = tmp_path / "server" / "stats_temp"
+    if staging_root_exists:
+        stats_temp_root.mkdir(parents=True)
 
     class FakeLogs2DB:
         def __init__(self, session_arg, lookup_arg):
@@ -840,7 +870,9 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
     class FakeStatsGen:
         def __init__(self, session_arg, output_dir):
             assert session_arg is session
-            assert output_dir == "stats_temp"
+            assert output_dir == stats_temp_root
+            assert stats_temp_root.is_dir()
+            assert (stats_temp_root / "users").is_dir()
 
         def output_ratings(self):
             return None
@@ -870,8 +902,10 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
         cron_module.glob,
         "glob",
         lambda pattern: {
-            "stats_temp/*.json": ["stats_temp/ratings.json"],
-            "stats_temp/users/*.json": ["stats_temp/users/alice.json"],
+            str(stats_temp_root / "*.json"): [str(stats_temp_root / "ratings.json")],
+            str(stats_temp_root / "users" / "*.json"): [
+                str(stats_temp_root / "users" / "alice.json")
+            ],
         }[pattern],
     )
     monkeypatch.setattr(
@@ -881,34 +915,40 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
     )
 
     stats_data_root = tmp_path / "client" / "stats" / "data"
-    cron_module.process_logs(
-        write_stats_files=True,
-        stats_data_root=stats_data_root,
-    )
+    monkeypatch.setenv(cron_module.STATS_DATA_ROOT_ENV, str(stats_data_root))
+    monkeypatch.setenv(cron_module.STATS_TEMP_ROOT_ENV, str(stats_temp_root))
 
+    cron_module.process_logs(write_stats_files=True)
+
+    assert stats_temp_root.is_dir()
+    assert (stats_temp_root / "users").is_dir()
     assert stats_data_root.is_dir()
     assert (stats_data_root / "users").is_dir()
     assert subprocess_calls == [
-        ["zopfli", "stats_temp/ratings.json", "stats_temp/users/alice.json"],
+        [
+            "zopfli",
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "users" / "alice.json"),
+        ],
         [
             "touch",
             "-r",
-            "stats_temp/ratings.json",
-            "stats_temp/ratings.json",
-            "stats_temp/ratings.json.gz",
-            "stats_temp/users/alice.json",
-            "stats_temp/users/alice.json.gz",
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "ratings.json") + ".gz",
+            str(stats_temp_root / "users" / "alice.json"),
+            str(stats_temp_root / "users" / "alice.json") + ".gz",
         ],
         [
             "mv",
-            "stats_temp/ratings.json",
-            "stats_temp/ratings.json.gz",
+            str(stats_temp_root / "ratings.json"),
+            str(stats_temp_root / "ratings.json") + ".gz",
             str(stats_data_root),
         ],
         [
             "mv",
-            "stats_temp/users/alice.json",
-            "stats_temp/users/alice.json.gz",
+            str(stats_temp_root / "users" / "alice.json"),
+            str(stats_temp_root / "users" / "alice.json") + ".gz",
             str(stats_data_root / "users"),
         ],
     ]
