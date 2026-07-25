@@ -85,6 +85,12 @@ operators configure their absolute locations with `ACQUIRE_STATS_DATA_ROOT`
 and `ACQUIRE_STATS_TEMP_ROOT`; relative configuration is rejected to prevent
 working-directory-dependent writes. Stats generation creates missing staging
 and per-user directories so newly attached empty volumes are supported.
+Issue #110 exposes that continuous workflow as `acquire-update-stats`. The
+command accepts explicit absolute `--stats-data-root` and
+`--stats-temp-root` values, falls back to the corresponding environment
+variables or validated source layout, validates configuration before database
+initialization, and retries operational failures at the legacy interval with a
+fixed diagnostic.
 
 Issue #108 moves the retained MySQL backup importer and sanitized report
 validator under `acquire.migration`. The migration package owns separate,
@@ -102,9 +108,45 @@ The compatibility wrappers remain until issue #111 removes the transitional
 layout.
 
 Issue #110 is delivered in three independently reviewable slices. The first
-adds the installed database-setup boundary and packaged Alembic resources; the
-following slices add build and maintenance commands, then migrate the gateway
-and runtime callers. The issue remains open until all three slices merge.
+adds the installed database-setup boundary and packaged Alembic resources. The
+second moves enum generation to `acquire.enumsgen`, adds
+`acquire-generate-enums` and `acquire-update-stats`, and migrates the focused
+npm and Compose enum callers. The final slice migrates the gateway and runtime
+callers. The issue remains open until all three slices merge.
+
+### Build And Maintenance Command Data Boundaries
+
+| Field | Source and trust | Runtime use | Diagnostic policy |
+| --- | --- | --- | --- |
+| Client and release source roots | Operator or build configuration, private and untrusted | Discover JavaScript inputs for enum generation | Require absolute paths; never print |
+| Replacement inputs and enum output path | Operator or build configuration, private and untrusted | Read or mutate the explicitly selected JavaScript files | Validate all replacement inputs first; use fixed failures |
+| JavaScript source contents | Client source, untrusted text | Inspect normalized alphanumeric enum references only | Preserve legitimate enum names; never include source text in diagnostics |
+| Stats publication and staging roots | Operator arguments or environment, private and untrusted | Stage and publish generated JSON/gzip files | Require absolute paths; never print |
+| Database rows and log contents | Application database and logs, private and untrusted | Update persistence, ratings, records, and published stats | Never include values or exception representations in command diagnostics |
+
+`acquire-generate-enums` exits with status 0 after generation or replacement,
+status 2 for invalid arguments, and status 1 for missing inputs or operational
+read/write failures. `acquire-update-stats` is continuous: invalid arguments
+exit 2, invalid installed-layout configuration exits 1, update failures emit a
+fixed marker and retry after 60 seconds, and interruption exits 130.
+
+| Enum command state | Result |
+| --- | --- |
+| Development plus client root, optional output | Generate all enums; write stdout or the selected file; exit 0 |
+| Release plus client and release roots, optional output | Generate referenced enums; write stdout or the selected file; exit 0 |
+| Replace plus client root and one or more existing inputs | Validate every input, mutate selected files, exit 0 |
+| Development with a release root, release without one, replace without inputs, or any relative path | Fixed invalid-argument diagnostic; exit 2 |
+| Missing/unreadable input, unknown referenced enum, or write failure | Fixed operational diagnostic; exit 1 |
+
+| Stats updater state | Result |
+| --- | --- |
+| New completed games | Commit log offsets and publish regenerated files, then wait |
+| No completed-game changes | Commit updated offsets without publication, then wait |
+| Database, staging, generation, publication, or unknown operational failure | Roll back the transaction, emit a fixed marker, clean remaining staged outputs where possible, then retry |
+| Partial publication before a later move fails | Keep already published valid files, roll back offsets, clean remaining staging, and replace the full set on retry |
+| Stale staged gzip files | Remove before compression; treat cleanup failure as retryable |
+| Missing or relative installed-layout configuration | Emit a fixed configuration marker before database initialization; exit 1 |
+| Process interruption | Stop without a traceback; exit 130 |
 
 Issue #111 removes all transitional paths. Issue #127 then owns the final wheel
 and source-distribution manifests and clean-wheel command verification.

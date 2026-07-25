@@ -41,6 +41,7 @@ def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None
     assert "import mysql.connector" in workflow
     assert "import acquire.migration.import_mysql_to_postgres" in workflow
     assert 'assert "acquire.orm" not in sys.modules' in workflow
+    assert 'assert "trueskill" not in sys.modules' in workflow
 
 
 def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> None:
@@ -123,11 +124,24 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
     assert "build:css" in scripts
     assert "build:enums" in scripts
     assert "build:js" in scripts
+    assert scripts["build:enums"] == (
+        "uv run --no-dev acquire-generate-enums js development "
+        '--client-source-root "$PWD/client/main/js" '
+        '--output "$PWD/client/main/js/enums.js"'
+    )
     assert scripts["build:js"].startswith("esbuild client/main/js/app.js --bundle")
     assert scripts["build:client"] == (
         "npm run build:css && npm run build:enums && npm run build:js"
     )
     assert "node_modules/webpack" not in package_lock["packages"]
+
+
+def test_build_and_maintenance_project_scripts_use_packaged_main_functions() -> None:
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+    scripts = pyproject["project"]["scripts"]
+
+    assert scripts["acquire-generate-enums"] == "acquire.enumsgen:main"
+    assert scripts["acquire-update-stats"] == "acquire.stats:main"
 
 
 def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
@@ -171,6 +185,10 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     deployment_notes = (REPOSITORY_ROOT / "docs" / "deployment.md").read_text()
 
     assert "FROM node:22-bookworm-slim AS client-assets" in dockerfile
+    assert "ghcr.io/astral-sh/uv:0.11.22" in dockerfile
+    assert "RUN uv sync --frozen --no-dev" in dockerfile
+    assert "COPY src ./src" in dockerfile
+    assert "server/enumsgen.py" not in dockerfile
     assert "RUN npm ci" in dockerfile
     assert "RUN npm run build:client" in dockerfile
     assert "FROM python:3.12-slim AS runtime" in dockerfile

@@ -55,6 +55,24 @@ def test_client_asset_helper_uses_modern_node_and_npm_scripts():
     assert "webpack" not in command
 
 
+def test_client_enum_helper_uses_packaged_module_with_absolute_paths():
+    services = _load_compose_services()
+    client_enums = services["client-enums"]
+    command = client_enums["command"]
+
+    assert command == [
+        "python",
+        "-m",
+        "acquire.enumsgen",
+        "js",
+        "development",
+        "--client-source-root",
+        "/app/client/main/js",
+        "--output",
+        "/app/client/main/js/enums.js",
+    ]
+
+
 def test_e2e_fixture_uses_alembic_database_setup():
     fixture_text = (REPO_DIR / "tests" / "conftest.py").read_text()
 

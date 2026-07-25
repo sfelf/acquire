@@ -124,6 +124,23 @@ issue #110 slice migrates Docker callers. Normal installations expose
 `acquire-setup-database`. Future schema or required lookup-data changes should
 be added as Alembic revisions.
 
+## Stats updater
+
+Run the continuous log import and stats publication worker with explicit
+absolute roots:
+
+```bash
+uv run acquire-update-stats \
+  --stats-data-root /srv/acquire/stats/data \
+  --stats-temp-root /srv/acquire/stats/staging
+```
+
+`ACQUIRE_STATS_DATA_ROOT` and `ACQUIRE_STATS_TEMP_ROOT` provide equivalent
+environment fallbacks. Editable source layouts retain their validated local
+defaults. The updater retries operational failures at 60-second intervals and
+uses fixed diagnostics that do not include database values, paths, log
+contents, or exception details.
+
 ## Install dependencies
 
 Install `uv`, then create the project environment:

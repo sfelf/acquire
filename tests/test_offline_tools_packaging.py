@@ -4,6 +4,7 @@ import ast
 import importlib
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -170,6 +171,23 @@ def test_explicit_stats_roots_override_environment_configuration(
     )
 
 
+@pytest.mark.parametrize("root_index", (0, 1))
+def test_explicit_stats_roots_must_be_absolute(
+    root_index: int,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify explicit command roots cannot restore cwd-dependent behavior."""
+    stats = importlib.import_module("acquire.stats")
+    roots = [tmp_path / "published", tmp_path / "staging"]
+    roots[root_index] = Path("private/relative/root")
+    monkeypatch.setenv(stats.STATS_DATA_ROOT_ENV, str(tmp_path / "environment-published"))
+    monkeypatch.setenv(stats.STATS_TEMP_ROOT_ENV, str(tmp_path / "environment-staging"))
+
+    with pytest.raises(ValueError, match="must be an absolute path"):
+        stats.resolve_stats_roots(*roots)
+
+
 def test_stats_roots_use_absolute_environment_configuration(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -184,26 +202,116 @@ def test_stats_roots_use_absolute_environment_configuration(
     assert stats.resolve_stats_roots() == (stats_data_root, stats_temp_root)
 
 
+def test_stats_command_help_runs_outside_repository_without_database(
+    tmp_path: Path,
+) -> None:
+    """Verify installed help parses before malformed database configuration."""
+    command = shutil.which("acquire-update-stats")
+    assert command is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.pop("ACQUIRE_DATABASE_URL", None)
+    environment["POSTGRES_PORT"] = "private-secret"
+
+    result = subprocess.run(
+        [command, "--help"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert "Continuously import logs" in result.stdout
+    assert "private-secret" not in result.stdout
+
+
+def test_stats_module_import_defers_database_and_rating_initialization(
+    tmp_path: Path,
+) -> None:
+    """Verify command parsing does not eagerly load operational dependencies."""
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.pop("ACQUIRE_DATABASE_URL", None)
+    environment["POSTGRES_PORT"] = "private-secret"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; import acquire.stats; "
+                "assert 'acquire.orm' not in sys.modules; "
+                "assert 'trueskill' not in sys.modules"
+            ),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_stats_command_rejects_relative_roots_without_reflecting_them(
+    tmp_path: Path,
+) -> None:
+    """Verify invalid private paths use the fixed argument diagnostic."""
+    command = shutil.which("acquire-update-stats")
+    assert command is not None
+    private_root = "private/relative/staging"
+
+    result = subprocess.run(
+        [command, "--stats-temp-root", private_root],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr == "error: invalid arguments\n"
+    assert private_root not in result.stderr
+
+
 @pytest.mark.parametrize(
-    ("wrapper_name", "package_name"),
+    ("wrapper_name", "package_name", "raises_system_exit"),
     (
-        ("logs_to_games.py", "log_tools"),
-        ("cron.py", "stats"),
+        ("logs_to_games.py", "log_tools", False),
+        ("cron.py", "stats", True),
     ),
 )
 def test_direct_file_entry_points_delegate_to_packaged_main(
     wrapper_name: str,
     package_name: str,
+    raises_system_exit: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify existing script paths invoke the authoritative package command."""
     package_module = importlib.import_module(f"acquire.{package_name}")
     calls: list[str] = []
-    monkeypatch.setattr(package_module, "main", lambda: calls.append(package_name))
-
-    runpy.run_path(
-        str(REPOSITORY_ROOT / "server" / wrapper_name),
-        run_name="__main__",
+    monkeypatch.setattr(
+        package_module,
+        "main",
+        lambda: calls.append(package_name) or 0,
     )
+
+    if raises_system_exit:
+        with pytest.raises(SystemExit) as exit_info:
+            runpy.run_path(
+                str(REPOSITORY_ROOT / "server" / wrapper_name),
+                run_name="__main__",
+            )
+        assert exit_info.value.code == 0
+    else:
+        runpy.run_path(
+            str(REPOSITORY_ROOT / "server" / wrapper_name),
+            run_name="__main__",
+        )
 
     assert calls == [package_name]
