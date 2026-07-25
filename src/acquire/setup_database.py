@@ -18,8 +18,6 @@ from typing import TYPE_CHECKING, Never
 import sqlalchemy
 from sqlalchemy.engine.reflection import Inspector
 
-from acquire import orm
-
 if TYPE_CHECKING:  # pragma: no cover
     from alembic.config import Config
 
@@ -71,6 +69,11 @@ BASELINE_LOOKUP_ROWS = {
 def alembic_config() -> Config:
     """Return the Alembic configuration from installed package resources.
 
+    Configuration and revision scripts are resolved through the installed
+    `acquire` package rather than the repository or current working directory.
+    Both `alembic.ini` and the migrations directory must be available as
+    filesystem-backed package resources before setup can proceed.
+
     Returns:
         Alembic config for the packaged migration environment.
 
@@ -102,6 +105,8 @@ def is_unstamped_legacy_schema() -> bool:
         `True` when the baseline application tables, expected columns, and
         required lookup rows exist and `alembic_version` is absent.
     """
+    from acquire import orm
+
     inspector = sqlalchemy.inspect(orm.engine)
     table_names = set(inspector.get_table_names())
     return (
@@ -135,6 +140,8 @@ def has_baseline_lookup_rows() -> bool:
         `True` when the legacy schema contains exactly the lookup rows inserted
         by the baseline migration.
     """
+    from acquire import orm
+
     with orm.engine.connect() as connection:
         for table_name, expected_names in BASELINE_LOOKUP_ROWS.items():
             rows = connection.execute(sqlalchemy.text(f"select name from {table_name}"))
@@ -175,7 +182,12 @@ def run_setup() -> None:
 
 
 class SetupArgumentParser(argparse.ArgumentParser):
-    """Parse the no-argument setup command without reflecting unsafe input."""
+    """Parse command arguments while enforcing the diagnostic safety boundary.
+
+    Operator input and argparse-generated messages may contain credentials or
+    private identifiers. Invalid input must therefore exit with a fixed marker
+    and must never be reflected through usage or error output.
+    """
 
     def error(self, message: str) -> Never:
         """Exit with a fixed diagnostic for invalid command arguments.
@@ -199,6 +211,7 @@ def parse_args(argv: Sequence[str] | None = None) -> None:
     parser = SetupArgumentParser(
         prog="acquire-setup-database",
         description="Upgrade the configured Acquire database to the latest revision.",
+        allow_abbrev=False,
     )
     parser.parse_args(argv)
 

@@ -196,7 +196,7 @@ def test_database_setup_is_idempotent_and_preserves_seeded_lookups(
 ):
     sys.modules.pop("acquire.setup_database", None)
     setup_database = importlib.import_module("acquire.setup_database")
-    monkeypatch.setattr(setup_database.orm, "engine", postgres_engine)
+    monkeypatch.setattr(real_orm_module, "engine", postgres_engine)
 
     setup_database.run_setup()
     setup_database.run_setup()

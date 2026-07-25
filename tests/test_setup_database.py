@@ -151,7 +151,7 @@ def test_setup_database_upgrades_to_head(setup_database_module, monkeypatch):
 def test_setup_database_stamps_unversioned_legacy_schema(setup_database_module, monkeypatch):
     setup_database, command, sqlalchemy = setup_database_module
     calls = []
-    setup_database.orm.engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
+    sys.modules["acquire.orm"].engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
     monkeypatch.setattr(
         sqlalchemy,
         "inspect",
@@ -283,7 +283,7 @@ def test_setup_database_does_not_stamp_schema_with_missing_columns(
 ):
     setup_database, command, sqlalchemy = setup_database_module
     calls = []
-    setup_database.orm.engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
+    sys.modules["acquire.orm"].engine = Engine(setup_database.BASELINE_LOOKUP_ROWS)
     columns = {
         **setup_database.BASELINE_COLUMNS,
         "user": {"user_id", "name"},
@@ -315,7 +315,7 @@ def test_setup_database_does_not_stamp_schema_with_missing_lookup_rows(
 ):
     setup_database, command, sqlalchemy = setup_database_module
     calls = []
-    setup_database.orm.engine = Engine(
+    sys.modules["acquire.orm"].engine = Engine(
         {
             **setup_database.BASELINE_LOOKUP_ROWS,
             "rating_type": {"Singles2", "Singles3", "Singles4"},
@@ -383,6 +383,23 @@ def test_setup_database_main_rejects_arguments_without_reflecting_values(
     assert captured.out == ""
     assert captured.err == "error: invalid arguments\n"
     assert sensitive_argument not in captured.err
+
+
+@pytest.mark.parametrize("abbreviated_help", ["--h", "--he", "--hel"])
+def test_setup_database_main_rejects_abbreviated_help(
+    setup_database_module,
+    capsys,
+    abbreviated_help,
+):
+    setup_database, _, _ = setup_database_module
+
+    with pytest.raises(SystemExit) as exit_info:
+        setup_database.main([abbreviated_help])
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid arguments\n"
 
 
 def test_setup_database_main_sanitizes_setup_failures(

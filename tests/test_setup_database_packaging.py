@@ -96,9 +96,8 @@ def test_setup_database_command_help_runs_outside_repository_without_database(
     assert command is not None
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
-    environment["ACQUIRE_DATABASE_URL"] = (
-        "postgresql+psycopg://private-user:private-password@invalid/db"
-    )
+    environment.pop("ACQUIRE_DATABASE_URL", None)
+    environment["POSTGRES_PORT"] = "private-secret"
 
     result = subprocess.run(
         [command, "--help"],
@@ -112,4 +111,30 @@ def test_setup_database_command_help_runs_outside_repository_without_database(
     assert result.returncode == 0
     assert result.stderr == ""
     assert "Upgrade the configured Acquire database" in result.stdout
-    assert "private-password" not in result.stdout
+    assert "private-secret" not in result.stdout
+
+
+def test_setup_database_command_sanitizes_environment_configuration_failure(
+    tmp_path: Path,
+) -> None:
+    """Verify malformed sensitive environment values stay inside the boundary."""
+    command = shutil.which("acquire-setup-database")
+    assert command is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.pop("ACQUIRE_DATABASE_URL", None)
+    environment["POSTGRES_PORT"] = "private-secret"
+
+    result = subprocess.run(
+        [command],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "error: database setup failed\n"
+    assert "private-secret" not in result.stderr
