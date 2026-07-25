@@ -39,6 +39,18 @@ COMMANDS = (
     "acquire-update-stats",
     "acquire-validate-migration-reports",
 )
+SANITIZED_ENVIRONMENT_VARIABLES = (
+    "PYTHONPATH",
+    "ACQUIRE_ARTIFACT_POSTGRES_URL",
+    "ACQUIRE_DATABASE_URL",
+    "ACQUIRE_STATS_DATA_ROOT",
+    "ACQUIRE_STATS_TEMP_ROOT",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_HOST",
+    "POSTGRES_PORT",
+    "POSTGRES_DB",
+)
 
 
 class VerificationError(RuntimeError):
@@ -100,11 +112,21 @@ def run(
 def tracked_files(*patterns: str) -> set[str]:
     """Return tracked repository files matching Git pathspecs.
 
+    The release inventory comes from the Git index at `REPOSITORY_ROOT`, so
+    untracked and ignored working-tree files are intentionally excluded.
+    Missing Git, an invalid repository, or any other `git ls-files` failure
+    aborts verification rather than yielding a partial or empty inventory.
+
     Args:
         patterns: Git pathspecs selecting the artifact-owned source inventory.
 
     Returns:
         Repository-relative tracked file names.
+
+    Raises:
+        OSError: Git cannot be started.
+        subprocess.CalledProcessError: Git cannot provide the index-backed
+            inventory.
     """
     result = run(
         ["git", "ls-files", "--", *patterns],
@@ -343,22 +365,24 @@ def build_wheel_from_sdist(sdist: Path, workspace: Path) -> Path:
 def clean_environment() -> dict[str, str]:
     """Return a sanitized environment for installed-artifact checks.
 
-    The child inherits the host environment except for `PYTHONPATH`, which
-    could import repository code instead of the installed wheel;
-    `ACQUIRE_ARTIFACT_POSTGRES_URL` and `ACQUIRE_DATABASE_URL`, which could
-    select ambient or verifier-owned databases; and `ACQUIRE_STATS_DATA_ROOT`
-    plus `ACQUIRE_STATS_TEMP_ROOT`, which could redirect filesystem behavior.
-    Individual checks add back only the database setting they explicitly own.
+    The child retains unrelated host settings such as executable search paths
+    but removes every repository import, database, and stats-root setting read
+    by the verified command graph: `PYTHONPATH`,
+    `ACQUIRE_ARTIFACT_POSTGRES_URL`, `ACQUIRE_DATABASE_URL`,
+    `ACQUIRE_STATS_DATA_ROOT`, `ACQUIRE_STATS_TEMP_ROOT`, `POSTGRES_USER`,
+    `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, and `POSTGRES_DB`.
+    This prevents ambient values from importing checkout code, selecting or
+    exposing database credentials, breaking module import through malformed
+    fallback configuration, or redirecting filesystem behavior. Individual
+    checks add back only the database URL they explicitly own; removed values
+    are never included in diagnostics.
 
     Returns:
         Sanitized child-process environment.
     """
     environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
-    environment.pop("ACQUIRE_ARTIFACT_POSTGRES_URL", None)
-    environment.pop("ACQUIRE_DATABASE_URL", None)
-    environment.pop("ACQUIRE_STATS_DATA_ROOT", None)
-    environment.pop("ACQUIRE_STATS_TEMP_ROOT", None)
+    for variable in SANITIZED_ENVIRONMENT_VARIABLES:
+        environment.pop(variable, None)
     return environment
 
 

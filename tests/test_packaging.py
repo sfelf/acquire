@@ -216,6 +216,36 @@ def test_distribution_verifier_rejects_wheel_links(tmp_path: Path) -> None:
         verifier["wheel_manifest"](wheel)
 
 
+def test_distribution_verifier_removes_all_command_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = runpy.run_path(
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py",
+        run_name="distribution_verifier_test",
+    )
+    sanitized_variables = {
+        "PYTHONPATH",
+        "ACQUIRE_ARTIFACT_POSTGRES_URL",
+        "ACQUIRE_DATABASE_URL",
+        "ACQUIRE_STATS_DATA_ROOT",
+        "ACQUIRE_STATS_TEMP_ROOT",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+    }
+    assert set(verifier["SANITIZED_ENVIRONMENT_VARIABLES"]) == sanitized_variables
+    for variable in sanitized_variables:
+        monkeypatch.setenv(variable, "private-secret")
+    monkeypatch.setenv("ACQUIRE_VERIFY_SENTINEL", "preserved")
+
+    environment = verifier["clean_environment"]()
+
+    assert sanitized_variables.isdisjoint(environment)
+    assert environment["ACQUIRE_VERIFY_SENTINEL"] == "preserved"
+
+
 def test_server_compatibility_layout_is_removed() -> None:
     assert not list((REPOSITORY_ROOT / "server").glob("*.py"))
 

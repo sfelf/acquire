@@ -48,6 +48,13 @@ runs this verification on every supported Python version. All release
 conditions use explicit failures rather than Python assertions, so optimization
 cannot disable checks or skip their side effects.
 
+Clean installed-command checks retain unrelated operational host settings such
+as `PATH`, but remove `PYTHONPATH`, `ACQUIRE_ARTIFACT_POSTGRES_URL`,
+`ACQUIRE_DATABASE_URL`, both `ACQUIRE_STATS_*_ROOT` settings, and all five
+`POSTGRES_*` connection fallbacks. This prevents ambient checkout, database,
+credential, and stats-root configuration from affecting artifact verification;
+checks add back only an explicit database URL they own.
+
 | Verification state | Result |
 | --- | --- |
 | Both manifests exactly match and both wheels install | Continue to command and resource smoke tests |
