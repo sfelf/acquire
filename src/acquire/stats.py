@@ -655,6 +655,8 @@ def process_logs(
                 stats_data_root,
                 stats_temp_root,
             )
+            stats_temp_root.mkdir(parents=True, exist_ok=True)
+            (stats_temp_root / "users").mkdir(parents=True, exist_ok=True)
             statsgen = StatsGen(session, stats_temp_root)
             statsgen.output_ratings()
             for user in completed_game_users:

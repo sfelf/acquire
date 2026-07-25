@@ -84,7 +84,8 @@ publication and staging roots use the former `client/stats/data` and
 source layout. Installed artifacts do not contain those directories, so
 operators configure their absolute locations with `ACQUIRE_STATS_DATA_ROOT`
 and `ACQUIRE_STATS_TEMP_ROOT`; relative configuration is rejected to prevent
-working-directory-dependent writes.
+working-directory-dependent writes. Stats generation creates missing staging
+and per-user directories so newly attached empty volumes are supported.
 
 Issue #111 owns the final wheel and source-distribution manifests after the
 runtime modules and their tests have migrated into the installed-package

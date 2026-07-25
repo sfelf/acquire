@@ -840,7 +840,13 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
     ]
 
 
-def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch, tmp_path):
+@pytest.mark.parametrize("staging_root_exists", (False, True))
+def test_process_logs_publishes_compressed_stats_files(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+    staging_root_exists,
+):
     session = FakeSession()
     lookup = FakeLookup()
     user = FakeUser(1, "alice")
@@ -850,6 +856,8 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
     )
     subprocess_calls = []
     stats_temp_root = tmp_path / "server" / "stats_temp"
+    if staging_root_exists:
+        stats_temp_root.mkdir(parents=True)
 
     class FakeLogs2DB:
         def __init__(self, session_arg, lookup_arg):
@@ -863,6 +871,8 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
         def __init__(self, session_arg, output_dir):
             assert session_arg is session
             assert output_dir == stats_temp_root
+            assert stats_temp_root.is_dir()
+            assert (stats_temp_root / "users").is_dir()
 
         def output_ratings(self):
             return None
@@ -905,12 +915,13 @@ def test_process_logs_publishes_compressed_stats_files(cron_module, monkeypatch,
     )
 
     stats_data_root = tmp_path / "client" / "stats" / "data"
-    cron_module.process_logs(
-        write_stats_files=True,
-        stats_data_root=stats_data_root,
-        stats_temp_root=stats_temp_root,
-    )
+    monkeypatch.setenv(cron_module.STATS_DATA_ROOT_ENV, str(stats_data_root))
+    monkeypatch.setenv(cron_module.STATS_TEMP_ROOT_ENV, str(stats_temp_root))
 
+    cron_module.process_logs(write_stats_files=True)
+
+    assert stats_temp_root.is_dir()
+    assert (stats_temp_root / "users").is_dir()
     assert stats_data_root.is_dir()
     assert (stats_data_root / "users").is_dir()
     assert subprocess_calls == [
