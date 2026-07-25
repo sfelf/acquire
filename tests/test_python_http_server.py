@@ -1004,10 +1004,39 @@ def test_main_rejects_file_static_root_before_starting_server(
 def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
     calls = []
 
-    def run(app, **kwargs):
-        calls.append((app.title, kwargs))
+    class Listener:
+        def setsockopt(self, level, option, value):
+            calls.append(("setsockopt", level, option, value))
 
-    monkeypatch.setattr(http_server.uvicorn, "run", run)
+        def bind(self, address):
+            calls.append(("bind", address))
+
+        def set_inheritable(self, inheritable):
+            calls.append(("set_inheritable", inheritable))
+
+        def close(self):
+            calls.append(("close",))
+
+    listener = Listener()
+
+    def create_socket(*, family):
+        calls.append(("socket", family))
+        return listener
+
+    class Server:
+        def __init__(self, config):
+            calls.append(("server", config.app.title, config.host, config.port))
+
+        def run(self, *, sockets):
+            calls.append(("run", sockets))
+
+    monkeypatch.setattr(http_server.socket, "socket", create_socket)
+    monkeypatch.setattr(
+        http_server.uvicorn,
+        "Config",
+        lambda app, host, port: SimpleNamespace(app=app, host=host, port=port),
+    )
+    monkeypatch.setattr(http_server.uvicorn, "Server", Server)
 
     http_server.run_http_server(
         host="127.0.0.1",
@@ -1017,14 +1046,148 @@ def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
     )
 
     assert calls == [
+        ("socket", http_server.socket.AF_INET),
         (
-            "Acquire Python HTTP",
-            {
-                "host": "127.0.0.1",
-                "port": 19001,
-            },
-        )
+            "setsockopt",
+            http_server.socket.SOL_SOCKET,
+            http_server.socket.SO_REUSEADDR,
+            1,
+        ),
+        ("bind", ("127.0.0.1", 19001)),
+        ("set_inheritable", True),
+        ("server", "Acquire Python HTTP", "127.0.0.1", 19001),
+        ("run", [listener]),
+        ("close",),
     ]
+
+
+def test_run_http_server_closes_listener_after_server_failure(monkeypatch, tmp_path):
+    class Listener:
+        closed = False
+
+        def setsockopt(self, level, option, value):
+            pass
+
+        def bind(self, address):
+            pass
+
+        def set_inheritable(self, inheritable):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    listener = Listener()
+
+    class Server:
+        def __init__(self, config):
+            pass
+
+        def run(self, *, sockets):
+            raise RuntimeError("server failed")
+
+    monkeypatch.setattr(http_server.socket, "socket", lambda *, family: listener)
+    monkeypatch.setattr(http_server.uvicorn, "Server", Server)
+
+    with pytest.raises(RuntimeError, match="server failed"):
+        http_server.run_http_server(
+            host="::1",
+            port=19001,
+            main_static_root=tmp_path / "main",
+            stats_static_root=tmp_path / "stats",
+        )
+
+    assert listener.closed
+
+
+def test_run_http_server_sanitizes_listener_bind_failure(monkeypatch, tmp_path):
+    class Listener:
+        closed = False
+
+        def setsockopt(self, level, option, value):
+            pass
+
+        def bind(self, address):
+            raise OSError(f"private bind failure for {address}")
+
+        def close(self):
+            self.closed = True
+
+    listener = Listener()
+    monkeypatch.setattr(http_server.socket, "socket", lambda *, family: listener)
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.run_http_server(
+            host="private-host",
+            port=19001,
+            main_static_root=tmp_path / "main",
+            stats_static_root=tmp_path / "stats",
+        )
+
+    assert str(exit_info.value) == ""
+    assert listener.closed
+
+
+def test_run_http_server_sanitizes_listener_creation_failure(monkeypatch, tmp_path):
+    def create_socket(*, family):
+        raise OSError("private socket setup failure")
+
+    monkeypatch.setattr(http_server.socket, "socket", create_socket)
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.run_http_server(
+            host="private-host",
+            port=19001,
+            main_static_root=tmp_path / "main",
+            stats_static_root=tmp_path / "stats",
+        )
+
+    assert str(exit_info.value) == ""
+
+
+@pytest.mark.parametrize(
+    "private_host",
+    [
+        "private-host.internal",
+        r"private-host\.internal",
+        "private-host%2Einternal",
+        "private-host%252Einternal",
+    ],
+)
+def test_main_redacts_listener_bind_failure(
+    private_host,
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    main_root = tmp_path / "main"
+    stats_root = tmp_path / "stats"
+    main_root.mkdir()
+    stats_root.mkdir()
+    monkeypatch.setattr(
+        http_server,
+        "run_http_server",
+        lambda **kwargs: (_ for _ in ()).throw(
+            http_server.HttpServerBindError(private_host)
+        ),
+    )
+
+    result = http_server.main(
+        [
+            "--host",
+            private_host,
+            "--main-static-root",
+            str(main_root),
+            "--stats-static-root",
+            str(stats_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert captured.err == "error: HTTP server configuration failed\n"
+    assert private_host not in captured.err
 
 
 def test_main_runs_http_server_with_parsed_args(monkeypatch, tmp_path):

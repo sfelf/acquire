@@ -124,10 +124,10 @@ and remaining runtime callers.
 | Main and stats static roots | Operator or container configuration, private and untrusted | Serve generated external client assets | Require absolute existing directories before startup; never print |
 
 `acquire-http-server` accepts `--host`, `--port`, `--main-static-root`, and
-`--stats-static-root`. Invalid arguments exit 2, unavailable roots exit 1 with
-a fixed marker before Uvicorn starts, and a normal shutdown exits 0. Production
-and local containers pass both roots explicitly and run from `/app`, not
-`/app/server`.
+`--stats-static-root`. Invalid arguments exit 2; unavailable roots or listener
+addresses exit 1 with a fixed marker before Uvicorn can reflect private values;
+and a normal shutdown exits 0. Production and local containers pass both roots
+explicitly and run from `/app`, not `/app/server`.
 
 ### Build And Maintenance Command Data Boundaries
 

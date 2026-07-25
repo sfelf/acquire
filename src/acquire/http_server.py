@@ -12,6 +12,7 @@ import asyncio
 import mimetypes
 import posixpath
 import secrets
+import socket
 import sys
 import urllib.parse
 from collections.abc import Callable
@@ -39,6 +40,10 @@ SessionScope = Callable[[], AbstractContextManager[auth.AuthSession]]
 
 class InvalidWebsocketPayloadError(ValueError):
     """Raised when a post-login websocket frame cannot be decoded."""
+
+
+class HttpServerBindError(OSError):
+    """Signal that the configured listener address could not be bound."""
 
 
 class ReportErrorForm(BaseModel):
@@ -680,6 +685,10 @@ def run_http_server(
 ) -> None:
     """Run the FastAPI HTTP server until interrupted.
 
+    The listener is bound before Uvicorn starts so address failures can be
+    projected through the command's fixed diagnostic without a check-then-bind
+    race or Uvicorn logging the private bind value.
+
     Args:
         host: Interface to bind.
         port: TCP port to bind.
@@ -692,7 +701,26 @@ def run_http_server(
         stats_static_root=stats_static_root,
         log_output=log_output,
     )
-    uvicorn.run(app, host=host, port=port)
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    listener: socket.socket | None = None
+    try:
+        listener = socket.socket(family=family)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((host, port))
+        listener.set_inheritable(True)
+    except OSError:
+        if listener is not None:
+            with suppress(OSError):
+                listener.close()
+        raise HttpServerBindError from None
+
+    assert listener is not None
+    config = uvicorn.Config(app, host=host, port=port)
+    server = uvicorn.Server(config)
+    try:
+        server.run(sockets=[listener])
+    finally:
+        listener.close()
 
 
 class HttpServerArgumentParser(argparse.ArgumentParser):
@@ -771,15 +799,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         validate_static_roots(args.main_static_root, args.stats_static_root)
-    except OSError:
+        run_http_server(
+            host=args.host,
+            port=args.port,
+            main_static_root=args.main_static_root,
+            stats_static_root=args.stats_static_root,
+        )
+    except (FileNotFoundError, HttpServerBindError):
         print("error: HTTP server configuration failed", file=sys.stderr)
         return 1
-    run_http_server(
-        host=args.host,
-        port=args.port,
-        main_static_root=args.main_static_root,
-        stats_static_root=args.stats_static_root,
-    )
     return 0
 
 
