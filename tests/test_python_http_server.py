@@ -906,6 +906,101 @@ def test_parse_args_accepts_http_server_options(tmp_path):
     assert args.stats_static_root == tmp_path / "stats"
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--port", "0"],
+        ["--port", "65536"],
+        ["--port", "not-a-port"],
+        ["--main-static-root", "private/relative/main"],
+        ["--stats-static-root", "private/relative/stats"],
+        ["--unknown"],
+    ],
+)
+def test_parse_args_rejects_invalid_gateway_configuration_with_fixed_diagnostic(
+    arguments,
+    capsys,
+):
+    with pytest.raises(SystemExit) as exit_info:
+        http_server.parse_args(arguments)
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid arguments\n"
+
+
+@pytest.mark.parametrize(
+    "private_root",
+    [
+        "/private/missing/root",
+        r"/private\/missing\/root",
+        "/private%2Fmissing%2Froot",
+        "/private%252Fmissing%252Froot",
+    ],
+)
+def test_main_rejects_missing_static_roots_without_reflecting_them(
+    private_root,
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    calls = []
+    monkeypatch.setattr(
+        http_server,
+        "run_http_server",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    stats_root = tmp_path / "stats"
+    stats_root.mkdir()
+
+    result = http_server.main(
+        [
+            "--main-static-root",
+            private_root,
+            "--stats-static-root",
+            str(stats_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert calls == []
+    assert captured.out == ""
+    assert captured.err == "error: HTTP server configuration failed\n"
+    assert private_root not in captured.err
+
+
+def test_main_rejects_file_static_root_before_starting_server(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    main_root = tmp_path / "main"
+    stats_root = tmp_path / "stats"
+    main_root.mkdir()
+    stats_root.write_text("not a directory")
+    calls = []
+    monkeypatch.setattr(
+        http_server,
+        "run_http_server",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    result = http_server.main(
+        [
+            "--main-static-root",
+            str(main_root),
+            "--stats-static-root",
+            str(stats_root),
+        ]
+    )
+
+    assert result == 1
+    assert calls == []
+    assert capsys.readouterr().err == "error: HTTP server configuration failed\n"
+
+
 def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
     calls = []
 
@@ -934,30 +1029,35 @@ def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
 
 def test_main_runs_http_server_with_parsed_args(monkeypatch, tmp_path):
     calls = []
+    main_root = tmp_path / "main"
+    stats_root = tmp_path / "stats"
+    main_root.mkdir()
+    stats_root.mkdir()
 
     def run_http_server(**kwargs):
         calls.append(kwargs)
 
     monkeypatch.setattr(http_server, "run_http_server", run_http_server)
 
-    http_server.main(
+    result = http_server.main(
         [
             "--host",
             "127.0.0.1",
             "--port",
             "19002",
             "--main-static-root",
-            str(tmp_path / "main"),
+            str(main_root),
             "--stats-static-root",
-            str(tmp_path / "stats"),
+            str(stats_root),
         ]
     )
 
+    assert result == 0
     assert calls == [
         {
             "host": "127.0.0.1",
             "port": 19002,
-            "main_static_root": tmp_path / "main",
-            "stats_static_root": tmp_path / "stats",
+            "main_static_root": main_root,
+            "stats_static_root": stats_root,
         }
     ]

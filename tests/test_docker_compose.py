@@ -42,6 +42,18 @@ def test_python_gateway_explains_missing_client_assets():
     assert "client-build" in services["python-gateway"]["command"]
 
 
+def test_python_gateway_uses_installed_command_and_explicit_static_roots():
+    services = _load_compose_services()
+    gateway = services["python-gateway"]
+    command = gateway["command"]
+
+    assert gateway["working_dir"] == "/app"
+    assert "acquire-http-server" in command
+    assert "--main-static-root /app/client/main" in command
+    assert "--stats-static-root /app/client/stats" in command
+    assert "http_server.py" not in command
+
+
 def test_client_asset_helper_uses_modern_node_and_npm_scripts():
     services = _load_compose_services()
     client_assets = services["client-assets"]
@@ -61,9 +73,7 @@ def test_client_enum_helper_uses_packaged_module_with_absolute_paths():
     command = client_enums["command"]
 
     assert command == [
-        "python",
-        "-m",
-        "acquire.enumsgen",
+        "acquire-generate-enums",
         "js",
         "development",
         "--client-source-root",
@@ -76,8 +86,8 @@ def test_client_enum_helper_uses_packaged_module_with_absolute_paths():
 def test_e2e_fixture_uses_alembic_database_setup():
     fixture_text = (REPO_DIR / "tests" / "conftest.py").read_text()
 
-    assert '"python"' in fixture_text
-    assert '"setup_database.py"' in fixture_text
+    assert '"acquire-setup-database"' in fixture_text
+    assert '"setup_database.py"' not in fixture_text
     assert "python initialize_database.py" not in fixture_text
     assert '"postgres"' in fixture_text
     assert "mysql_test_url" not in fixture_text

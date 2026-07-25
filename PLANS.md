@@ -3,8 +3,8 @@
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
-- The Packaging milestone is active. Issues #103 through #109 are complete;
-  work is currently at issue #110.
+- The Packaging milestone is active. Issues #103 through #110 are complete;
+  work is currently at issue #111.
 
 This document preserves the agreed modernization record and documents the
 delivery order for active milestone work. GitHub issues remain the source of
@@ -18,9 +18,10 @@ Status: issues
 [#105](https://github.com/sfelf/acquire/issues/105),
 [#106](https://github.com/sfelf/acquire/issues/106),
 [#107](https://github.com/sfelf/acquire/issues/107),
-[#108](https://github.com/sfelf/acquire/issues/108), and
-[#109](https://github.com/sfelf/acquire/issues/109) are complete. Issue
-[#110](https://github.com/sfelf/acquire/issues/110) is in progress.
+[#108](https://github.com/sfelf/acquire/issues/108),
+[#109](https://github.com/sfelf/acquire/issues/109), and
+[#110](https://github.com/sfelf/acquire/issues/110) are complete. Issue
+[#111](https://github.com/sfelf/acquire/issues/111) is next.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.
@@ -124,12 +125,12 @@ Issue #110 is also delivered as three stand-alone PR slices:
 1. Add the installed database-setup command, make Alembic an operational
    runtime dependency, and package its configuration and migration resources.
    Complete.
-2. Add the installed build and maintenance commands. In progress.
+2. Add the installed build and maintenance commands. Complete.
 3. Add the installed gateway command and migrate Docker, Compose, and remaining
-   runtime callers.
+   runtime callers. Complete.
 
-The issue remains open until all three slices merge and its complete acceptance
-criteria pass.
+All three slices have passed the complete acceptance criteria; the final slice
+closes the issue when it merges.
 
 ### Issue Verification Gates
 

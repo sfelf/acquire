@@ -17,11 +17,9 @@ def _read_requirements(path: str) -> list[str]:
 
 def test_mysql_connector_is_isolated_to_backup_migration_extra() -> None:
     requirements = _read_requirements("requirements.txt")
-    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
     assert "mysql-connector-python>=9.3,<10" not in requirements
-    assert "mysql-connector-python>=9.3,<10" not in local_docker_requirements
     assert pyproject["project"]["optional-dependencies"]["mysql-migration"] == [
         "mysql-connector-python>=9.3,<10"
     ]
@@ -44,9 +42,8 @@ def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None
     assert 'assert "trueskill" not in sys.modules' in workflow
 
 
-def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> None:
+def test_legacy_runtime_dependency_pins_match_project_baseline() -> None:
     requirements = set(_read_requirements("requirements.txt"))
-    local_docker_requirements = set(_read_requirements("requirements.local-docker.txt"))
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
     compatibility_requirements = {
@@ -57,7 +54,6 @@ def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> 
     }
 
     assert compatibility_requirements <= requirements
-    assert compatibility_requirements <= local_docker_requirements
     assert {"psycopg[binary]>=3.2,<4", "sqlalchemy>=2,<3"} <= set(
         pyproject["project"]["dependencies"]
     )
@@ -72,20 +68,31 @@ def test_runtime_dependency_compatibility_pins_match_local_docker_baseline() -> 
 def test_runtime_images_do_not_install_mysql_dependencies() -> None:
     local_dockerfile = (REPOSITORY_ROOT / "Dockerfile.local").read_text()
     production_dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text()
-    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
 
     assert "default-mysql-client" not in local_dockerfile
-    assert "mysql-connector-python" not in local_docker_requirements
-    assert "requirements.local-docker.txt" in production_dockerfile
+    assert "mysql-migration" not in production_dockerfile
+    assert not (REPOSITORY_ROOT / "requirements.local-docker.txt").exists()
+
+
+def test_local_docker_installs_project_outside_bind_mount() -> None:
+    local_dockerfile = (REPOSITORY_ROOT / "Dockerfile.local").read_text()
+
+    assert "UV_PROJECT_ENVIRONMENT=/opt/acquire" in local_dockerfile
+    assert 'PATH="/opt/acquire/bin:$PATH"' in local_dockerfile
+    assert "RUN uv sync --frozen --no-dev" in local_dockerfile
+    assert "PYTHONPATH" not in local_dockerfile
+    assert "requirements.local-docker.txt" not in local_dockerfile
+    assert 'CMD ["acquire-http-server"' in local_dockerfile
+    assert '"--main-static-root", "/app/client/main"' in local_dockerfile
+    assert '"--stats-static-root", "/app/client/stats"' in local_dockerfile
+    assert "server.py" not in local_dockerfile
 
 
 def test_local_docker_includes_alembic_for_database_setup() -> None:
     requirements = _read_requirements("requirements.txt")
-    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
     assert "alembic>=1.17,<2" in requirements
-    assert "alembic>=1.17,<2" in local_docker_requirements
     assert "alembic>=1.17,<2" in pyproject["project"]["dependencies"]
     assert "alembic>=1.17,<2" not in pyproject["dependency-groups"]["dev"]
     assert pyproject["project"]["scripts"]["acquire-setup-database"] == (
@@ -94,19 +101,22 @@ def test_local_docker_includes_alembic_for_database_setup() -> None:
 
 
 def test_local_docker_includes_postgres_driver_for_default_database() -> None:
-    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert "psycopg[binary]>=3.2,<4" in local_docker_requirements
+    assert "psycopg[binary]>=3.2,<4" in pyproject["project"]["dependencies"]
 
 
 def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
     requirements = _read_requirements("requirements.txt")
-    local_docker_requirements = _read_requirements("requirements.local-docker.txt")
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
     assert "trueskill==0.4.4" in requirements
-    assert "trueskill==0.4.4" in local_docker_requirements
+    assert "trueskill==0.4.4" in pyproject["project"]["dependencies"]
     assert not any(requirement.startswith("openskill") for requirement in requirements)
-    assert not any(requirement.startswith("openskill") for requirement in local_docker_requirements)
+    assert not any(
+        requirement.startswith("openskill")
+        for requirement in pyproject["project"]["dependencies"]
+    )
 
 
 def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
@@ -136,12 +146,24 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
     assert "node_modules/webpack" not in package_lock["packages"]
 
 
-def test_build_and_maintenance_project_scripts_use_packaged_main_functions() -> None:
+def test_supported_project_scripts_use_packaged_main_functions() -> None:
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
     scripts = pyproject["project"]["scripts"]
 
-    assert scripts["acquire-generate-enums"] == "acquire.enumsgen:main"
-    assert scripts["acquire-update-stats"] == "acquire.stats:main"
+    assert scripts == {
+        "acquire-generate-enums": "acquire.enumsgen:main",
+        "acquire-http-server": "acquire.http_server:main",
+        "acquire-migrate-mysql-to-postgres": (
+            "acquire.migration.import_mysql_to_postgres:main"
+        ),
+        "acquire-setup-database": "acquire.setup_database:main",
+        "acquire-update-stats": "acquire.stats:main",
+        "acquire-validate-migration-reports": (
+            "acquire.migration.validate_import_reports:main"
+        ),
+    }
+    assert "acquire-game-server" not in scripts
+    assert "acquire-log-tools" not in scripts
 
 
 def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
@@ -192,15 +214,19 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     assert "RUN npm ci" in dockerfile
     assert "RUN npm run build:client" in dockerfile
     assert "FROM python:3.12-slim AS runtime" in dockerfile
-    assert "COPY requirements.local-docker.txt ." in dockerfile
+    assert "UV_PROJECT_ENVIRONMENT=/opt/acquire" in dockerfile
+    assert "RUN uv sync --frozen --no-dev --no-editable" in dockerfile
+    assert "PYTHONPATH" not in dockerfile
+    assert "requirements.local-docker.txt" not in dockerfile
     assert "client/main/js/main.js" in dockerfile
     assert "client/stats/css/stats.css" in dockerfile
-    assert 'CMD ["python", "http_server.py", "--host", "0.0.0.0", "--port", "9000"]' in (
-        dockerfile
-    )
+    assert 'CMD ["acquire-http-server"' in dockerfile
+    assert '"--main-static-root", "/app/client/main"' in dockerfile
+    assert '"--stats-static-root", "/app/client/stats"' in dockerfile
+    assert "http_server.py" not in dockerfile
     assert "docker build -t acquire:production ." in readme
     assert "docker build -t acquire:production ." in deployment_notes
-    assert "python setup_database.py" in deployment_notes
+    assert "acquire-setup-database" in deployment_notes
     assert "AWS" in deployment_notes
 
 
@@ -216,6 +242,7 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert publish_job["permissions"] == {"contents": "read", "id-token": "write"}
     assert "docker build -t acquire:production-test ." in workflow
     assert workflow.count("production image smoke ok") == 2
+    assert workflow.count("acquire-http-server --help") == 2
     assert workflow.count("from acquire import http_server") == 2
     assert workflow.count("http_server.DEFAULT_MAIN_STATIC_ROOT") == 6
     assert workflow.count("http_server.DEFAULT_STATS_STATIC_ROOT") == 4

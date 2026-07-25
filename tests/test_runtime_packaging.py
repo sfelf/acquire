@@ -3,6 +3,7 @@
 import ast
 import importlib
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -78,6 +79,48 @@ def test_runtime_imports_outside_repository_without_pythonpath(tmp_path: Path) -
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_installed_http_server_command_runs_outside_repository(
+    tmp_path: Path,
+) -> None:
+    """Verify installed help and configuration failure need no source cwd."""
+    command = shutil.which("acquire-http-server")
+    assert command is not None
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    missing_root = tmp_path / "private-missing-root"
+
+    help_result = subprocess.run(
+        [command, "--help"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    failure_result = subprocess.run(
+        [
+            command,
+            "--main-static-root",
+            str(missing_root),
+            "--stats-static-root",
+            str(missing_root),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert help_result.returncode == 0
+    assert help_result.stderr == ""
+    assert "Serve Acquire HTTP routes from Python" in help_result.stdout
+    assert failure_result.returncode == 1
+    assert failure_result.stdout == ""
+    assert failure_result.stderr == "error: HTTP server configuration failed\n"
+    assert str(missing_root) not in failure_result.stderr
 
 
 @pytest.mark.parametrize(

@@ -23,9 +23,7 @@ services:
       - .:/app
     working_dir: /app
     command:
-      - python
-      - -m
-      - acquire.enumsgen
+      - acquire-generate-enums
       - js
       - development
       - --client-source-root
@@ -70,13 +68,17 @@ services:
       - "${ACQUIRE_UI_PORT:-9000}:9000"
     volumes:
       - .:/app
-    working_dir: /app/server
+    working_dir: /app
     command: >
       sh -c "test -f /app/client/main/js/main.js
       && test -f /app/client/main/css/main.css
       && test -f /app/client/stats/css/stats.css
       || { echo 'Run docker compose --profile client-build run --rm client-assets before starting python-gateway.'; exit 1; }
-      && python http_server.py --host 0.0.0.0 --port 9000"
+      && acquire-http-server
+      --host 0.0.0.0
+      --port 9000
+      --main-static-root /app/client/main
+      --stats-static-root /app/client/stats"
 
 volumes:
   postgres-data:

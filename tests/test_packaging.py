@@ -69,6 +69,7 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert "package_root.joinpath('migrations', 'env.py').is_file()" in workflow_text
     assert ".venv/bin/acquire-setup-database --help" in workflow_text
     assert ".venv/bin/acquire-generate-enums --help" in workflow_text
+    assert ".venv/bin/acquire-http-server --help" in workflow_text
     assert ".venv/bin/acquire-update-stats --help" in workflow_text
 
 

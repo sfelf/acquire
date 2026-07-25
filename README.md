@@ -76,7 +76,7 @@ docker compose up --build postgres python-gateway
 Initialize the local database in another terminal:
 
 ```bash
-docker compose run --rm python-gateway python setup_database.py
+docker compose run --rm python-gateway acquire-setup-database
 ```
 
 Then open [http://localhost:9000/](http://localhost:9000/).
@@ -118,11 +118,9 @@ lookup rows, mark the baseline as already applied instead:
 uv run alembic stamp head
 ```
 
-Local Docker setup uses Alembic through `acquire.setup_database`; the current
-direct-file command is a temporary compatibility entry point until a later
-issue #110 slice migrates Docker callers. Normal installations expose
-`acquire-setup-database`. Future schema or required lookup-data changes should
-be added as Alembic revisions.
+Local Docker setup uses Alembic through the installed
+`acquire-setup-database` command. Future schema or required lookup-data changes
+should be added as Alembic revisions.
 
 ## Stats updater
 

@@ -43,9 +43,10 @@ Follow these rules when a later Packaging issue moves a module:
 7. Do not edit generated client assets. Update their source or generation
    command only when the owning issue requires it.
 
-Until issue #111 removes legacy direct-file working directories, Docker images
-temporarily add `/app/src` to `PYTHONPATH` so those commands can import migrated
-modules. This is compatibility scaffolding, not an alternative package layout.
+Docker images install the project into a dedicated virtual environment and
+invoke supported project scripts without `PYTHONPATH` or a `server/` working
+directory. Issue #111 still owns removal of the compatibility wrappers
+themselves.
 
 Issue #105 moves the persistence boundary in reviewable slices. The ORM models
 and session lifecycle are authoritative in `acquire.orm`; `server/orm.py`
@@ -53,10 +54,10 @@ temporarily aliases that same module object for unmigrated direct-file callers.
 Authentication is authoritative in `acquire.auth`; `server/auth.py` provides
 the equivalent temporary alias while the HTTP runtime remains under `server/`.
 Database setup is authoritative in `acquire.setup_database`;
-`server/setup_database.py` remains a temporary direct-file entry point for
-Docker and deployment callers until a later issue #110 slice migrates those
-calls. The installed `acquire-setup-database` command is available in a normal
-installation, and Alembic is an operational runtime dependency. Its
+`server/setup_database.py` remains a temporary direct-file entry point only for
+compatibility until issue #111. Docker and deployment callers use the installed
+`acquire-setup-database` command, and Alembic is an operational runtime
+dependency. Its
 configuration, environment, revision template, and revision scripts are package
 resources under `src/acquire/`, so the command works independently of the
 repository and current working directory. The root `alembic.ini` remains a
@@ -111,8 +112,22 @@ Issue #110 is delivered in three independently reviewable slices. The first
 adds the installed database-setup boundary and packaged Alembic resources. The
 second moves enum generation to `acquire.enumsgen`, adds
 `acquire-generate-enums` and `acquire-update-stats`, and migrates the focused
-npm and Compose enum callers. The final slice migrates the gateway and runtime
-callers. The issue remains open until all three slices merge.
+npm and Compose enum callers. The final slice adds `acquire-http-server`,
+installs the project in production and local images, and migrates the gateway
+and remaining runtime callers.
+
+### Gateway Command Boundary
+
+| Field | Source and trust | Runtime use | Diagnostic policy |
+| --- | --- | --- | --- |
+| Host and port | Operator or container configuration, untrusted | Bind the Uvicorn listener | Validate the TCP port; use fixed invalid-argument output |
+| Main and stats static roots | Operator or container configuration, private and untrusted | Serve generated external client assets | Require absolute existing directories before startup; never print |
+
+`acquire-http-server` accepts `--host`, `--port`, `--main-static-root`, and
+`--stats-static-root`. Invalid arguments exit 2, unavailable roots exit 1 with
+a fixed marker before Uvicorn starts, and a normal shutdown exits 0. Production
+and local containers pass both roots explicitly and run from `/app`, not
+`/app/server`.
 
 ### Build And Maintenance Command Data Boundaries
 

@@ -174,8 +174,7 @@ def e2e_base_url(pytestconfig):
             "run",
             "--rm",
             "python-gateway",
-            "python",
-            "setup_database.py",
+            "acquire-setup-database",
         )
         yield f"http://127.0.0.1:{ui_port}/"
     finally:

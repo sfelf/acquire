@@ -17,7 +17,7 @@ import urllib.parse
 from collections.abc import Callable
 from contextlib import AbstractContextManager, suppress
 from pathlib import Path
-from typing import Literal, TextIO
+from typing import Literal, Never, TextIO
 
 import ujson
 import uvicorn
@@ -695,8 +695,29 @@ def run_http_server(
     uvicorn.run(app, host=host, port=port)
 
 
+class HttpServerArgumentParser(argparse.ArgumentParser):
+    """Parse gateway arguments without reflecting operator-controlled values.
+
+    Bind configuration and static roots may contain private deployment
+    identifiers. Invalid input therefore exits with a fixed diagnostic rather
+    than argparse output containing the supplied value.
+    """
+
+    def error(self, message: str) -> Never:
+        """Exit with a fixed invalid-argument diagnostic.
+
+        Args:
+            message: Argparse-generated error text, intentionally ignored.
+        """
+        self.exit(2, "error: invalid arguments\n")
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments.
+    """Parse and validate installed gateway arguments.
+
+    Ports must be in the TCP range and both static roots must be absolute.
+    Filesystem availability is checked separately so `--help` never requires
+    generated client assets.
 
     Args:
         argv: Optional argument list. Uses `sys.argv` when omitted.
@@ -704,28 +725,63 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     Returns:
         Parsed command-line namespace.
     """
-    parser = argparse.ArgumentParser(description="Serve Acquire HTTP routes from Python.")
+    parser = HttpServerArgumentParser(
+        prog="acquire-http-server",
+        description="Serve Acquire HTTP routes from Python.",
+        allow_abbrev=False,
+    )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--main-static-root", type=Path, default=DEFAULT_MAIN_STATIC_ROOT)
     parser.add_argument("--stats-static-root", type=Path, default=DEFAULT_STATS_STATIC_ROOT)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not 1 <= args.port <= 65535:
+        parser.error("port must be between 1 and 65535")
+    if not args.main_static_root.is_absolute() or not args.stats_static_root.is_absolute():
+        parser.error("static roots must be absolute")
+    return args
 
 
-def main(argv: list[str] | None = None) -> None:
-    """Run the command-line HTTP server.
+def validate_static_roots(main_static_root: Path, stats_static_root: Path) -> None:
+    """Require both configured static roots to be existing directories.
+
+    Args:
+        main_static_root: Root directory for generated `client/main` assets.
+        stats_static_root: Root directory for generated `client/stats` assets.
+
+    Raises:
+        FileNotFoundError: Either root is missing or is not a directory.
+    """
+    if not main_static_root.is_dir() or not stats_static_root.is_dir():
+        raise FileNotFoundError("configured static root is unavailable")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the installed HTTP gateway command.
+
+    Static roots are validated before Uvicorn starts. Missing roots return a
+    fixed operational diagnostic that excludes private filesystem paths.
 
     Args:
         argv: Optional argument list. Uses `sys.argv` when omitted.
+
+    Returns:
+        `0` after a normal server shutdown or `1` for invalid static roots.
     """
     args = parse_args(argv)
+    try:
+        validate_static_roots(args.main_static_root, args.stats_static_root)
+    except OSError:
+        print("error: HTTP server configuration failed", file=sys.stderr)
+        return 1
     run_http_server(
         host=args.host,
         port=args.port,
         main_static_root=args.main_static_root,
         stats_static_root=args.stats_static_root,
     )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -23,6 +23,7 @@ jobs:
 
       - name: Smoke test production image
         run: |
+          docker run --rm acquire:production-test acquire-http-server --help
           docker run --rm acquire:production-test python -c "from pathlib import Path; from acquire import http_server; assert http_server.DEFAULT_MAIN_STATIC_ROOT == Path('/app/client/main'); assert http_server.DEFAULT_STATS_STATIC_ROOT == Path('/app/client/stats'); assert (http_server.DEFAULT_MAIN_STATIC_ROOT / 'js/main.js').is_file(); assert (http_server.DEFAULT_MAIN_STATIC_ROOT / 'css/main.css').is_file(); assert (http_server.DEFAULT_STATS_STATIC_ROOT / 'css/stats.css').is_file(); print('production image smoke ok')"
 
   publish-ecr:
@@ -59,5 +60,6 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker run --rm "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" acquire-http-server --help
           docker run --rm "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" python -c "from pathlib import Path; from acquire import http_server; assert http_server.DEFAULT_MAIN_STATIC_ROOT == Path('/app/client/main'); assert http_server.DEFAULT_STATS_STATIC_ROOT == Path('/app/client/stats'); assert (http_server.DEFAULT_MAIN_STATIC_ROOT / 'js/main.js').is_file(); assert (http_server.DEFAULT_MAIN_STATIC_ROOT / 'css/main.css').is_file(); assert (http_server.DEFAULT_STATS_STATIC_ROOT / 'css/stats.css').is_file(); print('production image smoke ok')"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
