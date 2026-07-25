@@ -3,7 +3,6 @@
 import ast
 import importlib
 import os
-import runpy
 import shutil
 import subprocess
 import sys
@@ -15,22 +14,15 @@ pytestmark = pytest.mark.unit
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_MODULES = ("log_tools", "recreate_game", "stats")
-LEGACY_MODULES = {
-    "log_tools": "logs_to_games",
-    "recreate_game": "recreate_game",
-    "stats": "cron",
-}
 
 
 @pytest.mark.parametrize("package_name", PACKAGE_MODULES)
-def test_packaged_offline_tool_is_authoritative_and_legacy_module_is_alias(
+def test_packaged_offline_tool_is_authoritative(
     package_name: str,
 ) -> None:
-    """Verify each legacy offline-tool path shares its packaged module object."""
+    """Verify each offline tool resolves from the production source layout."""
     package_module = importlib.import_module(f"acquire.{package_name}")
-    legacy_module = importlib.import_module(LEGACY_MODULES[package_name])
 
-    assert legacy_module is package_module
     assert package_module.__file__ == str(
         REPOSITORY_ROOT / "src" / "acquire" / f"{package_name}.py"
     )
@@ -87,31 +79,6 @@ def test_offline_tools_run_outside_repository_without_pythonpath(tmp_path: Path)
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize(
-    ("wrapper_name", "package_name"),
-    (
-        ("logs_to_games.py", "log_tools"),
-        ("recreate_game.py", "recreate_game"),
-        ("cron.py", "stats"),
-    ),
-)
-def test_legacy_offline_tool_wrappers_are_minimal_and_owned_by_issue_111(
-    wrapper_name: str,
-    package_name: str,
-) -> None:
-    """Verify transitional direct-file paths contain only package delegation."""
-    wrapper_path = REPOSITORY_ROOT / "server" / wrapper_name
-    source = wrapper_path.read_text()
-    tree = ast.parse(source)
-
-    assert "issue #111" in source
-    assert f"from acquire import {package_name} as _" in source
-    assert not any(
-        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        for node in ast.walk(tree)
-    )
-
-
 def test_stats_roots_default_to_validated_source_layout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -122,7 +89,7 @@ def test_stats_roots_default_to_validated_source_layout(
 
     assert stats.resolve_stats_roots() == (
         REPOSITORY_ROOT / "client" / "stats" / "data",
-        REPOSITORY_ROOT / "server" / "stats_temp",
+        REPOSITORY_ROOT / "stats_temp",
     )
 
 
@@ -277,41 +244,3 @@ def test_stats_command_rejects_relative_roots_without_reflecting_them(
     assert result.stdout == ""
     assert result.stderr == "error: invalid arguments\n"
     assert private_root not in result.stderr
-
-
-@pytest.mark.parametrize(
-    ("wrapper_name", "package_name", "raises_system_exit"),
-    (
-        ("logs_to_games.py", "log_tools", False),
-        ("cron.py", "stats", True),
-    ),
-)
-def test_direct_file_entry_points_delegate_to_packaged_main(
-    wrapper_name: str,
-    package_name: str,
-    raises_system_exit: bool,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Verify existing script paths invoke the authoritative package command."""
-    package_module = importlib.import_module(f"acquire.{package_name}")
-    calls: list[str] = []
-    monkeypatch.setattr(
-        package_module,
-        "main",
-        lambda: calls.append(package_name) or 0,
-    )
-
-    if raises_system_exit:
-        with pytest.raises(SystemExit) as exit_info:
-            runpy.run_path(
-                str(REPOSITORY_ROOT / "server" / wrapper_name),
-                run_name="__main__",
-            )
-        assert exit_info.value.code == 0
-    else:
-        runpy.run_path(
-            str(REPOSITORY_ROOT / "server" / wrapper_name),
-            run_name="__main__",
-        )
-
-    assert calls == [package_name]

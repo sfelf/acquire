@@ -16,12 +16,10 @@ pytestmark = pytest.mark.unit
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_packaged_setup_database_is_authoritative_and_legacy_module_is_alias() -> None:
-    """Verify both database-setup import paths share one mutable module."""
+def test_packaged_setup_database_is_authoritative() -> None:
+    """Verify database setup resolves from the sole production source layout."""
     package_setup = importlib.import_module("acquire.setup_database")
-    legacy_setup = importlib.import_module("setup_database")
 
-    assert legacy_setup is package_setup
     assert package_setup.__file__ == str(
         REPOSITORY_ROOT / "src" / "acquire" / "setup_database.py"
     )

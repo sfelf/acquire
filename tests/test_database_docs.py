@@ -26,14 +26,14 @@ def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     assert "The Packaging milestone is active." in plans
     assert "[#103](https://github.com/sfelf/acquire/issues/103)," in plans
     assert "[#104](https://github.com/sfelf/acquire/issues/104)," in plans
-    assert "[#110](https://github.com/sfelf/acquire/issues/110) are complete" in plans
-    assert "[#111](https://github.com/sfelf/acquire/issues/111) is next" in plans
+    assert "[#111](https://github.com/sfelf/acquire/issues/111) are complete" in plans
+    assert "[#127](https://github.com/sfelf/acquire/issues/127) is next" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
     assert "Issue #110 is also delivered as three stand-alone PR slices" in plans
     assert "GitHub issues remain the source of\ntruth for issue scope" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
     assert "The six-phase modernization plan is complete." in agent_notes
-    assert "Complete packaging and import restructuring" in agent_notes
+    assert "Complete Packaging artifact closeout in issue #127" in agent_notes
     assert "GitHub issues and milestones\nremain authoritative" in agent_notes
     assert "update `PLANS.md` when an approved issue change" in agent_notes
     assert "Keep linting and type checking permissive" not in agent_notes
@@ -217,7 +217,7 @@ def test_local_database_setup_docs_use_alembic_command() -> None:
         local_development
     )
     assert "`acquire.setup_database`" in database_notes
-    assert "server/setup_database.py" in database_notes
+    assert "server/setup_database.py" not in database_notes
     assert "The legacy MySQL reset command has been removed" in database_notes
     assert "python initialize_database.py" not in readme
     assert "python initialize_database.py" not in local_development

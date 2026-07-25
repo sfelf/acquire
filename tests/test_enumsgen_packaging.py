@@ -1,7 +1,6 @@
 """Verify the packaged enum-generator command boundary."""
 
 import ast
-import importlib
 import os
 import shutil
 import subprocess
@@ -12,31 +11,6 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_packaged_enum_generator_is_authoritative_and_legacy_module_is_alias() -> None:
-    """Verify both enum-generator import paths share one module."""
-    package_module = importlib.import_module("acquire.enumsgen")
-    legacy_module = importlib.import_module("enumsgen")
-
-    assert legacy_module is package_module
-    assert package_module.__file__ == str(
-        REPOSITORY_ROOT / "src" / "acquire" / "enumsgen.py"
-    )
-
-
-def test_enum_generator_wrapper_is_minimal_and_owned_by_issue_111() -> None:
-    """Verify the transitional direct-file path contains only delegation."""
-    wrapper_path = REPOSITORY_ROOT / "server" / "enumsgen.py"
-    source = wrapper_path.read_text()
-    tree = ast.parse(source)
-
-    assert "issue #111" in source
-    assert "from acquire import enumsgen as _enumsgen" in source
-    assert not any(
-        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        for node in ast.walk(tree)
-    )
 
 
 def test_enum_generator_does_not_mutate_sys_path() -> None:

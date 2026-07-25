@@ -14,12 +14,10 @@ pytestmark = pytest.mark.unit
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_packaged_auth_is_authoritative_and_legacy_module_is_alias() -> None:
-    """Verify both auth import paths share one mutable module."""
+def test_packaged_auth_is_authoritative() -> None:
+    """Verify authentication resolves from the sole production source layout."""
     package_auth = importlib.import_module("acquire.auth")
-    legacy_auth = importlib.import_module("auth")
 
-    assert legacy_auth is package_auth
     assert package_auth.__file__ == str(REPOSITORY_ROOT / "src" / "acquire" / "auth.py")
 
 

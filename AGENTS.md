@@ -16,10 +16,10 @@ import restructuring before the major refactor.
 - `src/acquire/log_tools.py`, `src/acquire/recreate_game.py`, and
   `src/acquire/stats.py` contain the replay, snapshot-restoration, and stats
   maintenance tooling.
-- The corresponding files under `server/` are temporary compatibility wrappers
-  for existing direct-file commands.
-- `docs/packaging.md` defines the incremental module-migration convention for
-  the active Packaging milestone.
+- `src/acquire/` is the sole production Python source boundary; use installed
+  project commands or `acquire.*` imports.
+- `docs/packaging.md` defines the canonical source-layout and installed-command
+  contract for the active Packaging milestone.
 - Postgres is the only application runtime database. MySQL support is limited
   to `acquire.migration`, installed with the `mysql-migration` optional uv extra
   for importing existing backups.
@@ -111,7 +111,8 @@ uv run pre-commit run --all-files
 
 ## Current Priorities
 
-1. Complete packaging and import restructuring through the Packaging milestone.
+1. Complete Packaging artifact closeout in issue #127 from the canonical
+   `src/acquire/` layout.
 2. Keep characterization, integration, database, golden, and e2e tests green
    while preparing the major refactor.
 3. Preserve the optional MySQL-backup import path until existing backups no

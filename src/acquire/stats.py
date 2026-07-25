@@ -24,7 +24,7 @@ RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
 STATS_UPDATE_INTERVAL_SECONDS = 60
 SOURCE_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_STATS_DATA_ROOT = SOURCE_PROJECT_ROOT / "client" / "stats" / "data"
-SOURCE_STATS_TEMP_ROOT = SOURCE_PROJECT_ROOT / "server" / "stats_temp"
+SOURCE_STATS_TEMP_ROOT = SOURCE_PROJECT_ROOT / "stats_temp"
 STATS_DATA_ROOT_ENV = "ACQUIRE_STATS_DATA_ROOT"
 STATS_TEMP_ROOT_ENV = "ACQUIRE_STATS_TEMP_ROOT"
 
@@ -99,7 +99,7 @@ def resolve_stats_roots(
             stats_temp_root,
             STATS_TEMP_ROOT_ENV,
             SOURCE_STATS_TEMP_ROOT,
-            SOURCE_PROJECT_ROOT / "server",
+            SOURCE_PROJECT_ROOT / "src" / "acquire",
         ),
     )
 

@@ -14,9 +14,6 @@ import sqlalchemy
 import acquire
 
 REPO_DIR = Path(__file__).resolve().parents[1]
-SERVER_DIR = Path(__file__).resolve().parents[1] / "server"
-if str(SERVER_DIR) not in sys.path:
-    sys.path.insert(0, str(SERVER_DIR))
 
 
 def _is_marker_selected(config, marker):

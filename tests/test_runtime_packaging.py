@@ -14,22 +14,15 @@ pytestmark = pytest.mark.unit
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_MODULES = ("game_server", "realtime", "http_server")
-LEGACY_MODULES = {
-    "game_server": "server",
-    "realtime": "websocket_gateway",
-    "http_server": "http_server",
-}
 
 
 @pytest.mark.parametrize("package_name", PACKAGE_MODULES)
-def test_packaged_runtime_is_authoritative_and_legacy_module_is_alias(
+def test_packaged_runtime_is_authoritative(
     package_name: str,
 ) -> None:
-    """Verify each legacy runtime path shares its packaged module object."""
+    """Verify each runtime module resolves from the production source layout."""
     package_module = importlib.import_module(f"acquire.{package_name}")
-    legacy_module = importlib.import_module(LEGACY_MODULES[package_name])
 
-    assert legacy_module is package_module
     assert package_module.__file__ == str(
         REPOSITORY_ROOT / "src" / "acquire" / f"{package_name}.py"
     )
@@ -121,31 +114,6 @@ def test_installed_http_server_command_runs_outside_repository(
     assert failure_result.stdout == ""
     assert failure_result.stderr == "error: HTTP server configuration failed\n"
     assert str(missing_root) not in failure_result.stderr
-
-
-@pytest.mark.parametrize(
-    ("wrapper_name", "package_name"),
-    (
-        ("server.py", "game_server"),
-        ("websocket_gateway.py", "realtime"),
-        ("http_server.py", "http_server"),
-    ),
-)
-def test_legacy_runtime_wrappers_are_minimal_and_owned_by_issue_111(
-    wrapper_name: str,
-    package_name: str,
-) -> None:
-    """Verify transitional startup files contain only package delegation."""
-    wrapper_path = REPOSITORY_ROOT / "server" / wrapper_name
-    source = wrapper_path.read_text()
-    tree = ast.parse(source)
-
-    assert "issue #111" in source
-    assert f"from acquire import {package_name} as _" in source
-    assert not any(
-        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        for node in ast.walk(tree)
-    )
 
 
 def test_runtime_static_roots_match_editable_and_container_layouts() -> None:

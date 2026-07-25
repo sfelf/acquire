@@ -1,9 +1,9 @@
 import hashlib
 from pathlib import Path
 
-import enumsgen
 import pytest
 
+from acquire import enumsgen
 from acquire.enums import CommandsToClient, GameModes, Options
 
 pytestmark = pytest.mark.unit

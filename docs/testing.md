@@ -30,13 +30,12 @@ All Python source included in the coverage target should count toward the covera
 Run coverage locally with:
 
 ```bash
-uv run pytest --cov=server --cov=src/acquire --cov-report=term-missing:skip-covered
+uv run pytest --cov=src/acquire --cov-report=term-missing:skip-covered
 ```
 
 ## Test Layout
 
-- `tests/conftest.py` makes the legacy `server/` modules importable without changing runtime paths.
-- `tests/conftest.py` also provides Docker-backed fixtures for marker tests that
+- `tests/conftest.py` provides Docker-backed fixtures for marker tests that
   need Postgres or the local browser UI.
 - `tests/test_id_managers.py` contains the migrated ID manager coverage.
 - `tests/test_server_protocol.py` covers the Python server line protocol parser.
