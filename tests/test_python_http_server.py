@@ -1269,6 +1269,35 @@ def test_create_listener_sockets_skips_unavailable_address_family(monkeypatch):
     available.close()
 
 
+def test_create_listener_sockets_supports_ipv6_only_hostname(monkeypatch):
+    listener = FakeListener()
+    ipv6_address = ("::1", 19001, 0, 0)
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET6,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ipv6_address,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listener,
+    )
+
+    result = http_server.create_listener_sockets("ipv6-only.internal", 19001)
+
+    assert result == [listener]
+    assert ("bind", ipv6_address) in listener.calls
+    listener.close()
+
+
 def test_create_listener_sockets_closes_partial_set_after_fatal_bind(monkeypatch):
     bound = FakeListener()
     failed = FakeListener(
