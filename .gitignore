@@ -10,7 +10,7 @@
 *.py[cod]
 *.sock
 /tests/__pycache__/
-/server/__pycache__
+/stats_temp/
 /uv-cache
 /.uv-cache
 /.uv-venv

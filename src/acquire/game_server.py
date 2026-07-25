@@ -1,7 +1,7 @@
 """Run the authoritative Acquire game engine and socket protocol handlers.
 
 The game engine owns in-memory game state and the legacy line-oriented protocol
-still consumed by compatibility and replay callers.
+still consumed by gateway and replay callers.
 """
 
 from __future__ import annotations
@@ -2274,34 +2274,3 @@ class Game:
 
         # action
         self.actions[-1].send_message({client.client_id})
-
-
-def main() -> None:
-    """Run the module command-line entry point."""
-    server = Server()
-    server_protocol = ServerProtocol(server)
-
-    # import recreate_game
-    # recreate_game.recreate_some_games(server)
-
-    loop = asyncio.get_event_loop()
-
-    loop.run_until_complete(loop.create_unix_server(lambda: server_protocol, "python.sock"))
-
-    def destroy_expired_games_loop():
-        """Destroy expired games loop."""
-        server.destroy_expired_games()
-        loop.call_later(15, destroy_expired_games_loop)
-
-    loop.call_later(15, destroy_expired_games_loop)
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        pass
-    except BaseException:
-        traceback.print_exc()
-
-
-if __name__ == "__main__":
-    main()

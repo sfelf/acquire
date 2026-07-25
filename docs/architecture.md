@@ -12,8 +12,8 @@ tooling.
 - `acquire.log_tools` owns historical parsing, replay, and manual reports;
   `acquire.recreate_game` restores serialized in-progress games; and
   `acquire.stats` owns database log ingestion, ratings, and published stats.
-- Files with the former names under `server/` are temporary compatibility
-  wrappers for existing direct-file commands.
+- `src/acquire/` is the sole production Python source layout. Runtime and
+  maintenance callers use installed project commands or `acquire.*` imports.
 - Postgres is the application runtime database. MySQL support is limited to the
   optional backup-import tools under `acquire.migration`; loading that package
   does not initialize the application ORM or runtime database engine.

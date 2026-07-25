@@ -3,8 +3,8 @@
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
-- The Packaging milestone is active. Issues #103 through #110 are complete;
-  work is currently at issue #111.
+- The Packaging milestone is active. Issues #103 through #111 are complete;
+  issue #127 is the remaining artifact-closeout gate.
 
 This document preserves the agreed modernization record and documents the
 delivery order for active milestone work. GitHub issues remain the source of
@@ -19,9 +19,10 @@ Status: issues
 [#106](https://github.com/sfelf/acquire/issues/106),
 [#107](https://github.com/sfelf/acquire/issues/107),
 [#108](https://github.com/sfelf/acquire/issues/108),
-[#109](https://github.com/sfelf/acquire/issues/109), and
-[#110](https://github.com/sfelf/acquire/issues/110) are complete. Issue
-[#111](https://github.com/sfelf/acquire/issues/111) is next.
+[#109](https://github.com/sfelf/acquire/issues/109),
+[#110](https://github.com/sfelf/acquire/issues/110), and
+[#111](https://github.com/sfelf/acquire/issues/111) are complete. Issue
+[#127](https://github.com/sfelf/acquire/issues/127) is next.
 
 Goal: package the Python backend for uv-managed installation, normalize imports,
 and expose stable project scripts without changing application behavior.
@@ -44,12 +45,12 @@ and expose stable project scripts without changing application behavior.
   test suite and its required sanitized fixtures. They exclude generated
   assets, credentials, database dumps, sockets, caches, bytecode, coverage
   output, and temporary reports.
-- These are artifact-closeout requirements, not an instruction for #103 to
-  include tests that still depend on unmigrated modules under `server/`.
-- Temporary `server/` compatibility wrappers may exist only while callers are
-  being migrated. They contain no application logic, identify
-  [#111](https://github.com/sfelf/acquire/issues/111) as their removal owner,
-  and are not a second supported API.
+- `src/acquire/` is the sole production Python source boundary. Application
+  and test imports use the `acquire.*` namespace, and installed project scripts
+  own the supported command surface.
+- Exactly six project scripts are supported. The standalone socket game-server
+  and ad hoc log-maintenance dispatchers are retired while their packaged
+  engine and replay APIs remain importable.
 
 ### Dependency Waves
 
@@ -131,6 +132,11 @@ Issue #110 is also delivered as three stand-alone PR slices:
 
 All three slices have passed the complete acceptance criteria; the final slice
 closes the issue when it merges.
+
+Issue #111 removes the complete transitional `server/` layout, path injection,
+direct-file commands, and compatibility-oriented tool configuration. The
+source-layout migration is complete; #127 owns only distribution artifact
+inventory and clean-install verification.
 
 ### Issue Verification Gates
 

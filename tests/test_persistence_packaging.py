@@ -14,12 +14,10 @@ pytestmark = pytest.mark.unit
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_packaged_orm_is_authoritative_and_legacy_module_is_alias() -> None:
-    """Verify both import paths share one mutable ORM module."""
+def test_packaged_orm_is_authoritative() -> None:
+    """Verify ORM resolves from the sole production source layout."""
     package_orm = importlib.import_module("acquire.orm")
-    legacy_orm = importlib.import_module("orm")
 
-    assert legacy_orm is package_orm
     assert package_orm.__file__ == str(REPOSITORY_ROOT / "src" / "acquire" / "orm.py")
 
 

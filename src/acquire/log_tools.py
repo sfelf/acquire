@@ -3464,39 +3464,3 @@ def punycode_non_ascii_usernames_in_the_database() -> None:
                     + str(user_id)
                     + ";"
                 )
-
-
-def main() -> None:
-    """Run the module command-line entry point."""
-    output_dir = "/tmp/tim/acquire/gameTestFiles"
-    output_dir + "/logs"
-
-    # test_individual_game_log(output_dir)
-
-    # output_sync_logs_for_all_unsynchronized_games(output_logs_dir)
-    # report_on_sync_logs(output_logs_dir)
-    # make_individual_game_logs_for_each_sync_log(output_logs_dir, output_logs_dir)
-    # run_all_game_logs_with_tile_bag_tweaks(output_logs_dir, output_dir)
-    # verbosely_compare_individual_game_logs_with_tile_bag_tweaks(output_logs_dir, output_dir)
-    # output_server_game_files_for_all_in_progress_games(output_dir)
-    # output_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir)
-    # report_on_first_merge_bonuses_and_final_scores_of_all_completed_games(output_dir)
-    # report_on_player_ranking_distribution(output_dir)
-    # make_individual_game_log(1483363628, 893, output_dir)
-    # output_server_game_file_for_game(1433241253, 510, output_dir)
-    # output_chat_messages(1520848828)
-    # compare_log_usernames_with_database_usernames(1408911415)
-
-    command = sys.argv[1]
-    if command == "output_username_to_user_id":
-        output_username_to_user_id()
-    elif command == "output_log_file_filenames_in_reverse_size_order":
-        output_log_file_filenames_in_reverse_size_order()
-    elif command == "make_acquire2_game_test_files":
-        make_acquire2_game_test_files(int(sys.argv[2]), output_dir)
-    elif command == "punycode_non_ascii_usernames_in_the_database":
-        punycode_non_ascii_usernames_in_the_database()
-
-
-if __name__ == "__main__":
-    main()

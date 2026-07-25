@@ -38,7 +38,7 @@ uv run pytest
 Run the informational coverage report with:
 
 ```bash
-uv run pytest --cov=server --cov-report=term-missing:skip-covered --cov-report=xml
+uv run pytest --cov=src/acquire --cov-report=term-missing:skip-covered --cov-report=xml
 ```
 
 The test configuration enforces at least 90% total coverage. The coverage
@@ -156,22 +156,6 @@ npm run build:client
 ```
 
 Install the `zopfli` system package when running the legacy stats compression
-workflow.
-
-### Legacy Python Installation
-
-`requirements.txt` remains available temporarily for compatibility with the
-pre-uv installation path. New development should use `uv`.
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip3 install -r requirements.txt
-pip3 install --no-deps -e .
-```
-
-The editable project install exposes the `acquire` package while
-`requirements.txt` remains the source of dependencies for this transitional
 workflow.
 
 ## Download libraries for development use:

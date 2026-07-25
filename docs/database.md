@@ -13,9 +13,7 @@ existing backup into Postgres.
   lookup rows.
 - `acquire.setup_database` applies Alembic migrations for local Docker and e2e
   setup without dropping data. Local Docker, deployment, and installed
-  environments invoke that boundary through `acquire-setup-database`. The
-  temporary `server/setup_database.py` wrapper remains only for compatibility
-  until issue #111 removes transitional paths.
+  environments invoke that boundary through `acquire-setup-database`.
 - `acquire.migration.import_mysql_to_postgres` copies known application tables from a
   MySQL-compatible source into a migrated Postgres-compatible target for
   cutover rehearsals. It accepts matching Alembic-seeded lookup rows but refuses

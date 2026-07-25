@@ -496,45 +496,6 @@ def test_log_file_size_and_username_id_tools_print_generated_data(
     assert "src/acquire/username_to_user_id.py" in opened_username_paths[0].as_posix()
 
 
-def test_main_dispatches_supported_commands(logs_to_games_without_database, monkeypatch):
-    logs_to_games = logs_to_games_without_database
-    calls = []
-    monkeypatch.setattr(
-        logs_to_games, "output_username_to_user_id", lambda: calls.append("usernames")
-    )
-    monkeypatch.setattr(
-        logs_to_games,
-        "output_log_file_filenames_in_reverse_size_order",
-        lambda: calls.append("sizes"),
-    )
-    monkeypatch.setattr(
-        logs_to_games,
-        "make_acquire2_game_test_files",
-        lambda log_timestamp, output_dir: calls.append(("acquire2", log_timestamp, output_dir)),
-    )
-    monkeypatch.setattr(
-        logs_to_games,
-        "punycode_non_ascii_usernames_in_the_database",
-        lambda: calls.append("punycode"),
-    )
-
-    for argv in [
-        ["logs_to_games.py", "output_username_to_user_id"],
-        ["logs_to_games.py", "output_log_file_filenames_in_reverse_size_order"],
-        ["logs_to_games.py", "make_acquire2_game_test_files", "123"],
-        ["logs_to_games.py", "punycode_non_ascii_usernames_in_the_database"],
-    ]:
-        monkeypatch.setattr(logs_to_games.sys, "argv", argv)
-        logs_to_games.main()
-
-    assert calls == [
-        "usernames",
-        "sizes",
-        ("acquire2", 123, "/tmp/tim/acquire/gameTestFiles"),
-        "punycode",
-    ]
-
-
 def test_make_acquire2_game_test_files_writes_replay_text(
     logs_to_games_without_database,
     monkeypatch,
