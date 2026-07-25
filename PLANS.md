@@ -123,7 +123,8 @@ Issue #110 is also delivered as three stand-alone PR slices:
 
 1. Add the installed database-setup command, make Alembic an operational
    runtime dependency, and package its configuration and migration resources.
-2. Add the installed build and maintenance commands.
+   Complete.
+2. Add the installed build and maintenance commands. In progress.
 3. Add the installed gateway command and migrate Docker, Compose, and remaining
    runtime callers.
 

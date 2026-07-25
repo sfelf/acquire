@@ -1,8 +1,10 @@
 import contextlib
 import importlib
 import io
+import subprocess
 import sys
 import types
+from pathlib import Path
 
 import pytest
 import ujson
@@ -806,8 +808,8 @@ def test_process_logs_updates_offsets_and_writes_changed_user_stats(cron_module,
         file.name = filename
         return file
 
-    monkeypatch.setattr(cron_module.orm, "session_scope", session_scope)
-    monkeypatch.setattr(cron_module.orm, "Lookup", lambda session_arg: lookup)
+    monkeypatch.setattr(sys.modules["acquire.orm"], "session_scope", session_scope)
+    monkeypatch.setattr(sys.modules["acquire.orm"], "Lookup", lambda session_arg: lookup)
     monkeypatch.setattr(cron_module, "Logs2DB", FakeLogs2DB)
     monkeypatch.setattr(cron_module, "StatsGen", FakeStatsGen)
     monkeypatch.setattr(
@@ -884,8 +886,8 @@ def test_process_logs_publishes_compressed_stats_files(
     def session_scope():
         yield session
 
-    monkeypatch.setattr(cron_module.orm, "session_scope", session_scope)
-    monkeypatch.setattr(cron_module.orm, "Lookup", lambda session_arg: lookup)
+    monkeypatch.setattr(sys.modules["acquire.orm"], "session_scope", session_scope)
+    monkeypatch.setattr(sys.modules["acquire.orm"], "Lookup", lambda session_arg: lookup)
     monkeypatch.setattr(cron_module, "Logs2DB", FakeLogs2DB)
     monkeypatch.setattr(cron_module, "StatsGen", FakeStatsGen)
     monkeypatch.setattr(
@@ -908,11 +910,12 @@ def test_process_logs_publishes_compressed_stats_files(
             ],
         }[pattern],
     )
-    monkeypatch.setattr(
-        cron_module.subprocess,
-        "call",
-        lambda command: subprocess_calls.append(command),
-    )
+    def run_publication_command(command, check, stdout, stderr):
+        assert stdout is cron_module.subprocess.DEVNULL
+        assert stderr is cron_module.subprocess.DEVNULL
+        subprocess_calls.append((command, check))
+
+    monkeypatch.setattr(cron_module.subprocess, "run", run_publication_command)
 
     stats_data_root = tmp_path / "client" / "stats" / "data"
     monkeypatch.setenv(cron_module.STATS_DATA_ROOT_ENV, str(stats_data_root))
@@ -925,12 +928,16 @@ def test_process_logs_publishes_compressed_stats_files(
     assert stats_data_root.is_dir()
     assert (stats_data_root / "users").is_dir()
     assert subprocess_calls == [
-        [
+        (
+            [
             "zopfli",
             str(stats_temp_root / "ratings.json"),
             str(stats_temp_root / "users" / "alice.json"),
-        ],
-        [
+            ],
+            True,
+        ),
+        (
+            [
             "touch",
             "-r",
             str(stats_temp_root / "ratings.json"),
@@ -938,20 +945,105 @@ def test_process_logs_publishes_compressed_stats_files(
             str(stats_temp_root / "ratings.json") + ".gz",
             str(stats_temp_root / "users" / "alice.json"),
             str(stats_temp_root / "users" / "alice.json") + ".gz",
-        ],
-        [
+            ],
+            True,
+        ),
+        (
+            [
             "mv",
             str(stats_temp_root / "ratings.json"),
             str(stats_temp_root / "ratings.json") + ".gz",
             str(stats_data_root),
-        ],
-        [
+            ],
+            True,
+        ),
+        (
+            [
             "mv",
             str(stats_temp_root / "users" / "alice.json"),
             str(stats_temp_root / "users" / "alice.json") + ".gz",
             str(stats_data_root / "users"),
-        ],
+            ],
+            True,
+        ),
     ]
+
+
+def test_publish_stats_files_cleans_staging_after_publication_failure(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+):
+    stats_data_root = tmp_path / "published"
+    users_data_root = stats_data_root / "users"
+    stats_temp_root = tmp_path / "staging"
+    users_temp_root = stats_temp_root / "users"
+    users_data_root.mkdir(parents=True)
+    users_temp_root.mkdir(parents=True)
+    ratings_path = stats_temp_root / "ratings.json"
+    user_path = users_temp_root / "alice.json"
+    ratings_path.write_text("{}")
+    user_path.write_text("{}")
+
+    def run(command, check, stdout, stderr):
+        assert check is True
+        assert stdout is cron_module.subprocess.DEVNULL
+        assert stderr is cron_module.subprocess.DEVNULL
+        if command[0] == "zopfli":
+            Path(str(ratings_path) + ".gz").write_text("compressed")
+            Path(str(user_path) + ".gz").write_text("compressed")
+            return None
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(cron_module.subprocess, "run", run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        cron_module.publish_stats_files(
+            stats_data_root,
+            stats_temp_root,
+            [str(ratings_path)],
+            [str(user_path)],
+        )
+
+    for path in (
+        ratings_path,
+        user_path,
+        Path(str(ratings_path) + ".gz"),
+        Path(str(user_path) + ".gz"),
+    ):
+        assert not path.exists()
+
+
+def test_publish_stats_files_propagates_stale_staging_cleanup_failure(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+):
+    stats_data_root = tmp_path / "published"
+    stats_temp_root = tmp_path / "staging"
+    stats_temp_root.mkdir()
+    ratings_path = stats_temp_root / "ratings.json"
+    ratings_path.write_text("{}")
+    Path(str(ratings_path) + ".gz").mkdir()
+    calls = []
+    monkeypatch.setattr(
+        cron_module.subprocess,
+        "run",
+        lambda command, check, stdout, stderr: calls.append(
+            (command, check, stdout, stderr)
+        ),
+    )
+
+    with pytest.raises(OSError):
+        cron_module.publish_stats_files(
+            stats_data_root,
+            stats_temp_root,
+            [str(ratings_path)],
+            [],
+        )
+
+    assert calls == []
+    assert ratings_path.read_text() == "{}"
 
 
 def test_output_all_stats_files_writes_ratings_and_each_user(cron_module, monkeypatch, capsys):
@@ -979,7 +1071,7 @@ def test_output_all_stats_files_writes_ratings_and_each_user(cron_module, monkey
     def session_scope():
         yield session
 
-    monkeypatch.setattr(cron_module.orm, "session_scope", session_scope)
+    monkeypatch.setattr(sys.modules["acquire.orm"], "session_scope", session_scope)
     monkeypatch.setattr(cron_module, "StatsGen", FakeStatsGen)
 
     cron_module.output_all_stats_files()
@@ -995,22 +1087,148 @@ def test_output_all_stats_files_writes_ratings_and_each_user(cron_module, monkey
     ]
 
 
-def test_main_continues_after_process_logs_error(cron_module, monkeypatch, capsys):
+@pytest.mark.parametrize(
+    "update_failure",
+    [
+        RuntimeError("postgresql://private-user:private-password@private-host/db"),
+        OSError("/private/staging/path"),
+        subprocess.CalledProcessError(1, ["zopfli", "/private/publication/path"]),
+        PermissionError("/private/cleanup/path"),
+    ],
+    ids=("database", "staging", "publication", "cleanup"),
+)
+def test_main_retries_after_process_logs_error_without_reflecting_it(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+    capsys,
+    update_failure,
+):
     calls = []
 
-    def process_logs(write_stats_files):
-        calls.append(write_stats_files)
-        raise RuntimeError("boom")
+    def process_logs(write_stats_files, *, stats_data_root, stats_temp_root):
+        calls.append((write_stats_files, stats_data_root, stats_temp_root))
+        raise update_failure
 
     def sleep(seconds):
-        assert seconds == 60
+        assert seconds == cron_module.STATS_UPDATE_INTERVAL_SECONDS
         raise KeyboardInterrupt
 
     monkeypatch.setattr(cron_module, "process_logs", process_logs)
     monkeypatch.setattr(cron_module.time, "sleep", sleep)
+    stats_data_root = tmp_path / "published"
+    stats_temp_root = tmp_path / "staging"
 
-    with pytest.raises(KeyboardInterrupt):
-        cron_module.main()
+    result = cron_module.main(
+        [
+            "--stats-data-root",
+            str(stats_data_root),
+            "--stats-temp-root",
+            str(stats_temp_root),
+        ]
+    )
 
-    assert calls == [True]
-    assert "RuntimeError: boom" in capsys.readouterr().out
+    assert result == 130
+    assert calls == [(True, stats_data_root, stats_temp_root)]
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "error: stats update failed\n"
+    assert "private" not in captured.err
+
+
+def test_main_uses_environment_roots_and_exits_cleanly_on_interruption(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    stats_data_root = tmp_path / "published"
+    stats_temp_root = tmp_path / "staging"
+    monkeypatch.setenv(cron_module.STATS_DATA_ROOT_ENV, str(stats_data_root))
+    monkeypatch.setenv(cron_module.STATS_TEMP_ROOT_ENV, str(stats_temp_root))
+    calls = []
+    monkeypatch.setattr(
+        cron_module,
+        "process_logs",
+        lambda write_stats_files, *, stats_data_root, stats_temp_root: calls.append(
+            (write_stats_files, stats_data_root, stats_temp_root)
+        ),
+    )
+    monkeypatch.setattr(
+        cron_module.time,
+        "sleep",
+        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+
+    result = cron_module.main([])
+
+    assert result == 130
+    assert calls == [(True, stats_data_root, stats_temp_root)]
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_main_exits_cleanly_when_update_is_interrupted(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        cron_module,
+        "process_logs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+
+    assert (
+        cron_module.main(
+            [
+                "--stats-data-root",
+                str(tmp_path / "published"),
+                "--stats-temp-root",
+                str(tmp_path / "staging"),
+            ]
+        )
+        == 130
+    )
+
+
+def test_main_rejects_relative_explicit_root_with_fixed_diagnostic(
+    cron_module,
+    capsys,
+):
+    with pytest.raises(SystemExit) as exit_info:
+        cron_module.main(["--stats-data-root", "private/relative/root"])
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid arguments\n"
+
+
+@pytest.mark.parametrize(
+    "private_root",
+    [
+        "private/relative/root",
+        r"private\/relative\/root",
+        "private%2Frelative%2Froot",
+        "private%252Frelative%252Froot",
+    ],
+)
+def test_main_sanitizes_invalid_environment_configuration(
+    cron_module,
+    monkeypatch,
+    tmp_path,
+    capsys,
+    private_root,
+):
+    monkeypatch.setenv(cron_module.STATS_DATA_ROOT_ENV, private_root)
+    monkeypatch.setenv(cron_module.STATS_TEMP_ROOT_ENV, str(tmp_path / "staging"))
+
+    result = cron_module.main([])
+
+    assert result == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "error: stats configuration failed\n"
+    assert private_root not in captured.err

@@ -8,8 +8,9 @@ reviewable and generated diffs do not obscure runtime changes.
 
 - `client/main/css/main.scss` and `client/stats/css/stats.scss` are compiled by
   Dart Sass.
-- `server/enumsgen.py` generates `client/main/js/enums.js` from the canonical
-  Python enum definitions in `src/acquire/enums.py`.
+- `acquire-generate-enums` generates `client/main/js/enums.js` through the
+  packaged `acquire.enumsgen` module and canonical definitions in
+  `src/acquire/enums.py`.
 - `client/main/js/app.js` is the browser JavaScript entrypoint. esbuild bundles
   that entrypoint and its CommonJS dependencies into `client/main/js/main.js`.
 
@@ -36,15 +37,30 @@ Both paths write the same gitignored files into the checkout:
 - `client/main/js/main.js`
 - `client/main/js/main.js.map`
 
-The npm enum command temporarily adds `src/` to `PYTHONPATH` so the legacy
-generator executable can import `acquire.enums`. Issue #111 removes this
-transition after installed project scripts replace legacy executable paths.
+The npm enum command runs the installed project script with explicit absolute
+client-source and output paths. The Compose enum helper invokes the same
+packaged module with `/app/client/main/js`; project installation for the local
+runtime image remains part of the final issue #110 slice.
+
+Run development generation directly with:
+
+```bash
+uv run --no-dev acquire-generate-enums js development \
+  --client-source-root "$PWD/client/main/js" \
+  --output "$PWD/client/main/js/enums.js"
+```
+
+Release generation additionally requires an absolute
+`--release-source-root`. Omit `--output` to write generated module text to
+stdout. The `replace` operation accepts one or more absolute JavaScript input
+files after `--client-source-root`; it validates every input before modifying
+any file.
 
 The separately gitignored `client/stats/data` directory is runtime data, not a
-client build output. The cron log processor publishes ratings and per-user JSON
+client build output. `acquire-update-stats` publishes ratings and per-user JSON
 there, and the Python gateway serves it at `/stats/data/`. Deployments that run
-cron and the gateway as separate processes must give both processes access to
-the same writable `client/stats/data` tree.
+the updater and gateway as separate processes must give both processes access
+to the same writable publication tree.
 
 ## Repository Boundary
 

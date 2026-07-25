@@ -4,18 +4,19 @@ FROM node:22-bookworm-slim AS client-assets
 
 WORKDIR /app
 
-ENV PYTHONPATH=/app/src
-
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.22 /uv /uvx /bin/
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY client ./client
-COPY server/enumsgen.py ./server/
-COPY src/acquire/__init__.py src/acquire/enums.py ./src/acquire/
 RUN npm run build:client
 
 FROM python:3.12-slim AS runtime

@@ -22,7 +22,16 @@ services:
     volumes:
       - .:/app
     working_dir: /app
-    command: sh -c "python server/enumsgen.py js development > client/main/js/enums.js"
+    command:
+      - python
+      - -m
+      - acquire.enumsgen
+      - js
+      - development
+      - --client-source-root
+      - /app/client/main/js
+      - --output
+      - /app/client/main/js/enums.js
 
   client-assets:
     image: node:22-bookworm-slim

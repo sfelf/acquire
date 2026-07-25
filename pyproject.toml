@@ -20,8 +20,10 @@ dependencies = [
 ]
 
 [project.scripts]
+acquire-generate-enums = "acquire.enumsgen:main"
 acquire-migrate-mysql-to-postgres = "acquire.migration.import_mysql_to_postgres:main"
 acquire-setup-database = "acquire.setup_database:main"
+acquire-update-stats = "acquire.stats:main"
 acquire-validate-migration-reports = "acquire.migration.validate_import_reports:main"
 
 [project.optional-dependencies]

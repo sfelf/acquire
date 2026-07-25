@@ -9,6 +9,6 @@ import sys
 from acquire import stats as _stats
 
 if __name__ == "__main__":
-    _stats.main()
+    raise SystemExit(_stats.main())
 else:
     sys.modules[__name__] = _stats

@@ -50,6 +50,7 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert ".venv/bin/python -c" in workflow_text
     assert "import acquire.auth" in workflow_text
     assert "import acquire.enums" in workflow_text
+    assert "import acquire.enumsgen" in workflow_text
     assert "import acquire.game_server" in workflow_text
     assert "import acquire.http_server" in workflow_text
     assert "import acquire.log_tools" in workflow_text
@@ -67,6 +68,8 @@ def test_ci_builds_package_across_supported_python_versions() -> None:
     assert "package_root.joinpath('alembic.ini').is_file()" in workflow_text
     assert "package_root.joinpath('migrations', 'env.py').is_file()" in workflow_text
     assert ".venv/bin/acquire-setup-database --help" in workflow_text
+    assert ".venv/bin/acquire-generate-enums --help" in workflow_text
+    assert ".venv/bin/acquire-update-stats --help" in workflow_text
 
 
 def test_packaging_docs_define_incremental_module_migration_rules() -> None:

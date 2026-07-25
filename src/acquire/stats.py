@@ -1,25 +1,27 @@
 """Import legacy game logs into Postgres and generate published stats files."""
 
+import argparse
 import base64
 import collections
 import glob
 import os
 import os.path
 import subprocess
+import sys
 import time
-import traceback
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Never, Protocol, cast
 
 import sqlalchemy.orm
 import sqlalchemy.sql
 import sqlalchemy.types
-import trueskill
 import ujson
 
-from acquire import orm, util
+from acquire import util
 
 RECENT_RATINGS_WINDOW_SECONDS = 30 * 24 * 60 * 60
+STATS_UPDATE_INTERVAL_SECONDS = 60
 SOURCE_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_STATS_DATA_ROOT = SOURCE_PROJECT_ROOT / "client" / "stats" / "data"
 SOURCE_STATS_TEMP_ROOT = SOURCE_PROJECT_ROOT / "server" / "stats_temp"
@@ -46,9 +48,11 @@ def _resolve_stats_root(
 
     Raises:
         RuntimeError: If neither configuration nor a source layout is available.
-        ValueError: If an environment-provided root is not absolute.
+        ValueError: If an explicit or environment-provided root is not absolute.
     """
     if explicit_root is not None:
+        if not explicit_root.is_absolute():
+            raise ValueError(f"{environment_name} must be an absolute path")
         return explicit_root
 
     configured_root = os.environ.get(environment_name)
@@ -222,6 +226,10 @@ class Logs2DB:
             game: Game or game-like object being updated.
             game_players: Game player rows participating in the completed game.
         """
+        import trueskill
+
+        from acquire import orm
+
         game_mode_name = game.game_mode.name
         num_players = len(game_players)
         if game_mode_name == "Teams":
@@ -297,6 +305,8 @@ class Logs2DB:
         Returns:
             Cached TrueSkill environment configured for the rating type.
         """
+        import trueskill
+
         trueskill_environment = self.trueskill_environment_lookup.get(rating_type.name)
         if trueskill_environment:
             return trueskill_environment
@@ -316,6 +326,8 @@ class Logs2DB:
             game: Game or game-like object being updated.
             game_players: Game player rows participating in the completed game.
         """
+        from acquire import orm
+
         record_index = None
         game_mode_name = game.game_mode.name
         if game_mode_name == "Singles":
@@ -621,6 +633,8 @@ def process_logs(
         stats_temp_root: Directory where stats files are staged before publishing,
             or `None` to resolve it from configuration or the source layout.
     """
+    from acquire import orm
+
     with orm.session_scope() as session:
         lookup = orm.Lookup(session)
         logs2db = Logs2DB(session, lookup)
@@ -670,32 +684,95 @@ def process_logs(
                 users_stats_data_root = stats_data_root / "users"
                 users_stats_data_root.mkdir(parents=True, exist_ok=True)
 
-                command = ["zopfli"]
-                command.extend(ratings_filenames)
-                command.extend(users_filenames)
-                subprocess.call(command)
+                publish_stats_files(
+                    stats_data_root,
+                    stats_temp_root,
+                    ratings_filenames,
+                    users_filenames,
+                )
 
-                ratings_filenames = ratings_filenames + [x + ".gz" for x in ratings_filenames]
-                users_filenames = users_filenames + [x + ".gz" for x in users_filenames]
 
-                command = ["touch", "-r", os.fspath(stats_temp_root / "ratings.json")]
-                command.extend(ratings_filenames)
-                command.extend(users_filenames)
-                subprocess.call(command)
+def publish_stats_files(
+    stats_data_root: Path,
+    stats_temp_root: Path,
+    ratings_filenames: Sequence[str],
+    users_filenames: Sequence[str],
+) -> None:
+    """Compress and publish staged stats files.
 
-                command = ["mv"]
-                command.extend(ratings_filenames)
-                command.append(os.fspath(stats_data_root))
-                subprocess.call(command)
+    External command failures propagate so the surrounding database transaction
+    rolls back its log offsets. Staged JSON and gzip files are removed after a
+    failed attempt, allowing the continuous updater to regenerate a coherent
+    set on its next retry. Files already moved to publication remain valid and
+    may be replaced by that retry.
 
-                command = ["mv"]
-                command.extend(users_filenames)
-                command.append(os.fspath(users_stats_data_root))
-                subprocess.call(command)
+    Args:
+        stats_data_root: Published stats-data directory.
+        stats_temp_root: Staging directory containing generated JSON files.
+        ratings_filenames: Staged top-level ratings JSON files.
+        users_filenames: Staged per-user JSON files.
+
+    Raises:
+        OSError: A staging cleanup or publication command cannot complete.
+        subprocess.CalledProcessError: A publication command exits unsuccessfully.
+    """
+    staged_filenames = [*ratings_filenames, *users_filenames]
+    compressed_filenames = [filename + ".gz" for filename in staged_filenames]
+    cleanup_paths = [Path(filename) for filename in [*staged_filenames, *compressed_filenames]]
+
+    for compressed_path in cleanup_paths[len(staged_filenames) :]:
+        compressed_path.unlink(missing_ok=True)
+
+    try:
+        subprocess.run(
+            ["zopfli", *staged_filenames],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        published_filenames = [
+            *ratings_filenames,
+            *(filename + ".gz" for filename in ratings_filenames),
+        ]
+        published_users_filenames = [
+            *users_filenames,
+            *(filename + ".gz" for filename in users_filenames),
+        ]
+        subprocess.run(
+            [
+                "touch",
+                "-r",
+                os.fspath(stats_temp_root / "ratings.json"),
+                *published_filenames,
+                *published_users_filenames,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["mv", *published_filenames, os.fspath(stats_data_root)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["mv", *published_users_filenames, os.fspath(stats_data_root / "users")],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        for cleanup_path in cleanup_paths:
+            cleanup_path.unlink(missing_ok=True)
+        raise
 
 
 def output_all_stats_files() -> None:
     """Output all stats files."""
+    from acquire import orm
+
     with orm.session_scope() as session:
         statsgen = StatsGen(session, "/tmp/tim/acquire/stats")
         statsgen.output_ratings()
@@ -705,18 +782,94 @@ def output_all_stats_files() -> None:
             statsgen.output_user(user_id, username, records)
 
 
-def main() -> None:
-    """Run the module command-line entry point."""
+class StatsArgumentParser(argparse.ArgumentParser):
+    """Parse stats command arguments without reflecting configured paths.
+
+    Publication and staging roots may contain private deployment identifiers.
+    Invalid input therefore exits with a fixed diagnostic rather than argparse
+    output containing the supplied value.
+    """
+
+    def error(self, message: str) -> Never:
+        """Exit with a fixed invalid-argument diagnostic.
+
+        Args:
+            message: Argparse-generated error text, intentionally ignored.
+        """
+        self.exit(2, "error: invalid arguments\n")
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse the installed stats-updater arguments.
+
+    Both roots are optional so the command can use its documented environment
+    or validated source-layout fallbacks. Explicit values are checked for
+    absolute paths here without resolving configuration or initializing the
+    database.
+
+    Args:
+        argv: Arguments to parse, or `None` to use process arguments.
+
+    Returns:
+        Namespace containing optional explicit publication and staging roots.
+    """
+    parser = StatsArgumentParser(
+        prog="acquire-update-stats",
+        description="Continuously import logs and publish updated stats files.",
+        allow_abbrev=False,
+    )
+    parser.add_argument("--stats-data-root", type=Path)
+    parser.add_argument("--stats-temp-root", type=Path)
+    args = parser.parse_args(argv)
+    configured_roots = (args.stats_data_root, args.stats_temp_root)
+    if any(root is not None and not root.is_absolute() for root in configured_roots):
+        parser.error("stats roots must be absolute")
+    return args
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the installed continuous stats updater.
+
+    Roots are validated before ORM initialization, so help and configuration
+    errors require no live database. Each successful or failed update is
+    followed by the legacy 60-second interval. Operational failures emit a
+    fixed diagnostic and retry without exposing database values, filesystem
+    paths, log contents, or exception representations. Interruption exits with
+    status 130.
+
+    Args:
+        argv: Arguments to parse, or `None` to use process arguments.
+
+    Returns:
+        `1` for invalid installed-layout configuration or `130` on interruption.
+    """
+    args = parse_args(argv)
+    try:
+        stats_data_root, stats_temp_root = resolve_stats_roots(
+            args.stats_data_root,
+            args.stats_temp_root,
+        )
+    except Exception:
+        print("error: stats configuration failed", file=sys.stderr)
+        return 1
+
     while True:
         try:
-            process_logs(True)
-        except BaseException:
-            print(traceback.format_exc())
+            process_logs(
+                True,
+                stats_data_root=stats_data_root,
+                stats_temp_root=stats_temp_root,
+            )
+        except KeyboardInterrupt:
+            return 130
+        except Exception:
+            print("error: stats update failed", file=sys.stderr)
 
-        time.sleep(60)
+        try:
+            time.sleep(STATS_UPDATE_INTERVAL_SECONDS)
+        except KeyboardInterrupt:
+            return 130
 
 
 if __name__ == "__main__":
-    # process_logs(False)
-    # output_all_stats_files()
-    main()
+    raise SystemExit(main())
