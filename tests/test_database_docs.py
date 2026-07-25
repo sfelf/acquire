@@ -26,8 +26,8 @@ def test_plans_preserve_modernization_status_and_track_packaging_work() -> None:
     assert "The Packaging milestone is active." in plans
     assert "[#103](https://github.com/sfelf/acquire/issues/103)," in plans
     assert "[#104](https://github.com/sfelf/acquire/issues/104)," in plans
-    assert "[#109](https://github.com/sfelf/acquire/issues/109) are complete" in plans
-    assert "[#110](https://github.com/sfelf/acquire/issues/110) is in progress" in plans
+    assert "[#110](https://github.com/sfelf/acquire/issues/110) are complete" in plans
+    assert "[#111](https://github.com/sfelf/acquire/issues/111) is next" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
     assert "Issue #110 is also delivered as three stand-alone PR slices" in plans
     assert "GitHub issues remain the source of\ntruth for issue scope" in plans
@@ -212,8 +212,10 @@ def test_local_database_setup_docs_use_alembic_command() -> None:
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
 
     assert not (REPOSITORY_ROOT / "server" / "initialize_database.py").exists()
-    assert "python setup_database.py" in readme
-    assert "python setup_database.py" in local_development
+    assert "docker compose run --rm python-gateway acquire-setup-database" in readme
+    assert "docker compose run --rm python-gateway acquire-setup-database" in (
+        local_development
+    )
     assert "`acquire.setup_database`" in database_notes
     assert "server/setup_database.py" in database_notes
     assert "The legacy MySQL reset command has been removed" in database_notes

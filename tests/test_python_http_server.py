@@ -1,3 +1,4 @@
+import errno
 import io
 import time
 import urllib.parse
@@ -906,16 +907,204 @@ def test_parse_args_accepts_http_server_options(tmp_path):
     assert args.stats_static_root == tmp_path / "stats"
 
 
-def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--port", "0"],
+        ["--port", "65536"],
+        ["--port", "not-a-port"],
+        ["--main-static-root", "private/relative/main"],
+        ["--stats-static-root", "private/relative/stats"],
+        ["--unknown"],
+    ],
+)
+def test_parse_args_rejects_invalid_gateway_configuration_with_fixed_diagnostic(
+    arguments,
+    capsys,
+):
+    with pytest.raises(SystemExit) as exit_info:
+        http_server.parse_args(arguments)
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid arguments\n"
+
+
+@pytest.mark.parametrize(
+    "private_root",
+    [
+        "/private/missing/root",
+        r"/private\/missing\/root",
+        "/private%2Fmissing%2Froot",
+        "/private%252Fmissing%252Froot",
+    ],
+)
+def test_main_rejects_missing_static_roots_without_reflecting_them(
+    private_root,
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
     calls = []
+    monkeypatch.setattr(
+        http_server,
+        "run_http_server",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    stats_root = tmp_path / "stats"
+    stats_root.mkdir()
 
-    def run(app, **kwargs):
-        calls.append((app.title, kwargs))
+    result = http_server.main(
+        [
+            "--main-static-root",
+            private_root,
+            "--stats-static-root",
+            str(stats_root),
+        ]
+    )
 
-    monkeypatch.setattr(http_server.uvicorn, "run", run)
+    captured = capsys.readouterr()
+    assert result == 1
+    assert calls == []
+    assert captured.out == ""
+    assert captured.err == "error: HTTP server configuration failed\n"
+    assert private_root not in captured.err
+
+
+def test_main_rejects_file_static_root_before_starting_server(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    main_root = tmp_path / "main"
+    stats_root = tmp_path / "stats"
+    main_root.mkdir()
+    stats_root.write_text("not a directory")
+    calls = []
+    monkeypatch.setattr(
+        http_server,
+        "run_http_server",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    result = http_server.main(
+        [
+            "--main-static-root",
+            str(main_root),
+            "--stats-static-root",
+            str(stats_root),
+        ]
+    )
+
+    assert result == 1
+    assert calls == []
+    assert capsys.readouterr().err == "error: HTTP server configuration failed\n"
+
+
+class FakeListener:
+    def __init__(self, *, bind_error=None, listen_error=None, close_error=None):
+        self.bind_error = bind_error
+        self.listen_error = listen_error
+        self.close_error = close_error
+        self.calls = []
+        self.closed = False
+
+    def setsockopt(self, level, option, value):
+        self.calls.append(("setsockopt", level, option, value))
+
+    def bind(self, address):
+        self.calls.append(("bind", address))
+        if self.bind_error is not None:
+            raise self.bind_error
+
+    def listen(self, backlog):
+        self.calls.append(("listen", backlog))
+        if self.listen_error is not None:
+            raise self.listen_error
+
+    def set_inheritable(self, inheritable):
+        self.calls.append(("set_inheritable", inheritable))
+
+    def close(self):
+        self.calls.append(("close",))
+        self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
+
+
+def test_run_http_server_resolves_and_binds_every_hostname_address(
+    monkeypatch,
+    tmp_path,
+):
+    calls = []
+    ipv6_address = ("::1", 19001, 0, 0)
+    ipv4_address = ("127.0.0.1", 19001)
+    address_infos = [
+        (
+            http_server.socket.AF_INET6,
+            http_server.socket.SOCK_STREAM,
+            6,
+            "",
+            ipv6_address,
+        ),
+        (
+            http_server.socket.AF_INET,
+            http_server.socket.SOCK_STREAM,
+            6,
+            "",
+            ipv4_address,
+        ),
+        (
+            http_server.socket.AF_INET,
+            http_server.socket.SOCK_STREAM,
+            6,
+            "",
+            ipv4_address,
+        ),
+    ]
+    listeners = [FakeListener(), FakeListener()]
+
+    def getaddrinfo(host, port, **kwargs):
+        calls.append(("getaddrinfo", host, port, kwargs))
+        return address_infos
+
+    def create_socket(family, socktype, protocol):
+        calls.append(("socket", family, socktype, protocol))
+        return listeners.pop(0)
+
+    class Server:
+        def __init__(self, config):
+            calls.append(
+                (
+                    "server",
+                    config.app.title,
+                    config.host,
+                    config.port,
+                    config.backlog,
+                )
+            )
+
+        def run(self, *, sockets):
+            calls.append(("run", sockets))
+
+    bound_listeners = listeners.copy()
+    monkeypatch.setattr(http_server.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(http_server.socket, "socket", create_socket)
+    monkeypatch.setattr(
+        http_server.uvicorn,
+        "Config",
+        lambda app, host, port, backlog: SimpleNamespace(
+            app=app,
+            host=host,
+            port=port,
+            backlog=backlog,
+        ),
+    )
+    monkeypatch.setattr(http_server.uvicorn, "Server", Server)
 
     http_server.run_http_server(
-        host="127.0.0.1",
+        host="localhost",
         port=19001,
         main_static_root=tmp_path / "main",
         stats_static_root=tmp_path / "stats",
@@ -923,41 +1112,403 @@ def test_run_http_server_builds_uvicorn_app(monkeypatch, tmp_path):
 
     assert calls == [
         (
-            "Acquire Python HTTP",
+            "getaddrinfo",
+            "localhost",
+            19001,
             {
-                "host": "127.0.0.1",
-                "port": 19001,
+                "family": http_server.socket.AF_UNSPEC,
+                "type": http_server.socket.SOCK_STREAM,
+                "flags": http_server.socket.AI_PASSIVE,
+            },
+        ),
+        (
+            "socket",
+            http_server.socket.AF_INET6,
+            http_server.socket.SOCK_STREAM,
+            6,
+        ),
+        (
+            "socket",
+            http_server.socket.AF_INET,
+            http_server.socket.SOCK_STREAM,
+            6,
+        ),
+        (
+            "server",
+            "Acquire Python HTTP",
+            "localhost",
+            19001,
+            http_server.LISTEN_BACKLOG,
+        ),
+        ("run", bound_listeners),
+    ]
+    assert bound_listeners[0].calls == [
+        (
+            "setsockopt",
+            http_server.socket.SOL_SOCKET,
+            http_server.socket.SO_REUSEADDR,
+            1,
+        ),
+        (
+            "setsockopt",
+            http_server.socket.IPPROTO_IPV6,
+            http_server.socket.IPV6_V6ONLY,
+            1,
+        ),
+        ("bind", ipv6_address),
+        ("listen", http_server.LISTEN_BACKLOG),
+        ("set_inheritable", True),
+        ("close",),
+    ]
+    assert bound_listeners[1].calls == [
+        (
+            "setsockopt",
+            http_server.socket.SOL_SOCKET,
+            http_server.socket.SO_REUSEADDR,
+            1,
+        ),
+        ("bind", ipv4_address),
+        ("listen", http_server.LISTEN_BACKLOG),
+        ("set_inheritable", True),
+        ("close",),
+    ]
+
+
+def test_run_http_server_closes_all_listeners_after_server_failure(
+    monkeypatch,
+    tmp_path,
+):
+    listeners = [
+        FakeListener(close_error=OSError("private close failure")),
+        FakeListener(),
+    ]
+
+    class Server:
+        def __init__(self, config):
+            pass
+
+        def run(self, *, sockets):
+            raise RuntimeError("server failed")
+
+    monkeypatch.setattr(
+        http_server,
+        "create_listener_sockets",
+        lambda host, port: listeners,
+    )
+    monkeypatch.setattr(http_server.uvicorn, "Server", Server)
+
+    with pytest.raises(RuntimeError, match="server failed"):
+        http_server.run_http_server(
+            host="localhost",
+            port=19001,
+            main_static_root=tmp_path / "main",
+            stats_static_root=tmp_path / "stats",
+        )
+
+    assert all(listener.closed for listener in listeners)
+
+
+@pytest.mark.parametrize(
+    "resolution_error",
+    [
+        OSError("private resolution failure"),
+        UnicodeError("private host encoding failure"),
+    ],
+)
+def test_create_listener_sockets_sanitizes_resolution_failure(
+    resolution_error,
+    monkeypatch,
+):
+    def getaddrinfo(*args, **kwargs):
+        raise resolution_error
+
+    monkeypatch.setattr(http_server.socket, "getaddrinfo", getaddrinfo)
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("private-host", 19001)
+
+    assert str(exit_info.value) == ""
+
+
+def test_create_listener_sockets_sanitizes_listener_creation_failure(monkeypatch):
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            )
+        ],
+    )
+
+    def create_socket(family, socktype, protocol):
+        raise OSError("private socket setup failure")
+
+    monkeypatch.setattr(http_server.socket, "socket", create_socket)
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("private-host", 19001)
+
+    assert str(exit_info.value) == ""
+
+
+def test_create_listener_sockets_skips_unavailable_address_family(monkeypatch):
+    unavailable = FakeListener(
+        bind_error=OSError(errno.EADDRNOTAVAIL, "private unavailable address")
+    )
+    available = FakeListener()
+    listeners = [unavailable, available]
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET6,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("::1", 19001, 0, 0),
+            ),
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listeners.pop(0),
+    )
+
+    result = http_server.create_listener_sockets("localhost", 19001)
+
+    assert result == [available]
+    assert unavailable.closed
+    assert not available.closed
+    available.close()
+
+
+def test_create_listener_sockets_supports_ipv6_only_hostname(monkeypatch):
+    listener = FakeListener()
+    ipv6_address = ("::1", 19001, 0, 0)
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET6,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ipv6_address,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listener,
+    )
+
+    result = http_server.create_listener_sockets("ipv6-only.internal", 19001)
+
+    assert result == [listener]
+    assert ("bind", ipv6_address) in listener.calls
+    listener.close()
+
+
+def test_create_listener_sockets_closes_partial_set_after_fatal_bind(monkeypatch):
+    bound = FakeListener()
+    failed = FakeListener(
+        bind_error=OSError(errno.EADDRINUSE, "private address already in use")
+    )
+    listeners = [bound, failed]
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            ),
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.2", 19001),
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listeners.pop(0),
+    )
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("private-host", 19001)
+
+    assert str(exit_info.value) == ""
+    assert bound.closed
+    assert failed.closed
+
+
+def test_create_listener_sockets_sanitizes_listen_conflict(monkeypatch):
+    first = FakeListener()
+    conflicted = FakeListener(
+        listen_error=OSError(errno.EADDRINUSE, "private concurrent startup")
+    )
+    listeners = [first, conflicted]
+    monkeypatch.setattr(
+        http_server.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1", 19001),
+            ),
+            (
+                http_server.socket.AF_INET,
+                http_server.socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.2", 19001),
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        http_server.socket,
+        "socket",
+        lambda family, socktype, protocol: listeners.pop(0),
+    )
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("private-host", 19001)
+
+    assert str(exit_info.value) == ""
+    assert first.closed
+    assert conflicted.closed
+
+
+def test_create_listener_sockets_uses_wildcard_and_rejects_empty_results(
+    monkeypatch,
+):
+    calls = []
+
+    def getaddrinfo(host, port, **kwargs):
+        calls.append((host, port, kwargs))
+        return []
+
+    monkeypatch.setattr(http_server.socket, "getaddrinfo", getaddrinfo)
+
+    with pytest.raises(http_server.HttpServerBindError) as exit_info:
+        http_server.create_listener_sockets("", 19001)
+
+    assert str(exit_info.value) == ""
+    assert calls == [
+        (
+            None,
+            19001,
+            {
+                "family": http_server.socket.AF_UNSPEC,
+                "type": http_server.socket.SOCK_STREAM,
+                "flags": http_server.socket.AI_PASSIVE,
             },
         )
     ]
 
 
+@pytest.mark.parametrize(
+    "private_host",
+    [
+        "private-host.internal",
+        r"private-host\.internal",
+        "private-host%2Einternal",
+        "private-host%252Einternal",
+    ],
+)
+def test_main_redacts_listener_bind_failure(
+    private_host,
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    main_root = tmp_path / "main"
+    stats_root = tmp_path / "stats"
+    main_root.mkdir()
+    stats_root.mkdir()
+    monkeypatch.setattr(
+        http_server,
+        "run_http_server",
+        lambda **kwargs: (_ for _ in ()).throw(
+            http_server.HttpServerBindError(private_host)
+        ),
+    )
+
+    result = http_server.main(
+        [
+            "--host",
+            private_host,
+            "--main-static-root",
+            str(main_root),
+            "--stats-static-root",
+            str(stats_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert captured.out == ""
+    assert captured.err == "error: HTTP server configuration failed\n"
+    assert private_host not in captured.err
+
+
 def test_main_runs_http_server_with_parsed_args(monkeypatch, tmp_path):
     calls = []
+    main_root = tmp_path / "main"
+    stats_root = tmp_path / "stats"
+    main_root.mkdir()
+    stats_root.mkdir()
 
     def run_http_server(**kwargs):
         calls.append(kwargs)
 
     monkeypatch.setattr(http_server, "run_http_server", run_http_server)
 
-    http_server.main(
+    result = http_server.main(
         [
             "--host",
             "127.0.0.1",
             "--port",
             "19002",
             "--main-static-root",
-            str(tmp_path / "main"),
+            str(main_root),
             "--stats-static-root",
-            str(tmp_path / "stats"),
+            str(stats_root),
         ]
     )
 
+    assert result == 0
     assert calls == [
         {
             "host": "127.0.0.1",
             "port": 19002,
-            "main_static_root": tmp_path / "main",
-            "stats_static_root": tmp_path / "stats",
+            "main_static_root": main_root,
+            "stats_static_root": stats_root,
         }
     ]

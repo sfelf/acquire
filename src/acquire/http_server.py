@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import mimetypes
 import posixpath
 import secrets
+import socket
 import sys
 import urllib.parse
 from collections.abc import Callable
 from contextlib import AbstractContextManager, suppress
 from pathlib import Path
-from typing import Literal, TextIO
+from typing import Literal, Never, TextIO
 
 import ujson
 import uvicorn
@@ -33,12 +35,85 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MAIN_STATIC_ROOT = PROJECT_ROOT / "client" / "main"
 DEFAULT_STATS_STATIC_ROOT = PROJECT_ROOT / "client" / "stats"
 MAX_REPORT_ERROR_BODY_BYTES = 100 * 1024
+LISTEN_BACKLOG = 2048
 SERVER_VERSION = "VERSION"
 SessionScope = Callable[[], AbstractContextManager[auth.AuthSession]]
 
 
 class InvalidWebsocketPayloadError(ValueError):
     """Raised when a post-login websocket frame cannot be decoded."""
+
+
+class HttpServerBindError(OSError):
+    """Signal that the configured listener could not be started."""
+
+
+def create_listener_sockets(host: str, port: int) -> list[socket.socket]:
+    """Resolve and start every usable listener without unsafe logging.
+
+    This follows the standard asyncio server boundary: duplicate resolution
+    results are ignored, IPv4 and IPv6 candidates are bound separately, and
+    unavailable address families are skipped. Listening also starts inside
+    this boundary so concurrent startup conflicts cannot escape through
+    Uvicorn. Any other partial failure closes the complete listener set before
+    raising a fixed command-boundary exception.
+
+    Args:
+        host: Interface name, IP literal, or hostname to bind.
+        port: TCP port to bind.
+
+    Returns:
+        One or more bound and listening sockets.
+
+    Raises:
+        HttpServerBindError: Resolution, socket setup, binding, or listening
+            cannot produce a complete usable listener set.
+    """
+    listeners: list[socket.socket] = []
+    try:
+        address_infos = socket.getaddrinfo(
+            None if host == "" else host,
+            port,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+            flags=socket.AI_PASSIVE,
+        )
+        seen: set[tuple[object, ...]] = set()
+        for family, socktype, protocol, _canonical_name, address in address_infos:
+            address_key = (family, socktype, protocol, address)
+            if address_key in seen:
+                continue
+            seen.add(address_key)
+
+            try:
+                listener = socket.socket(family, socktype, protocol)
+            except OSError:
+                continue
+
+            try:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+                    listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                listener.bind(address)
+                listener.listen(LISTEN_BACKLOG)
+                listener.set_inheritable(True)
+            except OSError as exc:
+                with suppress(OSError):
+                    listener.close()
+                if exc.errno == errno.EADDRNOTAVAIL:
+                    continue
+                raise
+
+            listeners.append(listener)
+    except (OSError, UnicodeError):
+        for listener in listeners:
+            with suppress(OSError):
+                listener.close()
+        raise HttpServerBindError from None
+
+    if not listeners:
+        raise HttpServerBindError
+    return listeners
 
 
 class ReportErrorForm(BaseModel):
@@ -680,6 +755,10 @@ def run_http_server(
 ) -> None:
     """Run the FastAPI HTTP server until interrupted.
 
+    All resolved sockets are bound and listening before Uvicorn starts so
+    address failures can be projected through the command's fixed diagnostic
+    without a check-then-bind race or Uvicorn logging the private bind value.
+
     Args:
         host: Interface to bind.
         port: TCP port to bind.
@@ -692,11 +771,40 @@ def run_http_server(
         stats_static_root=stats_static_root,
         log_output=log_output,
     )
-    uvicorn.run(app, host=host, port=port)
+    listeners = create_listener_sockets(host, port)
+    config = uvicorn.Config(app, host=host, port=port, backlog=LISTEN_BACKLOG)
+    server = uvicorn.Server(config)
+    try:
+        server.run(sockets=listeners)
+    finally:
+        for listener in listeners:
+            with suppress(OSError):
+                listener.close()
+
+
+class HttpServerArgumentParser(argparse.ArgumentParser):
+    """Parse gateway arguments without reflecting operator-controlled values.
+
+    Bind configuration and static roots may contain private deployment
+    identifiers. Invalid input therefore exits with a fixed diagnostic rather
+    than argparse output containing the supplied value.
+    """
+
+    def error(self, message: str) -> Never:
+        """Exit with a fixed invalid-argument diagnostic.
+
+        Args:
+            message: Argparse-generated error text, intentionally ignored.
+        """
+        self.exit(2, "error: invalid arguments\n")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments.
+    """Parse and validate installed gateway arguments.
+
+    Ports must be in the TCP range and both static roots must be absolute.
+    Filesystem availability is checked separately so `--help` never requires
+    generated client assets.
 
     Args:
         argv: Optional argument list. Uses `sys.argv` when omitted.
@@ -704,28 +812,65 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     Returns:
         Parsed command-line namespace.
     """
-    parser = argparse.ArgumentParser(description="Serve Acquire HTTP routes from Python.")
+    parser = HttpServerArgumentParser(
+        prog="acquire-http-server",
+        description="Serve Acquire HTTP routes from Python.",
+        allow_abbrev=False,
+    )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--main-static-root", type=Path, default=DEFAULT_MAIN_STATIC_ROOT)
     parser.add_argument("--stats-static-root", type=Path, default=DEFAULT_STATS_STATIC_ROOT)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not 1 <= args.port <= 65535:
+        parser.error("port must be between 1 and 65535")
+    if not args.main_static_root.is_absolute() or not args.stats_static_root.is_absolute():
+        parser.error("static roots must be absolute")
+    return args
 
 
-def main(argv: list[str] | None = None) -> None:
-    """Run the command-line HTTP server.
+def validate_static_roots(main_static_root: Path, stats_static_root: Path) -> None:
+    """Require both configured static roots to be existing directories.
+
+    Args:
+        main_static_root: Root directory for generated `client/main` assets.
+        stats_static_root: Root directory for generated `client/stats` assets.
+
+    Raises:
+        FileNotFoundError: Either root is missing or is not a directory.
+    """
+    if not main_static_root.is_dir() or not stats_static_root.is_dir():
+        raise FileNotFoundError("configured static root is unavailable")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the installed HTTP gateway command.
+
+    Static roots and listener setup are validated before Uvicorn starts.
+    Failures return a fixed operational diagnostic that excludes private
+    filesystem paths and listener addresses.
 
     Args:
         argv: Optional argument list. Uses `sys.argv` when omitted.
+
+    Returns:
+        `0` after a normal server shutdown or `1` for invalid static roots,
+        address resolution failures, or listener setup failures.
     """
     args = parse_args(argv)
-    run_http_server(
-        host=args.host,
-        port=args.port,
-        main_static_root=args.main_static_root,
-        stats_static_root=args.stats_static_root,
-    )
+    try:
+        validate_static_roots(args.main_static_root, args.stats_static_root)
+        run_http_server(
+            host=args.host,
+            port=args.port,
+            main_static_root=args.main_static_root,
+            stats_static_root=args.stats_static_root,
+        )
+    except (FileNotFoundError, HttpServerBindError):
+        print("error: HTTP server configuration failed", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

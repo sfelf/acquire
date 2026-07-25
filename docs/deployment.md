@@ -35,13 +35,11 @@ Run migrations before starting or releasing the web process:
 docker run --rm \
   -e ACQUIRE_DATABASE_URL=postgresql+psycopg://user:password@host:5432/acquire \
   acquire:production \
-  python setup_database.py
+  acquire-setup-database
 ```
 
-`acquire.setup_database` applies Alembic migrations and required lookup data
-without dropping existing data. The direct-file command remains a temporary
-compatibility entry point until a later issue #110 slice migrates production
-image callers to the installed `acquire-setup-database` project script.
+`acquire-setup-database` applies packaged Alembic migrations and required
+lookup data without dropping existing data.
 
 ## Run The Gateway
 
@@ -54,8 +52,9 @@ docker run --rm \
   acquire:production
 ```
 
-The container listens on port `9000` and exposes the same `/sockjs/info`
-healthcheck used by local Docker.
+The container starts through `acquire-http-server`, listens on port `9000`,
+and passes explicit `/app/client/main` and `/app/client/stats` roots. It exposes
+the same `/sockjs/info` healthcheck used by local Docker.
 
 ## AWS Path
 

@@ -39,8 +39,7 @@ Both paths write the same gitignored files into the checkout:
 
 The npm enum command runs the installed project script with explicit absolute
 client-source and output paths. The Compose enum helper invokes the same
-packaged module with `/app/client/main/js`; project installation for the local
-runtime image remains part of the final issue #110 slice.
+installed command with `/app/client/main/js`.
 
 Run development generation directly with:
 

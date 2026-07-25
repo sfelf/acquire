@@ -9,6 +9,6 @@ import sys
 from acquire import http_server as _http_server
 
 if __name__ == "__main__":
-    _http_server.main()
+    raise SystemExit(_http_server.main())
 else:
     sys.modules[__name__] = _http_server

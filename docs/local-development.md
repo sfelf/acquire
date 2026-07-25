@@ -6,15 +6,16 @@ The local development stack now uses the Python gateway as the default runtime:
 - `acquire.http_server` runs the default FastAPI HTTP gateway.
 - `acquire.realtime` adapts SockJS-compatible WebSocket traffic.
 - `acquire.game_server` owns Python game state and gameplay command handling.
-- `server/http_server.py` remains the temporary direct-file startup wrapper.
+- `acquire-http-server` is the installed gateway command used by Docker.
 - Node.js is used only by the opt-in client asset build helper.
 
 Docker Compose provides the supported local development stack. The production
 container workflow is documented separately in `docs/deployment.md`.
 
-The local Python image installs from `requirements.local-docker.txt` to keep
-its tested runtime and database-migration dependencies explicit while project
-packaging is consolidated.
+The local Python image installs the locked project into `/opt/acquire`, outside
+the bind-mounted checkout. This keeps installed commands available while
+editable package imports continue to resolve live source changes under
+`/app/src`.
 
 ## Start The Local UI
 
@@ -63,13 +64,14 @@ ACQUIRE_UI_PORT=9002
 Initialize the local database in another terminal:
 
 ```bash
-docker compose run --rm python-gateway python setup_database.py
+docker compose run --rm python-gateway acquire-setup-database
 ```
 
 This applies Alembic migrations and required lookup data to the configured
 database without dropping existing data. The Compose services pass the same
 `POSTGRES_*` values from `.env` to Postgres, Alembic, the Python ORM, and the
-Python gateway.
+Python gateway. The gateway starts through `acquire-http-server` with explicit
+`/app/client/main` and `/app/client/stats` static roots.
 
 ## Useful Commands
 
