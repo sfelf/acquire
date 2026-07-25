@@ -18,6 +18,10 @@ dependencies = [
     "websockets>=14,<16",
 ]
 
+[project.scripts]
+acquire-migrate-mysql-to-postgres = "acquire.migration.import_mysql_to_postgres:main"
+acquire-validate-migration-reports = "acquire.migration.validate_import_reports:main"
+
 [project.optional-dependencies]
 mysql-migration = [
     "mysql-connector-python>=9.3,<10",

@@ -87,12 +87,12 @@ existing backup into Postgres.
 
 ## Import Rehearsal Command
 
-Use `acquire.migration.import_mysql_to_postgres` only with disposable rehearsal
-databases until the production runbook has owners and a tested backup restore.
-The target database must already have the current Alembic schema applied:
+Use `acquire-migrate-mysql-to-postgres` only with disposable rehearsal databases
+until the production runbook has owners and a tested backup restore. The target
+database must already have the current Alembic schema applied:
 
 ```bash
-uv run --extra mysql-migration python -m acquire.migration.import_mysql_to_postgres \
+uv run --extra mysql-migration acquire-migrate-mysql-to-postgres \
   --source-url mysql+mysqlconnector://user:password@host/source_db \
   --target-url postgresql+psycopg://user:password@host/target_db \
   --dry-run
@@ -123,6 +123,22 @@ against a restored MySQL backup.
 
 Report validation rejects unknown and duplicate fields so encoded URLs,
 credentials, paths, hostnames, or row contents cannot become accepted output.
+
+Validate a dry-run/import report pair with the normal installation:
+
+```bash
+uv run acquire-validate-migration-reports \
+  --dry-run-report /absolute/path/dry-run-report.json \
+  --import-report /absolute/path/import-report.json
+```
+
+The importer exits with `2` for invalid arguments, `3` for an unsafe target,
+`4` when the optional MySQL source driver is unavailable, `5` for an import
+failure, and `6` for a report-write failure. The validator exits with `2` for
+invalid arguments and `7` for report or validation failures. Both commands use
+fixed single-line diagnostics: connection values, credentials, hostnames,
+private paths, row contents, and exception representations are never projected
+to stdout or stderr.
 
 Use `docs/postgres-backup-rehearsal.md` when repeating the rehearsal with a new
 sanitized or staging MySQL backup. The runbook keeps backup files, credentials,

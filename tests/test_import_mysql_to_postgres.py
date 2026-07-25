@@ -1,5 +1,7 @@
+import base64
 import importlib
 import json
+from urllib.parse import quote
 
 import pytest
 import sqlalchemy
@@ -786,19 +788,245 @@ def test_main_fails_report_path_preflight_before_importing(
     report_path = tmp_path / "existing-directory"
     report_path.mkdir()
 
-    with pytest.raises(IsADirectoryError):
-        import_module.main(
-            [
-                "--source-url",
-                "mysql+mysqlconnector://source",
-                "--target-url",
-                "postgresql+psycopg://target",
-                "--report-json",
-                str(report_path),
-            ]
-        )
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+            "--report-json",
+            str(report_path),
+        ]
+    )
 
+    assert exit_code == import_module.EXIT_REPORT_WRITE_FAILED
     assert import_calls == []
+
+
+def test_main_returns_distinct_fixed_error_for_invalid_arguments(
+    import_module,
+    capsys,
+):
+    secret = "postgresql+psycopg://private-user:private-password@private-host/acquire"
+
+    exit_code = import_module.main(["--unexpected", secret])
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_INVALID_INPUT
+    assert captured.out == ""
+    assert captured.err == "error: invalid command arguments\n"
+    assert secret not in captured.err
+
+
+def test_main_returns_invalid_input_for_malformed_database_url(
+    import_module,
+    capsys,
+):
+    malformed_url = "not a database URL containing private-password"
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            malformed_url,
+            "--target-url",
+            "postgresql+psycopg://target",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_INVALID_INPUT
+    assert captured.out == ""
+    assert captured.err == "error: invalid database connection arguments\n"
+    assert malformed_url not in captured.err
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(
+            lambda module: module.TargetNotEmptyError("private target details"),
+            id="non-empty-target",
+        ),
+        pytest.param(
+            lambda module: module.UnsafeTargetError("private lookup row details"),
+            id="lookup-mismatch",
+        ),
+    ],
+)
+def test_main_returns_unsafe_target_exit_without_exception_projection(
+    import_module,
+    capsys,
+    monkeypatch,
+    error,
+):
+    def fail_import(*args, **kwargs):
+        raise error(import_module)
+
+    monkeypatch.setattr(import_module, "import_database", fail_import)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_UNSAFE_TARGET
+    assert captured.out == ""
+    assert captured.err == "error: target database is not safe to import\n"
+    assert "private" not in captured.err
+
+
+def test_main_returns_missing_optional_driver_exit(import_module, capsys, monkeypatch):
+    def fail_import(*args, **kwargs):
+        error = ModuleNotFoundError("No module named 'mysql'")
+        error.name = "mysql"
+        raise error
+
+    monkeypatch.setattr(import_module, "import_database", fail_import)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_MISSING_SOURCE_DRIVER
+    assert captured.out == ""
+    assert captured.err == (
+        "error: MySQL source driver is not installed; "
+        "install the mysql-migration extra\n"
+    )
+
+
+def test_main_treats_unrelated_missing_module_as_import_failure(
+    import_module,
+    capsys,
+    monkeypatch,
+):
+    def fail_import(*args, **kwargs):
+        error = ModuleNotFoundError("private module details")
+        error.name = "private_dependency"
+        raise error
+
+    monkeypatch.setattr(import_module, "import_database", fail_import)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_IMPORT_FAILED
+    assert captured.err == "error: database import failed\n"
+    assert "private" not in captured.err
+
+
+def test_main_returns_report_write_exit_for_final_write_failure(
+    import_module,
+    capsys,
+    monkeypatch,
+    tmp_path,
+):
+    report = import_module.ImportReport(dry_run=False, tables=())
+    monkeypatch.setattr(
+        import_module,
+        "import_database",
+        lambda *args, **kwargs: report,
+    )
+    monkeypatch.setattr(import_module, "preflight_report_json_path", lambda path: None)
+
+    def fail_write(report, path):
+        raise OSError("private report path details")
+
+    monkeypatch.setattr(import_module, "write_report_json", fail_write)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+            "--report-json",
+            str(tmp_path / "report.json"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_REPORT_WRITE_FAILED
+    assert captured.out == "import covered 0 rows\n"
+    assert captured.err == "error: report write failed\n"
+    assert "private" not in captured.err
+
+
+@pytest.mark.parametrize(
+    "sensitive_value",
+    [
+        pytest.param(
+            "mysql+mysqlconnector://private-user:private-password@private-host/acquire",
+            id="raw",
+        ),
+        pytest.param(
+            quote(
+                "mysql+mysqlconnector://private-user:private-password@private-host/acquire",
+                safe="",
+            ),
+            id="url-encoded",
+        ),
+        pytest.param(
+            quote(
+                quote(
+                    "mysql+mysqlconnector://private-user:private-password@private-host/acquire",
+                    safe="",
+                ),
+                safe="",
+            ),
+            id="repeatedly-url-encoded",
+        ),
+        pytest.param(
+            base64.b64encode(
+                b"mysql+mysqlconnector://private-user:private-password@private-host/acquire"
+            ).decode(),
+            id="base64-encoded",
+        ),
+    ],
+)
+def test_main_excludes_equivalent_sensitive_exception_forms(
+    import_module,
+    capsys,
+    monkeypatch,
+    sensitive_value,
+):
+    def fail_import(*args, **kwargs):
+        raise RuntimeError(sensitive_value)
+
+    monkeypatch.setattr(import_module, "import_database", fail_import)
+
+    exit_code = import_module.main(
+        [
+            "--source-url",
+            "mysql+mysqlconnector://source",
+            "--target-url",
+            "postgresql+psycopg://target",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == import_module.EXIT_IMPORT_FAILED
+    assert captured.out == ""
+    assert captured.err == "error: database import failed\n"
+    assert sensitive_value not in captured.err
 
 
 def test_read_rows_supports_table_without_primary_key(import_module):

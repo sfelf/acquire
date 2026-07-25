@@ -78,10 +78,10 @@ def test_packaging_docs_define_incremental_module_migration_rules() -> None:
     assert "`acquire.*` imports" in packaging_notes
     assert "must not add `server/` to `sys.path`" in normalized_packaging_notes
     assert "not the final distribution inventory" in normalized_packaging_notes
-    assert "Issue #111 owns the final wheel and source-distribution manifests" in (
+    assert "Issue #127 then owns the final wheel and source-distribution manifests" in (
         normalized_packaging_notes
     )
-    assert "These are package-closeout requirements, not an instruction for #103" in (
+    assert "These are artifact-closeout requirements, not an instruction for #103" in (
         normalized_plan_notes
     )
     assert "docs/packaging.md" in agent_notes
