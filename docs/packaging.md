@@ -38,15 +38,16 @@ documentation, lockfile, and development-tooling resources, so it does not
 promise that the complete repository integration suite can run from the
 archive alone.
 
-`scripts/verify_distribution.py` asserts both complete manifests, builds a
-wheel from the unpacked source distribution, installs that wheel in a clean
-temporary environment outside the repository, and exercises the installed
-resource and command boundaries. CI runs this verification on every supported
-Python version.
+From a repository checkout, `scripts/verify_distribution.py` asserts both
+complete manifests, builds a wheel from the unpacked source distribution,
+independently installs the direct and rebuilt wheels in clean temporary
+environments outside the repository, and exercises both installed resource and
+command boundaries. CI runs this verification on every supported Python
+version.
 
 | Verification state | Result |
 | --- | --- |
-| Both manifests exactly match and the rebuilt wheel installs | Continue to command and resource smoke tests |
+| Both manifests exactly match and both wheels install | Continue to command and resource smoke tests |
 | An artifact is empty, missing a required file, or contains an unexpected file | Fail before installation |
 | Build, rebuild, installation, or command execution is partial or fails | Fail without treating partial output as releasable |
 | A dependency index or external service is temporarily unavailable | Rerun the complete verifier after the environment recovers |

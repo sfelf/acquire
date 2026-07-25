@@ -39,6 +39,10 @@ def run(
 ) -> subprocess.CompletedProcess[str]:
     """Run a verification command and require success.
 
+    The child inherits normal output unless capture is requested. A nonzero
+    status aborts the verifier immediately rather than allowing later checks to
+    treat partial build or installation output as valid.
+
     Args:
         command: Command and arguments to execute.
         cwd: Working directory for the child process.
@@ -47,6 +51,9 @@ def run(
 
     Returns:
         Completed successful child process.
+
+    Raises:
+        subprocess.CalledProcessError: The child command returns nonzero.
     """
     return subprocess.run(
         command,
@@ -142,6 +149,9 @@ def assert_manifest(actual: set[str], expected: set[str], artifact: str) -> None
         actual: File names present in the built artifact.
         expected: Complete expected file names.
         artifact: Human-readable artifact kind for failures.
+
+    Raises:
+        AssertionError: Required files are missing or unexpected files exist.
     """
     missing = sorted(expected - actual)
     unexpected = sorted(actual - expected)
@@ -152,6 +162,10 @@ def assert_manifest(actual: set[str], expected: set[str], artifact: str) -> None
 
 def build_artifacts(output: Path) -> tuple[Path, Path]:
     """Build the repository source distribution and wheel.
+
+    The output directory is mutated by `uv build`. Both returned paths must be
+    treated as provisional until their complete manifests and clean-installed
+    behavior pass later verification.
 
     Args:
         output: Empty external directory for build outputs.
@@ -171,6 +185,10 @@ def build_artifacts(output: Path) -> tuple[Path, Path]:
 
 def build_wheel_from_sdist(sdist: Path, workspace: Path) -> Path:
     """Build a wheel from an unpacked source distribution.
+
+    This creates dedicated unpack and rebuild directories below `workspace`,
+    safely extracts the sdist, and invokes the backend against only that
+    extracted tree. Existing paths with those names are not accepted.
 
     Args:
         sdist: Verified source-distribution archive.
@@ -234,6 +252,10 @@ def command_path(environment_root: Path, command: str) -> Path:
 def smoke_command_help(command: Path, cwd: Path, environment: dict[str, str]) -> None:
     """Require an installed command's help boundary to resolve.
 
+    The command must exit successfully and write nothing to stderr. This check
+    intentionally runs from an external working directory with repository
+    import overrides removed.
+
     Args:
         command: Installed project script.
         cwd: External working directory.
@@ -251,6 +273,10 @@ def smoke_command_help(command: Path, cwd: Path, environment: dict[str, str]) ->
 def verify_editable_commands(workspace: Path) -> None:
     """Smoke-test all project scripts from the editable development install.
 
+    Every declared command must resolve on the active `uv run` path and its
+    help boundary must work from the external workspace. Missing commands,
+    nonzero exits, or unexpected stderr abort verification.
+
     Args:
         workspace: External working directory.
     """
@@ -264,8 +290,15 @@ def verify_editable_commands(workspace: Path) -> None:
 def reserve_port() -> int:
     """Return an available loopback TCP port.
 
+    The probing socket is closed before return so the installed gateway can
+    bind the port. A concurrent process can claim it in that interval; the
+    gateway lifecycle check will then fail rather than retrying another port.
+
     Returns:
         Ephemeral port number released for the gateway smoke test.
+
+    Raises:
+        OSError: A loopback socket cannot be bound.
     """
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -275,12 +308,20 @@ def reserve_port() -> int:
 def fetch_until_ready(url: str, process: subprocess.Popen[str]) -> bytes:
     """Fetch an asset after the installed gateway starts.
 
+    Poll for at most 15 seconds, using one-second request timeouts and
+    100-millisecond retry intervals. An early child exit fails immediately;
+    otherwise failure to receive a response before the deadline is a readiness
+    timeout. Both terminal states raise `AssertionError`.
+
     Args:
         url: Asset URL to request.
         process: Gateway child process.
 
     Returns:
         Response body.
+
+    Raises:
+        AssertionError: The child exits early or readiness times out.
     """
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -303,10 +344,20 @@ def verify_installed_gateway(
 ) -> None:
     """Verify external assets and invalid-root diagnostics from the clean wheel.
 
+    This creates representative main and stats trees, starts the installed
+    gateway on loopback, polls and validates both asset responses, and always
+    terminates the child. Graceful termination has a ten-second deadline before
+    forced cleanup. After shutdown, separate invocations verify the exact
+    missing-root and relative-root failure contracts.
+
     Args:
         command: Clean-installed HTTP gateway command.
         workspace: External temporary workspace.
         environment: Sanitized child environment.
+
+    Raises:
+        AssertionError: Asset serving, cleanup, or a fixed diagnostic differs
+            from the installed gateway contract.
     """
     main_root = workspace / "main-assets"
     stats_root = workspace / "stats-assets"
@@ -410,10 +461,18 @@ def verify_clean_wheel(
     workspace: Path,
     postgres_url: str | None,
 ) -> None:
-    """Install and exercise a rebuilt wheel outside the repository.
+    """Install and exercise one wheel outside the repository.
+
+    Ordering is significant: create a fresh virtual environment, install the
+    wheel with normal dependencies, prove MySQL is absent, inspect metadata and
+    packaged Alembic resources, exercise all commands and external gateway
+    assets, and validate explicit stats roots. When a Postgres URL is supplied,
+    database setup runs twice before the environment is mutated by installing
+    the `mysql-migration` extra. The final checks prove that extra activates
+    both the connector and importer command.
 
     Args:
-        wheel: Wheel rebuilt from the unpacked source distribution.
+        wheel: Direct or source-distribution-rebuilt wheel to verify.
         workspace: External temporary workspace.
         postgres_url: Optional fresh Postgres database used for setup verification.
     """
@@ -517,7 +576,15 @@ def verify_clean_wheel(
 
 
 def main() -> None:
-    """Build, inspect, rebuild, install, and exercise final artifacts."""
+    """Build, inspect, rebuild, install, and exercise final artifacts.
+
+    The workflow uses one disposable external root. It verifies exact sdist and
+    wheel manifests before installation, exercises the editable command
+    surface, then independently clean-installs both the direct wheel and the
+    wheel rebuilt from the unpacked sdist. Optional Postgres mutation is
+    reserved for the rebuilt-wheel path required by the artifact contract.
+    Any incomplete or unknown state aborts the workflow.
+    """
     postgres_url = os.environ.get("ACQUIRE_ARTIFACT_POSTGRES_URL")
     with tempfile.TemporaryDirectory(prefix="acquire-artifacts-") as temporary:
         workspace = Path(temporary)
@@ -531,7 +598,12 @@ def main() -> None:
         rebuilt_wheel = build_wheel_from_sdist(sdist, workspace)
         assert_manifest(wheel_manifest(rebuilt_wheel), expected_wheel, "rebuilt wheel")
         verify_editable_commands(workspace)
-        verify_clean_wheel(rebuilt_wheel, workspace, postgres_url)
+        direct_workspace = workspace / "direct-wheel-install"
+        direct_workspace.mkdir()
+        verify_clean_wheel(direct_wheel, direct_workspace, None)
+        rebuilt_workspace = workspace / "rebuilt-wheel-install"
+        rebuilt_workspace.mkdir()
+        verify_clean_wheel(rebuilt_wheel, rebuilt_workspace, postgres_url)
 
 
 if __name__ == "__main__":
