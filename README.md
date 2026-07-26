@@ -24,7 +24,7 @@ features. This repository is not the source currently deployed at
 
 The completed modernization, Packaging, and dependency-hygiene decisions are
 preserved in
-[docs/history/modernization-and-packaging.md](docs/history/modernization-and-packaging.md).
+[docs/history/modernization-and-packaging.md](https://github.com/sfelf/acquire/blob/main/docs/history/modernization-and-packaging.md).
 GitHub issues and milestones remain authoritative for active work.
 
 ## Development And Testing

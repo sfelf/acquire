@@ -50,7 +50,11 @@ def test_history_preserves_completed_modernization_and_packaging_status() -> Non
     )
     assert "`docs/history/modernization-and-packaging.md`" in agent_notes
     assert "GitHub issues and milestones are authoritative" in agent_notes
-    assert "docs/history/modernization-and-packaging.md" in readme
+    assert (
+        "[docs/history/modernization-and-packaging.md]"
+        "(https://github.com/sfelf/acquire/blob/main/"
+        "docs/history/modernization-and-packaging.md)"
+    ) in readme
     assert "Keep linting and type checking permissive" not in agent_notes
 
 
