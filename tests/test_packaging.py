@@ -264,7 +264,7 @@ def test_active_workflows_have_no_legacy_server_path_configuration() -> None:
         REPOSITORY_ROOT / "Dockerfile.local",
         REPOSITORY_ROOT / "docker-compose.yml",
         REPOSITORY_ROOT / "docker-compose.test.yml",
-        REPOSITORY_ROOT / "package.json",
+        REPOSITORY_ROOT / "client" / "package.json",
         REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml",
         REPOSITORY_ROOT / ".github" / "workflows" / "production-image.yml",
     )

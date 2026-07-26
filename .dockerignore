@@ -21,3 +21,4 @@ client/stats/data
 dist
 lib
 node_modules
+client/node_modules

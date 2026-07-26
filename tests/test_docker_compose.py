@@ -60,6 +60,8 @@ def test_client_asset_helper_uses_modern_node_and_npm_scripts():
     command = client_assets["command"]
 
     assert client_assets["image"] == "node:22-bookworm-slim"
+    assert client_assets["working_dir"] == "/app/client"
+    assert "node-modules:/app/client/node_modules" in client_assets["volumes"]
     assert "npm ci" in command
     assert "npm run build:css" in command
     assert "npm run build:js" in command

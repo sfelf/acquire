@@ -13,11 +13,11 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY client/package.json client/package-lock.json ./client/
+RUN npm --prefix client ci
 
 COPY client ./client
-RUN npm run build:client
+RUN npm --prefix client run build:client
 
 FROM python:3.12-slim AS runtime
 

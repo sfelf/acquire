@@ -14,11 +14,24 @@ reviewable and generated diffs do not obscure runtime changes.
 - `client/main/js/app.js` is the browser JavaScript entrypoint. esbuild bundles
   that entrypoint and its CommonJS dependencies into `client/main/js/main.js`.
 
+The npm manifests live alongside these browser sources under `client/`. Their
+three direct development dependencies have one build-only owner each:
+
+| Dependency | Responsibility |
+| --- | --- |
+| Dart Sass (`sass`) | Compile the main and stats SCSS entrypoints |
+| esbuild | Bundle browser JavaScript and emit its source map |
+| Prettier | Provide the explicit client-source formatting command |
+
+None of these packages is installed in the backend Python environment or the
+production image's final runtime stage.
+
 ## Local Builds
 
 Build all client assets from the host with:
 
 ```bash
+cd client
 npm ci
 npm run build:client
 ```
@@ -37,9 +50,10 @@ Both paths write the same gitignored files into the checkout:
 - `client/main/js/main.js`
 - `client/main/js/main.js.map`
 
-The npm enum command runs the installed project script with explicit absolute
-client-source and output paths. The Compose enum helper invokes the same
-installed command with `/app/client/main/js`.
+The npm enum command runs the installed project script through the parent
+uv-managed Python project with explicit absolute client-source and output
+paths. npm resolves only `client/package-lock.json`. The Compose enum helper
+invokes the same installed command with `/app/client/main/js`.
 
 Run development generation directly with:
 
@@ -64,8 +78,8 @@ to the same writable publication tree.
 ## Repository Boundary
 
 Do not commit generated client assets. The tracked source of truth is the SCSS,
-JavaScript source modules, Python enum generator, `package.json`, and
-`package-lock.json`.
+JavaScript source modules, Python enum generator, `client/package.json`, and
+`client/package-lock.json`.
 
 The default local Python gateway intentionally checks for generated assets at
 startup and tells the developer to run the client build helper when they are

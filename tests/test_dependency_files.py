@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+CLIENT_ROOT = REPOSITORY_ROOT / "client"
 
 
 def test_mysql_connector_is_isolated_to_backup_migration_extra() -> None:
@@ -126,6 +127,34 @@ def test_dependabot_updates_uv_dependency_sources() -> None:
     }
 
 
+def test_dependabot_updates_client_build_dependencies() -> None:
+    config = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github" / "dependabot.yml").read_text()
+    )
+    npm_updates = [
+        update
+        for update in config["updates"]
+        if update["package-ecosystem"] == "npm"
+    ]
+
+    assert npm_updates == [
+        {
+            "package-ecosystem": "npm",
+            "directory": "/client",
+            "schedule": {
+                "interval": "weekly",
+                "day": "monday",
+                "time": "09:00",
+                "timezone": "America/Los_Angeles",
+            },
+            "open-pull-requests-limit": 5,
+            "labels": ["dependencies", "javascript"],
+            "commit-message": {"prefix": "deps", "include": "scope"},
+            "groups": {"client-build-dependencies": {"patterns": ["*"]}},
+        }
+    ]
+
+
 def test_dependency_docs_describe_single_uv_managed_boundary() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
@@ -196,30 +225,58 @@ def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
 
 
 def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
-    package = json.loads((REPOSITORY_ROOT / "package.json").read_text())
-    package_lock = json.loads((REPOSITORY_ROOT / "package-lock.json").read_text())
+    package = json.loads((CLIENT_ROOT / "package.json").read_text())
+    package_lock = json.loads((CLIENT_ROOT / "package-lock.json").read_text())
     dev_dependencies = package["devDependencies"]
     engines = package["engines"]
     scripts = package["scripts"]
 
+    assert package["name"] == "acquire-client-assets"
+    assert package["private"] is True
     assert engines == {"node": ">=22", "npm": ">=10"}
-    assert "esbuild" in dev_dependencies
-    assert "sass" in dev_dependencies
-    assert "node-sass" not in dev_dependencies
-    assert "webpack" not in dev_dependencies
+    assert set(dev_dependencies) == {"esbuild", "prettier", "sass"}
     assert "build:css" in scripts
     assert "build:enums" in scripts
     assert "build:js" in scripts
     assert scripts["build:enums"] == (
-        "uv run --no-dev acquire-generate-enums js development "
-        '--client-source-root "$PWD/client/main/js" '
-        '--output "$PWD/client/main/js/enums.js"'
+        "uv run --project .. --no-dev acquire-generate-enums js development "
+        '--client-source-root "$PWD/main/js" '
+        '--output "$PWD/main/js/enums.js"'
     )
-    assert scripts["build:js"].startswith("esbuild client/main/js/app.js --bundle")
+    assert scripts["build:js"].startswith(
+        "cd .. && client/node_modules/.bin/esbuild "
+        "client/main/js/app.js --bundle"
+    )
     assert scripts["build:client"] == (
         "npm run build:css && npm run build:enums && npm run build:js"
     )
-    assert "node_modules/webpack" not in package_lock["packages"]
+    assert package_lock["name"] == "acquire-client-assets"
+    assert (
+        package_lock["packages"]["node_modules/sass"]["dependencies"]["immutable"]
+        == "^5.1.5"
+    )
+    assert package_lock["packages"]["node_modules/immutable"]["version"] == "5.1.9"
+    assert {
+        "node_modules/clean-css",
+        "node_modules/html-minifier",
+        "node_modules/node-sass",
+        "node_modules/uglify-js",
+        "node_modules/webpack",
+    }.isdisjoint(package_lock["packages"])
+
+
+def test_client_manifest_owns_the_only_npm_dependency_boundary() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text()
+    agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
+
+    assert not (REPOSITORY_ROOT / "package.json").exists()
+    assert not (REPOSITORY_ROOT / "package-lock.json").exists()
+    assert (CLIENT_ROOT / "package.json").is_file()
+    assert (CLIENT_ROOT / "package-lock.json").is_file()
+    assert not (REPOSITORY_ROOT / "generate_client_files.sh").exists()
+    assert "cd client\nnpm ci\nnpm run build:client" in readme
+    assert "cd client\nnpm ci\nnpm run build:client" in agent_notes
+    assert "Client assets and their npm manifests live under `client/`" in agent_notes
 
 
 def test_supported_project_scripts_use_packaged_main_functions() -> None:
@@ -263,6 +320,9 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
         assert f"/{asset}" in gitignore
         assert asset in dockerignore
 
+    assert "/node_modules" in gitignore
+    assert "/client/node_modules" in gitignore
+    assert "client/node_modules" in dockerignore
     assert "Client Asset Workflow" in asset_workflow
     assert "Do not commit generated client assets" in asset_workflow
     assert "npm run build:client" in asset_workflow
@@ -273,6 +333,10 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
     assert "docs/deployment.md" in asset_workflow
     assert "docs/client-assets.md" in architecture_notes
     assert "docs/client-assets.md" in local_development_notes
+    assert "`client/package.json`" in asset_workflow
+    assert "`client/package-lock.json`" in asset_workflow
+    assert "three direct development dependencies" in asset_workflow
+    assert "backend Python environment" in asset_workflow
     assert "legacy Node.js 6-era toolchain. Complete." in plans
     assert "build production assets in the\n     production Docker" in plans
 
@@ -287,8 +351,9 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     assert "RUN uv sync --frozen --no-dev" in dockerfile
     assert "COPY src ./src" in dockerfile
     assert "server/enumsgen.py" not in dockerfile
-    assert "RUN npm ci" in dockerfile
-    assert "RUN npm run build:client" in dockerfile
+    assert "COPY client/package.json client/package-lock.json ./client/" in dockerfile
+    assert "RUN npm --prefix client ci" in dockerfile
+    assert "RUN npm --prefix client run build:client" in dockerfile
     assert "FROM python:3.12-slim AS runtime" in dockerfile
     assert "UV_PROJECT_ENVIRONMENT=/opt/acquire" in dockerfile
     assert "RUN uv sync --frozen --no-dev --no-editable" in dockerfile
@@ -296,6 +361,9 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     assert "requirements.local-docker.txt" not in dockerfile
     assert "client/main/js/main.js" in dockerfile
     assert "client/stats/css/stats.css" in dockerfile
+    runtime_stage = dockerfile.split("FROM python:3.12-slim AS runtime", maxsplit=1)[1]
+    assert "node_modules" not in runtime_stage
+    assert "npm " not in runtime_stage
     assert 'CMD ["acquire-http-server"' in dockerfile
     assert '"--main-static-root", "/app/client/main"' in dockerfile
     assert '"--stats-static-root", "/app/client/stats"' in dockerfile

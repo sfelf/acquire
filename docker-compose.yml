@@ -40,8 +40,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - .:/app
-      - node-modules:/app/node_modules
-    working_dir: /app
+      - node-modules:/app/client/node_modules
+    working_dir: /app/client
     command: >
       sh -c "npm ci
       && npm run build:css
