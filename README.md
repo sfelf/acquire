@@ -167,6 +167,7 @@ Install Node.js 22 LTS or newer when you want to build client assets outside
 Docker, then run:
 
 ```bash
+cd client
 npm ci
 npm run build:client
 ```
