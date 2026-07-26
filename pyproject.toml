@@ -37,13 +37,13 @@ dev = [
     "httpx>=0.27,<1",
     "mypy>=1.18,<2",
     "pre-commit>=4,<5",
-    "pytest>=8.4,<9",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=7,<8",
     "ruff>=0.14,<0.15",
 ]
 
 [tool.pytest.ini_options]
-minversion = "8.0"
+minversion = "9.0"
 testpaths = ["tests"]
 python_files = ["test.py", "test_*.py", "*_test.py"]
 addopts = "-ra"
