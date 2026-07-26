@@ -6,6 +6,18 @@ uv-managed installation, and every application or test uses `acquire.*` imports.
 No compatibility modules, legacy direct-file command paths, `sys.path`
 injection, or `PYTHONPATH` configuration remain.
 
+## Python Dependency Boundary
+
+`pyproject.toml` is the only direct Python dependency manifest. Its
+`project.dependencies` table defines the normal application runtime,
+`project.optional-dependencies` keeps operational extras such as
+`mysql-migration` isolated, and `dependency-groups` defines development
+tooling. `uv.lock` is the only reproducible resolved dependency set.
+
+All repository installation paths use uv with these files. Dependency changes
+must update `pyproject.toml` and `uv.lock` together; Dependabot uses its `uv`
+ecosystem support at the repository root to maintain that same boundary.
+
 ## Installation And Source Layout
 
 The project uses `uv_build` with the conventional `src/acquire/` layout:
