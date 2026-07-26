@@ -66,6 +66,10 @@ status 2, successful fresh, guarded-legacy, already-versioned, and repeated
 setups exit with status 0, and resource, inspection, connection, or migration
 failures exit with status 1.
 
+Direct Alembic CLI invocation from the repository root is unsupported. The
+repository has no root `alembic.ini`; use `acquire-setup-database` for schema
+setup and the packaged resource boundary for migration tests.
+
 | Field | Source and trust | Runtime use | Diagnostic policy |
 | --- | --- | --- | --- |
 | Database URL and structured connection settings | Operator environment, sensitive | Construct the application engine used for inspection and migrations | Never print or serialize |
@@ -179,7 +183,7 @@ still requires an explicit deployment plan, owners, and a tested dry run.
 
 - A fresh MySQL backup exists and restore has been tested outside production.
 - The target Postgres database starts from an empty schema created with
-  `alembic upgrade head`.
+  `acquire-setup-database`.
 - A repeatable export/import command exists for production data, including
   users, games, actions, chat messages, and game-player rows.
 - The import dry run validates row counts, representative user login behavior,
