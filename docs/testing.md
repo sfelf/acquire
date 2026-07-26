@@ -2,6 +2,10 @@
 
 Testing is the main safety mechanism for the planned refactor.
 
+The development dependency boundary supports pytest 9 on Python 3.12, 3.13,
+and 3.14. Pytest and its plugins are development-only dependencies; runtime
+and MySQL-backup migration installs do not include them.
+
 ## Test Layers
 
 - Unit tests cover pure Python helpers and game-rule behavior.

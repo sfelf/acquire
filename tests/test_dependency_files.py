@@ -54,10 +54,44 @@ def test_pyproject_defines_complete_direct_dependency_boundaries() -> None:
         "httpx>=0.27,<1",
         "mypy>=1.18,<2",
         "pre-commit>=4,<5",
-        "pytest>=8.4,<9",
+        "pytest>=9.0.3,<10",
         "pytest-cov>=7,<8",
         "ruff>=0.14,<0.15",
     }
+
+
+def test_pytest_9_boundary_preserves_test_matrix_and_coverage_policy() -> None:
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    pytest_options = pyproject["tool"]["pytest"]["ini_options"]
+
+    assert "pytest>=9.0.3,<10" in pyproject["dependency-groups"]["dev"]
+    assert not any(
+        requirement.startswith(("pytest", "pytest-cov"))
+        for requirement in pyproject["project"]["dependencies"]
+    )
+    assert all(
+        not requirement.startswith(("pytest", "pytest-cov"))
+        for requirements in pyproject["project"]["optional-dependencies"].values()
+        for requirement in requirements
+    )
+    assert pytest_options["minversion"] == "9.0"
+    assert pytest_options["markers"] == [
+        "unit: fast tests that do not require external services",
+        "integration: tests that exercise service boundaries",
+        "golden: replay or fixture-based regression tests",
+        "postgres: tests that require Postgres",
+        "e2e: end-to-end smoke tests",
+    ]
+    assert pyproject["tool"]["coverage"]["report"]["fail_under"] == 90
+    assert workflow.count("python-version: ${{ matrix.python-version }}") == 1
+    assert '"3.12"' in workflow
+    assert '"3.13"' in workflow
+    assert '"3.14"' in workflow
+    assert "uv run pytest -m postgres" in workflow
+    assert "uv run pytest -m e2e" in workflow
+    assert "uv run pytest --cov=src/acquire" in workflow
+    assert "uses: codecov/codecov-action@v5" in workflow
 
 
 def test_uv_lock_records_project_dependency_boundaries() -> None:
@@ -87,6 +121,16 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         "pytest-cov",
         "ruff",
     }
+    pytest_package = next(
+        package for package in lock["package"] if package["name"] == "pytest"
+    )
+    pytest_requirement = next(
+        requirement
+        for requirement in metadata["requires-dev"]["dev"]
+        if requirement["name"] == "pytest"
+    )
+    assert pytest_package["version"].startswith("9.")
+    assert pytest_requirement["specifier"] == ">=9.0.3,<10"
     mysql_requirement = next(
         requirement
         for requirement in metadata["requires-dist"]
