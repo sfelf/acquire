@@ -159,6 +159,10 @@ Install `uv`, then create the project environment:
 uv sync --group dev
 ```
 
+`pyproject.toml` declares all direct Python dependencies and `uv.lock` pins the
+reproducible resolved environment. Use uv to change or install Python
+dependencies so both files remain synchronized.
+
 Install Node.js 22 LTS or newer when you want to build client assets outside
 Docker, then run:
 

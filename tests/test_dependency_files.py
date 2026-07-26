@@ -7,19 +7,10 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _read_requirements(path: str) -> list[str]:
-    return [
-        line.strip()
-        for line in (REPOSITORY_ROOT / path).read_text().splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
-
-
 def test_mysql_connector_is_isolated_to_backup_migration_extra() -> None:
-    requirements = _read_requirements("requirements.txt")
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert "mysql-connector-python>=9.3,<10" not in requirements
+    assert "mysql-connector-python>=9.3,<10" not in pyproject["project"]["dependencies"]
     assert pyproject["project"]["optional-dependencies"]["mysql-migration"] == [
         "mysql-connector-python>=9.3,<10"
     ]
@@ -42,27 +33,117 @@ def test_ci_verifies_runtime_and_mysql_migration_dependency_boundaries() -> None
     assert 'assert "trueskill" not in sys.modules' in workflow
 
 
-def test_legacy_runtime_dependency_pins_match_project_baseline() -> None:
-    requirements = set(_read_requirements("requirements.txt"))
+def test_pyproject_defines_complete_direct_dependency_boundaries() -> None:
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    compatibility_requirements = {
+    assert set(pyproject["project"]["dependencies"]) == {
+        "alembic>=1.17,<2",
+        "fastapi>=0.115,<1",
         "psycopg[binary]>=3.2,<4",
-        "six>=1.17,<2",
         "sqlalchemy>=2,<3",
+        "trueskill==0.4.4",
         "ujson>=5.13,<6",
+        "uvicorn>=0.32,<1",
+        "websockets>=14,<16",
+    }
+    assert pyproject["project"]["optional-dependencies"] == {
+        "mysql-migration": ["mysql-connector-python>=9.3,<10"]
+    }
+    assert set(pyproject["dependency-groups"]["dev"]) == {
+        "httpx>=0.27,<1",
+        "mypy>=1.18,<2",
+        "pre-commit>=4,<5",
+        "pytest>=8.4,<9",
+        "pytest-cov>=7,<8",
+        "ruff>=0.14,<0.15",
     }
 
-    assert compatibility_requirements <= requirements
-    assert {"psycopg[binary]>=3.2,<4", "sqlalchemy>=2,<3"} <= set(
-        pyproject["project"]["dependencies"]
+
+def test_uv_lock_records_project_dependency_boundaries() -> None:
+    lock = tomllib.loads((REPOSITORY_ROOT / "uv.lock").read_text())
+    acquire = next(package for package in lock["package"] if package["name"] == "acquire")
+    runtime = acquire["dependencies"]
+    optional = acquire["optional-dependencies"]
+    development = acquire["dev-dependencies"]
+    metadata = acquire["metadata"]
+
+    assert {dependency["name"] for dependency in runtime} == {
+        "alembic",
+        "fastapi",
+        "psycopg",
+        "sqlalchemy",
+        "trueskill",
+        "ujson",
+        "uvicorn",
+        "websockets",
+    }
+    assert optional == {"mysql-migration": [{"name": "mysql-connector-python"}]}
+    assert {dependency["name"] for dependency in development["dev"]} == {
+        "httpx",
+        "mypy",
+        "pre-commit",
+        "pytest",
+        "pytest-cov",
+        "ruff",
+    }
+    mysql_requirement = next(
+        requirement
+        for requirement in metadata["requires-dist"]
+        if requirement["name"] == "mysql-connector-python"
     )
-    assert {"trueskill==0.4.4", "ujson>=5.13,<6"} <= set(
-        pyproject["project"]["dependencies"]
+    assert mysql_requirement == {
+        "name": "mysql-connector-python",
+        "marker": "extra == 'mysql-migration'",
+        "specifier": ">=9.3,<10",
+    }
+
+
+def test_dependabot_updates_uv_dependency_sources() -> None:
+    config = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github" / "dependabot.yml").read_text()
     )
-    assert {"six>=1.17,<2", "trueskill==0.4.4", "ujson>=5.13,<6"}.isdisjoint(
-        pyproject["dependency-groups"]["dev"]
+
+    ecosystems = [update["package-ecosystem"] for update in config["updates"]]
+    assert "pip" not in ecosystems
+    assert ecosystems.count("uv") == 1
+
+    uv_update = next(
+        update for update in config["updates"] if update["package-ecosystem"] == "uv"
     )
+    assert uv_update == {
+        "package-ecosystem": "uv",
+        "directory": "/",
+        "schedule": {
+            "interval": "weekly",
+            "day": "monday",
+            "time": "09:00",
+            "timezone": "America/Los_Angeles",
+        },
+        "open-pull-requests-limit": 5,
+        "labels": ["dependencies", "python"],
+        "commit-message": {"prefix": "deps", "include": "scope"},
+        "groups": {"python-dependencies": {"patterns": ["*"]}},
+    }
+
+
+def test_dependency_docs_describe_single_uv_managed_boundary() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text()
+    agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
+    packaging_notes = (REPOSITORY_ROOT / "docs" / "packaging.md").read_text()
+
+    assert "`pyproject.toml` declares all direct Python dependencies" in readme
+    assert "`uv.lock` pins the\nreproducible resolved environment" in readme
+    assert "`pyproject.toml` is the sole source of direct application dependencies" in (
+        agent_notes
+    )
+    assert "`uv.lock` is the sole reproducible resolved Python dependency set" in (
+        agent_notes
+    )
+    assert "## Python Dependency Boundary" in packaging_notes
+    assert "`pyproject.toml` is the only direct Python dependency manifest" in (
+        packaging_notes
+    )
+    assert "Dependabot uses its `uv`\necosystem support" in packaging_notes
 
 
 def test_runtime_images_do_not_install_mysql_dependencies() -> None:
@@ -89,10 +170,8 @@ def test_local_docker_installs_project_outside_bind_mount() -> None:
 
 
 def test_local_docker_includes_alembic_for_database_setup() -> None:
-    requirements = _read_requirements("requirements.txt")
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert "alembic>=1.17,<2" in requirements
     assert "alembic>=1.17,<2" in pyproject["project"]["dependencies"]
     assert "alembic>=1.17,<2" not in pyproject["dependency-groups"]["dev"]
     assert pyproject["project"]["scripts"]["acquire-setup-database"] == (
@@ -107,12 +186,9 @@ def test_local_docker_includes_postgres_driver_for_default_database() -> None:
 
 
 def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
-    requirements = _read_requirements("requirements.txt")
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert "trueskill==0.4.4" in requirements
     assert "trueskill==0.4.4" in pyproject["project"]["dependencies"]
-    assert not any(requirement.startswith("openskill") for requirement in requirements)
     assert not any(
         requirement.startswith("openskill")
         for requirement in pyproject["project"]["dependencies"]
