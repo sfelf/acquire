@@ -13,10 +13,11 @@ docker build -t acquire:production .
 ```
 
 The Dockerfile installs `client/package-lock.json` in a Node 22 build stage and
-runs the client manifest's `build:client` script, then copies the generated CSS,
-enum JavaScript, and browser bundle into a slim Python runtime stage. Node, npm,
-and `node_modules` do not enter the final runtime stage. Generated client assets
-stay untracked in git.
+runs the client manifest's `build:client` and `verify:client` scripts, then
+copies the generated CSS, enum JavaScript, browser bundle, and source map into a
+slim Python runtime stage. Node, npm, and `node_modules` do not enter the final
+runtime stage. CI smoke-tests the complete five-file output set and the absence
+of those Node runtime tools. Generated client assets stay untracked in git.
 
 The standalone Python wheel is a runtime-code artifact, not a complete browser
 deployment: it deliberately excludes generated client assets. Deployments that

@@ -10,6 +10,46 @@ on:
       - main
 
 jobs:
+  client-build:
+    name: Client build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python runtime
+        run: uv sync --frozen --no-dev
+
+      - name: Install locked client tooling
+        run: npm --prefix client ci
+
+      - name: Test client output verification
+        run: npm --prefix client run test:client-build
+
+      - name: Build client assets
+        run: npm --prefix client run build:client
+
+      - name: Verify client outputs
+        run: npm --prefix client run verify:client
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

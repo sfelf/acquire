@@ -34,7 +34,12 @@ Build all client assets from the host with:
 cd client
 npm ci
 npm run build:client
+npm run verify:client
 ```
+
+The supported host and CI toolchain is Node.js 22 with npm 10 or newer.
+`verify:client` is read-only and fails after reporting every missing or empty
+expected output. Its focused Node test covers each output independently.
 
 Build them through Docker Compose with:
 
@@ -49,6 +54,10 @@ Both paths write the same gitignored files into the checkout:
 - `client/main/js/enums.js`
 - `client/main/js/main.js`
 - `client/main/js/main.js.map`
+
+The Compose helper runs the same CSS, JavaScript, and verification scripts
+after the packaged Python enum helper completes. The Python gateway checks the
+same five-file output set before it starts.
 
 The npm enum command runs the installed project script through the parent
 uv-managed Python project with explicit absolute client-source and output
@@ -89,7 +98,8 @@ Node container.
 
 ## Deployment Packaging
 
-The production Dockerfile builds client assets in a dedicated Node 22 image
-stage, then copies the generated files into the Python runtime image before
-starting the gateway. See `docs/deployment.md` for the production image build
-and runtime commands.
+The production Dockerfile builds and verifies client assets in a dedicated
+Node 22 image stage, then copies the generated files into the Python runtime
+image before starting the gateway. CI confirms the final image contains all
+five outputs but no Node executable, npm executable, or `node_modules`. See
+`docs/deployment.md` for the production image build and runtime commands.

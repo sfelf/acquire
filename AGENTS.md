@@ -92,6 +92,7 @@ The client asset build helpers use:
 cd client
 npm ci
 npm run build:client
+npm run verify:client
 ```
 
 ## Validation

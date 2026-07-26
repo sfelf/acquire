@@ -18,6 +18,7 @@ RUN npm --prefix client ci
 
 COPY client ./client
 RUN npm --prefix client run build:client
+RUN npm --prefix client run verify:client
 
 FROM python:3.12-slim AS runtime
 

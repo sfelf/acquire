@@ -65,8 +65,23 @@ def test_client_asset_helper_uses_modern_node_and_npm_scripts():
     assert "npm ci" in command
     assert "npm run build:css" in command
     assert "npm run build:js" in command
+    assert "npm run verify:client" in command
     assert "node-sass" not in command
     assert "webpack" not in command
+
+
+def test_gateway_checks_the_complete_client_output_set():
+    services = _load_compose_services()
+    command = services["python-gateway"]["command"]
+
+    for output in (
+        "client/main/css/main.css",
+        "client/stats/css/stats.css",
+        "client/main/js/enums.js",
+        "client/main/js/main.js",
+        "client/main/js/main.js.map",
+    ):
+        assert f"/app/{output}" in command
 
 
 def test_client_enum_helper_uses_packaged_module_with_absolute_paths():

@@ -16,6 +16,7 @@ coverage.xml
 client/main/css/main.css
 client/main/js/enums.js
 client/main/js/main.js
+client/main/js/main.js.map
 client/stats/css/stats.css
 client/stats/data
 dist
