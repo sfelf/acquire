@@ -5,6 +5,9 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+HISTORY_PATH = (
+    REPOSITORY_ROOT / "docs" / "history" / "modernization-and-packaging.md"
+)
 
 
 def test_readme_identifies_independent_fork_and_hosted_original() -> None:
@@ -17,32 +20,46 @@ def test_readme_identifies_independent_fork_and_hosted_original() -> None:
     assert "not the source currently deployed at\n`acquire.tlstyer.com`" in readme
 
 
-def test_plans_preserve_completed_modernization_and_packaging_status() -> None:
-    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+def test_history_preserves_completed_modernization_and_packaging_status() -> None:
+    plans = HISTORY_PATH.read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
+    readme = (REPOSITORY_ROOT / "README.md").read_text()
 
-    assert plans.startswith("# Modernization And Packaging Plan\n")
+    assert not (REPOSITORY_ROOT / "PLANS.md").exists()
+    assert plans.startswith("# Modernization And Packaging History\n")
     assert "The six-phase modernization plan is complete as of July 23, 2026." in plans
     assert "The Packaging milestone is complete." in plans
+    assert "Dependency and Repository Hygiene follow-up is complete" in plans
+    assert "historical context, not an active roadmap" in plans
+    for issue_number in ("134", "135", "136", "137", "138", "140"):
+        assert (
+            f"[#{issue_number}](https://github.com/sfelf/acquire/issues/{issue_number})"
+            in plans
+        )
     assert "[#103](https://github.com/sfelf/acquire/issues/103)," in plans
     assert "[#104](https://github.com/sfelf/acquire/issues/104)," in plans
     assert "[#111](https://github.com/sfelf/acquire/issues/111), and" in plans
     assert "[#127](https://github.com/sfelf/acquire/issues/127) are complete" in plans
     assert "Issue #105 is delivered as three stand-alone PR slices" in plans
     assert "Issue #110 is also delivered as three stand-alone PR slices" in plans
-    assert "GitHub issues remain the source of\ntruth for issue scope" in plans
+    assert "GitHub issues and milestones are the\nsource of truth" in plans
     assert "Runtime dependency upgrades are intentionally deferred." not in plans
     assert "The six-phase modernization plan is complete." in agent_notes
     assert "Follow GitHub issues and milestones for the next major-refactor work" in (
         agent_notes
     )
-    assert "GitHub issues and milestones\nremain authoritative" in agent_notes
-    assert "update `PLANS.md` when an approved issue change" in agent_notes
+    assert "`docs/history/modernization-and-packaging.md`" in agent_notes
+    assert "GitHub issues and milestones are authoritative" in agent_notes
+    assert (
+        "[docs/history/modernization-and-packaging.md]"
+        "(https://github.com/sfelf/acquire/blob/main/"
+        "docs/history/modernization-and-packaging.md)"
+    ) in readme
     assert "Keep linting and type checking permissive" not in agent_notes
 
 
 def test_phase_6_tracks_postgres_migration_sequence() -> None:
-    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    plans = HISTORY_PATH.read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
 
     assert "## Phase 6: Dependency And Deployment Modernization" in plans
@@ -63,7 +80,7 @@ def test_phase_6_tracks_postgres_migration_sequence() -> None:
 
 
 def test_postgres_runtime_docs_define_retained_backup_boundary() -> None:
-    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    plans = HISTORY_PATH.read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
 
@@ -87,7 +104,7 @@ def test_postgres_runtime_docs_define_retained_backup_boundary() -> None:
 
 
 def test_postgres_import_tooling_docs_require_rehearsal_guardrails() -> None:
-    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    plans = HISTORY_PATH.read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
     backup_runbook = (
         REPOSITORY_ROOT / "docs" / "postgres-backup-rehearsal.md"

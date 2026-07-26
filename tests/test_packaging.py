@@ -307,7 +307,10 @@ def test_python_imports_use_the_acquire_package_boundary() -> None:
 
 def test_packaging_docs_define_completed_source_layout() -> None:
     packaging_notes = (REPOSITORY_ROOT / "docs" / "packaging.md").read_text()
-    plan_notes = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    history_path = (
+        REPOSITORY_ROOT / "docs" / "history" / "modernization-and-packaging.md"
+    )
+    plan_notes = history_path.read_text()
     agent_notes = (REPOSITORY_ROOT / "AGENTS.md").read_text()
     normalized_packaging_notes = " ".join(packaging_notes.split())
     normalized_plan_notes = " ".join(plan_notes.split())
@@ -321,5 +324,7 @@ def test_packaging_docs_define_completed_source_layout() -> None:
     assert "scripts/verify_distribution.py" in packaging_notes
     assert "Packaging milestone is complete" in normalized_plan_notes
     assert "Issue #127 defines and verifies" in normalized_plan_notes
+    assert not (REPOSITORY_ROOT / "PLANS.md").exists()
+    assert history_path.is_file()
     assert "docs/packaging.md" in agent_notes
     assert "completed source-layout, distribution" in " ".join(agent_notes.split())

@@ -6,6 +6,9 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CLIENT_ROOT = REPOSITORY_ROOT / "client"
+HISTORY_PATH = (
+    REPOSITORY_ROOT / "docs" / "history" / "modernization-and-packaging.md"
+)
 
 
 def test_mysql_connector_is_isolated_to_backup_migration_extra() -> None:
@@ -350,7 +353,7 @@ def test_supported_project_scripts_use_packaged_main_functions() -> None:
 def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
     gitignore = (REPOSITORY_ROOT / ".gitignore").read_text()
     dockerignore = (REPOSITORY_ROOT / ".dockerignore").read_text()
-    plans = (REPOSITORY_ROOT / "PLANS.md").read_text()
+    plans = HISTORY_PATH.read_text()
     architecture_notes = (REPOSITORY_ROOT / "docs" / "architecture.md").read_text()
     local_development_notes = (
         REPOSITORY_ROOT / "docs" / "local-development.md"
