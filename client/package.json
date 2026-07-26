@@ -15,6 +15,8 @@
     "build:enums": "uv run --project .. --no-dev acquire-generate-enums js development --client-source-root \"$PWD/main/js\" --output \"$PWD/main/js/enums.js\"",
     "build:js": "cd .. && client/node_modules/.bin/esbuild client/main/js/app.js --bundle --format=iife --platform=browser --sourcemap --outfile=client/main/js/main.js",
     "build:client": "npm run build:css && npm run build:enums && npm run build:js",
+    "test:client-build": "node --test scripts/verify-client-build.test.mjs",
+    "verify:client": "node scripts/verify-client-build.mjs",
     "format": "prettier --write '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,scss}' --loglevel warn"
   },
   "prettier": {

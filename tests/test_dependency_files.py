@@ -294,6 +294,10 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
     assert scripts["build:client"] == (
         "npm run build:css && npm run build:enums && npm run build:js"
     )
+    assert scripts["test:client-build"] == (
+        "node --test scripts/verify-client-build.test.mjs"
+    )
+    assert scripts["verify:client"] == "node scripts/verify-client-build.mjs"
     assert package_lock["name"] == "acquire-client-assets"
     assert (
         package_lock["packages"]["node_modules/sass"]["dependencies"]["immutable"]
@@ -357,12 +361,16 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
         "client/main/css/main.css",
         "client/main/js/enums.js",
         "client/main/js/main.js",
+        "client/main/js/main.js.map",
         "client/stats/css/stats.css",
     }
 
     for asset in generated_assets:
-        assert f"/{asset}" in gitignore
         assert asset in dockerignore
+    assert "/client/main/css/main.css" in gitignore
+    assert "/client/main/js/enums.js" in gitignore
+    assert "/client/main/js/main.js*" in gitignore
+    assert "/client/stats/css/stats.css" in gitignore
 
     assert "/node_modules" in gitignore
     assert "/client/node_modules" in gitignore
@@ -373,7 +381,9 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
     assert "docker compose --profile client-build run --rm client-assets" in (
         asset_workflow
     )
-    assert "The production Dockerfile builds client assets" in asset_workflow
+    assert "The production Dockerfile builds and verifies client assets" in (
+        asset_workflow
+    )
     assert "docs/deployment.md" in asset_workflow
     assert "docs/client-assets.md" in architecture_notes
     assert "docs/client-assets.md" in local_development_notes
@@ -381,6 +391,8 @@ def test_client_asset_workflow_keeps_generated_outputs_untracked() -> None:
     assert "`client/package-lock.json`" in asset_workflow
     assert "three direct development dependencies" in asset_workflow
     assert "backend Python environment" in asset_workflow
+    assert "Node.js 22 with npm 10 or newer" in asset_workflow
+    assert "`verify:client` is read-only" in asset_workflow
     assert "legacy Node.js 6-era toolchain. Complete." in plans
     assert "build production assets in the\n     production Docker" in plans
 
@@ -398,6 +410,7 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     assert "COPY client/package.json client/package-lock.json ./client/" in dockerfile
     assert "RUN npm --prefix client ci" in dockerfile
     assert "RUN npm --prefix client run build:client" in dockerfile
+    assert "RUN npm --prefix client run verify:client" in dockerfile
     assert "FROM python:3.12-slim AS runtime" in dockerfile
     assert "UV_PROJECT_ENVIRONMENT=/opt/acquire" in dockerfile
     assert "RUN uv sync --frozen --no-dev --no-editable" in dockerfile
@@ -418,6 +431,42 @@ def test_production_dockerfile_builds_client_assets_and_runs_python_gateway() ->
     assert "AWS" in deployment_notes
 
 
+def test_client_build_ci_uses_locked_tools_and_verifies_every_output() -> None:
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    verifier = (
+        CLIENT_ROOT / "scripts" / "verify-client-build.mjs"
+    ).read_text()
+    verifier_test = (
+        CLIENT_ROOT / "scripts" / "verify-client-build.test.mjs"
+    ).read_text()
+
+    assert "client-build:" in workflow
+    assert "uses: actions/setup-node@v4" in workflow
+    assert 'node-version: "22"' in workflow
+    assert "cache-dependency-path: client/package-lock.json" in workflow
+    assert "npm --prefix client ci" in workflow
+    assert "npm --prefix client run test:client-build" in workflow
+    assert "npm --prefix client run build:client" in workflow
+    assert "npm --prefix client run verify:client" in workflow
+    assert "uv sync --frozen --no-dev" in workflow
+
+    expected_outputs = {
+        "main/css/main.css",
+        "stats/css/stats.css",
+        "main/js/enums.js",
+        "main/js/main.js",
+        "main/js/main.js.map",
+    }
+    assert all(f"'{output}'" in verifier for output in expected_outputs)
+    assert "metadata.isFile()" in verifier
+    assert "metadata.size === 0" in verifier
+    assert "writeFile" not in verifier
+    assert "for (const output of EXPECTED_CLIENT_OUTPUTS)" in verifier_test
+    assert "assert.deepEqual(await findInvalidClientOutputs(root), [output])" in (
+        verifier_test
+    )
+
+
 def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "production-image.yml").read_text()
     workflow_data = yaml.safe_load(workflow)
@@ -432,9 +481,11 @@ def test_production_image_workflow_builds_and_optionally_publishes_to_ecr() -> N
     assert workflow.count("production image smoke ok") == 2
     assert workflow.count("acquire-http-server --help") == 2
     assert workflow.count("assert '/opt/acquire/' in acquire.__file__") == 2
-    assert workflow.count("Path('/app/client/main/js/main.js').is_file()") == 2
-    assert workflow.count("Path('/app/client/main/css/main.css').is_file()") == 2
-    assert workflow.count("Path('/app/client/stats/css/stats.css').is_file()") == 2
+    assert workflow.count("main/js/main.js.map") == 2
+    assert workflow.count("main/js/enums.js") == 2
+    assert workflow.count("assert shutil.which('node') is None") == 2
+    assert workflow.count("assert shutil.which('npm') is None") == 2
+    assert workflow.count("assert not Path('/app/client/node_modules').exists()") == 2
     assert "aws-actions/configure-aws-credentials@v4" in workflow
     assert "aws-actions/amazon-ecr-login@v2" in workflow
     assert "AWS_ROLE_TO_ASSUME" in workflow

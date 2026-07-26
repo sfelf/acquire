@@ -156,13 +156,14 @@ uv sync --group dev
 reproducible resolved environment. Use uv to change or install Python
 dependencies so both files remain synchronized.
 
-Install Node.js 22 LTS or newer when you want to build client assets outside
-Docker, then run:
+Install Node.js 22 and npm 10 or newer when you want to build client assets
+outside Docker, then run:
 
 ```bash
 cd client
 npm ci
 npm run build:client
+npm run verify:client
 ```
 
 Install the `zopfli` system package when running the legacy stats compression

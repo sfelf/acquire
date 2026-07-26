@@ -33,9 +33,9 @@ docker compose --profile client-build run --rm client-assets
 
 This one-time setup helper uses the npm client build scripts to compile
 `client/main/css/main.css`, `client/stats/css/stats.css`,
-`client/main/js/enums.js`, and `client/main/js/main.js` into the bind-mounted
-checkout. It exits after the files are written and is not part of the default
-running stack.
+`client/main/js/enums.js`, `client/main/js/main.js`, and its source map into the
+bind-mounted checkout, then verifies the complete output set. It exits after
+the files are accepted and is not part of the default running stack.
 
 See `docs/client-assets.md` for the source/build-output boundary and deployment
 packaging follow-up.

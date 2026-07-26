@@ -24,7 +24,7 @@ jobs:
       - name: Smoke test production image
         run: |
           docker run --rm acquire:production-test acquire-http-server --help
-          docker run --rm acquire:production-test python -c "from pathlib import Path; import acquire; assert '/opt/acquire/' in acquire.__file__; assert Path('/app/client/main/js/main.js').is_file(); assert Path('/app/client/main/css/main.css').is_file(); assert Path('/app/client/stats/css/stats.css').is_file(); print('production image smoke ok')"
+          docker run --rm acquire:production-test python -c "from pathlib import Path; import shutil, acquire; outputs = ('main/css/main.css', 'stats/css/stats.css', 'main/js/enums.js', 'main/js/main.js', 'main/js/main.js.map'); assert '/opt/acquire/' in acquire.__file__; assert all((Path('/app/client') / output).is_file() for output in outputs); assert shutil.which('node') is None; assert shutil.which('npm') is None; assert not Path('/app/client/node_modules').exists(); print('production image smoke ok')"
 
   publish-ecr:
     name: Publish production image to ECR
@@ -61,5 +61,5 @@ jobs:
         run: |
           docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
           docker run --rm "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" acquire-http-server --help
-          docker run --rm "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" python -c "from pathlib import Path; import acquire; assert '/opt/acquire/' in acquire.__file__; assert Path('/app/client/main/js/main.js').is_file(); assert Path('/app/client/main/css/main.css').is_file(); assert Path('/app/client/stats/css/stats.css').is_file(); print('production image smoke ok')"
+          docker run --rm "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" python -c "from pathlib import Path; import shutil, acquire; outputs = ('main/css/main.css', 'stats/css/stats.css', 'main/js/enums.js', 'main/js/main.js', 'main/js/main.js.map'); assert '/opt/acquire/' in acquire.__file__; assert all((Path('/app/client') / output).is_file() for output in outputs); assert shutil.which('node') is None; assert shutil.which('npm') is None; assert not Path('/app/client/node_modules').exists(); print('production image smoke ok')"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
