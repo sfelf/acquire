@@ -22,6 +22,11 @@ Its goal is to support continued maintenance and the addition of new game
 features. This repository is not the source currently deployed at
 `acquire.tlstyer.com`.
 
+The completed modernization, Packaging, and dependency-hygiene decisions are
+preserved in
+[docs/history/modernization-and-packaging.md](docs/history/modernization-and-packaging.md).
+GitHub issues and milestones remain authoritative for active work.
+
 ## Development And Testing
 
 The project uses `uv`, `pytest`, `ruff`, `mypy`, and GitHub Actions for Python

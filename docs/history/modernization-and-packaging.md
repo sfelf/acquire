@@ -1,14 +1,18 @@
-# Modernization And Packaging Plan
+# Modernization And Packaging History
 
 Status:
 
 - The six-phase modernization plan is complete as of July 23, 2026.
 - The Packaging milestone is complete. Issues #103 through #111 and #127
   delivered the final source layout, command surface, and artifact contract.
+- The Dependency and Repository Hygiene follow-up is complete as of July 26,
+  2026. Issues #134 through #138 and #140 retired redundant repository
+  artifacts and established the maintained dependency and client-build
+  boundaries.
 
-This document preserves the agreed modernization record and documents the
-delivery order for active milestone work. GitHub issues remain the source of
-truth for issue scope and acceptance criteria.
+This document preserves completed architecture and delivery decisions. It is
+historical context, not an active roadmap. GitHub issues and milestones are the
+source of truth for current scope, sequencing, status, and acceptance criteria.
 
 ## Completed Packaging Milestone
 
@@ -164,6 +168,28 @@ formatting, lint, typing, test, pre-commit, and issue-specific package, Docker,
 database, integration, golden, or e2e checks. Runtime behavior, public
 protocols, persistence semantics, log formats, ratings, reports, and retained
 backup-migration behavior remain unchanged throughout this milestone.
+
+## Completed Dependency And Repository Hygiene Follow-Up
+
+Status: the
+[Dependency and Repository Hygiene milestone](https://github.com/sfelf/acquire/milestone/2)
+is complete.
+
+This follow-up removed redundant root artifacts and made the maintained
+dependency, migration, test, and client-build boundaries explicit:
+
+| Issue | Completed outcome |
+| --- | --- |
+| [#134](https://github.com/sfelf/acquire/issues/134) | Retired the legacy `requirements.txt` inventory in favor of `pyproject.toml` and `uv.lock`. |
+| [#135](https://github.com/sfelf/acquire/issues/135) | Pruned build-only client dependencies and moved their sole npm manifest boundary under `client/`. |
+| [#136](https://github.com/sfelf/acquire/issues/136) | Adopted bounded pytest 9 across Python 3.12 through 3.14 and the complete marker matrix. |
+| [#137](https://github.com/sfelf/acquire/issues/137) | Removed the redundant root Alembic configuration and made packaged migration resources authoritative. |
+| [#140](https://github.com/sfelf/acquire/issues/140) | Added a clean locked client-build CI job and verified all generated outputs across host, Compose, and production-image workflows. |
+| [#138](https://github.com/sfelf/acquire/issues/138) | Archived this completed record under `docs/history/` and restored GitHub issues and milestones as the only active planning source. |
+
+The follow-up did not reopen or redefine the completed modernization and
+Packaging work below. Later work should consult the linked issues for exact
+acceptance evidence and use current GitHub milestones for active sequencing.
 
 ## Completed Modernization Goal
 
