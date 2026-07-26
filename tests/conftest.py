@@ -193,6 +193,20 @@ def e2e_base_url(pytestconfig):
 
 
 @pytest.fixture
+def packaged_alembic_config():
+    """Return a factory for Alembic configs backed by installed resources."""
+    from acquire.setup_database import alembic_config
+
+    def factory(connection=None):
+        config = alembic_config()
+        if connection is not None:
+            config.attributes["connection"] = connection
+        return config
+
+    return factory
+
+
+@pytest.fixture
 def logs_to_games_without_database(monkeypatch):
     monkeypatch.delitem(sys.modules, "acquire.log_tools", raising=False)
 

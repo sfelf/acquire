@@ -212,8 +212,12 @@ def test_local_database_setup_docs_use_alembic_command() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text()
     local_development = (REPOSITORY_ROOT / "docs" / "local-development.md").read_text()
     database_notes = (REPOSITORY_ROOT / "docs" / "database.md").read_text()
+    backup_runbook = (
+        REPOSITORY_ROOT / "docs" / "postgres-backup-rehearsal.md"
+    ).read_text()
 
     assert not (REPOSITORY_ROOT / "server" / "initialize_database.py").exists()
+    assert not (REPOSITORY_ROOT / "alembic.ini").exists()
     assert "docker compose run --rm python-gateway acquire-setup-database" in readme
     assert "docker compose run --rm python-gateway acquire-setup-database" in (
         local_development
@@ -221,5 +225,12 @@ def test_local_database_setup_docs_use_alembic_command() -> None:
     assert "`acquire.setup_database`" in database_notes
     assert "server/setup_database.py" not in database_notes
     assert "The legacy MySQL reset command has been removed" in database_notes
+    assert "Direct Alembic CLI invocation from the repository root is unsupported" in (
+        database_notes
+    )
+    assert "uv run acquire-setup-database" in readme
+    assert "uv run acquire-setup-database" in backup_runbook
+    assert "uv run alembic" not in readme
+    assert "uv run alembic" not in backup_runbook
     assert "python initialize_database.py" not in readme
     assert "python initialize_database.py" not in local_development

@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 import sqlalchemy
 from alembic import command
-from alembic.config import Config
 from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.postgres
@@ -48,12 +47,6 @@ def drop_postgres_schema(postgres_engine):
             connection.execute(
                 sqlalchemy.text(f'drop table if exists "{table_name}" cascade')
             )
-
-
-def _alembic_config(connection):
-    config = Config(str(REPO_DIR / "alembic.ini"))
-    config.attributes["connection"] = connection
-    return config
 
 
 def _table_names(engine):
@@ -134,9 +127,10 @@ def test_alembic_baseline_runs_against_postgres(
     postgres_engine,
     real_orm_module,
     empty_postgres_schema,
+    packaged_alembic_config,
 ):
     with postgres_engine.begin() as connection:
-        command.upgrade(_alembic_config(connection), "head")
+        command.upgrade(packaged_alembic_config(connection), "head")
 
     assert _app_table_names(postgres_engine) == {
         "game",
@@ -182,7 +176,7 @@ def test_alembic_baseline_runs_against_postgres(
         session.close()
 
     with postgres_engine.begin() as connection:
-        command.downgrade(_alembic_config(connection), "base")
+        command.downgrade(packaged_alembic_config(connection), "base")
     with postgres_engine.begin() as connection:
         connection.execute(sqlalchemy.text("drop table if exists alembic_version"))
     assert not _table_names(postgres_engine)
@@ -290,9 +284,10 @@ def test_clean_wheel_database_setup_uses_packaged_resources(
 def test_alembic_baseline_preserves_mysql_numeric_contract_against_postgres(
     postgres_engine,
     empty_postgres_schema,
+    packaged_alembic_config,
 ):
     with postgres_engine.begin() as connection:
-        command.upgrade(_alembic_config(connection), "head")
+        command.upgrade(packaged_alembic_config(connection), "head")
 
     inspector = sqlalchemy.inspect(postgres_engine)
     assert "ck_game_log_time_unsigned" in _check_constraint_names(inspector, "game")

@@ -1,17 +1,14 @@
 import importlib
 import io
 import sys
-from pathlib import Path
 
 import pytest
 import sqlalchemy
 import ujson
 from alembic import command
-from alembic.config import Config
 from sqlalchemy.orm import sessionmaker
 
 pytestmark = pytest.mark.postgres
-REPO_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -51,10 +48,10 @@ def postgres_engine(postgres_test_url):
 
 
 @pytest.fixture
-def migrated_postgres_schema(postgres_engine):
+def migrated_postgres_schema(postgres_engine, packaged_alembic_config):
     drop_application_schema(postgres_engine)
     with postgres_engine.begin() as connection:
-        command.upgrade(_alembic_config(connection), "head")
+        command.upgrade(packaged_alembic_config(connection), "head")
     yield
     drop_application_schema(postgres_engine)
 
@@ -66,12 +63,6 @@ def drop_application_schema(postgres_engine):
             connection.execute(
                 sqlalchemy.text(f'drop table if exists "{table_name}" cascade')
             )
-
-
-def _alembic_config(connection):
-    config = Config(str(REPO_DIR / "alembic.ini"))
-    config.attributes["connection"] = connection
-    return config
 
 
 def make_postgres_session(postgres_engine):

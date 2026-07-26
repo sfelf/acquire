@@ -50,13 +50,12 @@ def test_alembic_offline_upgrade_loads_packaged_metadata_outside_repository(
     result = subprocess.run(
         [
             sys.executable,
-            "-m",
-            "alembic",
             "-c",
-            str(REPOSITORY_ROOT / "alembic.ini"),
-            "upgrade",
-            "head",
-            "--sql",
+            (
+                "from alembic import command; "
+                "from acquire.setup_database import alembic_config; "
+                "command.upgrade(alembic_config(), 'head', sql=True)"
+            ),
         ],
         cwd=tmp_path,
         env=environment,

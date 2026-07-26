@@ -114,25 +114,18 @@ deployment notes.
 
 ## Database migrations
 
-Alembic tracks schema migrations for the Python database runtime:
+Alembic tracks schema migrations for the Python database runtime. Apply the
+packaged migration boundary with the installed command:
 
 ```bash
-uv run alembic upgrade head
-uv run alembic current
+uv run acquire-setup-database
 ```
 
-The initial migration is a baseline for the current schema and required lookup
-rows. Use `upgrade head` for an empty schema. For a database that was already
-created by the pre-Alembic reset workflow and matches the current schema and
-lookup rows, mark the baseline as already applied instead:
-
-```bash
-uv run alembic stamp head
-```
-
-Local Docker setup uses Alembic through the installed
-`acquire-setup-database` command. Future schema or required lookup-data changes
-should be added as Alembic revisions.
+The command loads configuration and revisions from the installed `acquire`
+package, upgrades empty and versioned schemas, and safely recognizes the exact
+pre-Alembic baseline. Direct Alembic CLI invocation from the repository root is
+unsupported; no root configuration is provided. Future schema or required
+lookup-data changes should be added as packaged Alembic revisions.
 
 ## Stats updater
 

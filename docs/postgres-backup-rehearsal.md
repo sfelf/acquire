@@ -62,7 +62,7 @@ persisted rating history or derived win/place stats.
 
    ```bash
    ACQUIRE_DATABASE_URL=postgresql+psycopg://user:password@host:5432/acquire_rehearsal \
-     uv run alembic upgrade head
+     uv run acquire-setup-database
    ```
 
 5. Run `acquire-migrate-mysql-to-postgres` with explicit placeholder source and
@@ -183,7 +183,8 @@ persisted rating history or derived win/place stats.
 If any restore, import, validation, or marker test fails, stop the rehearsal and
 keep the MySQL backup as the source of truth. Do not retry against the same
 Postgres database after partial import; recreate the disposable target database
-from scratch, rerun Alembic, and repeat the import after fixing the failure.
+from scratch, rerun `acquire-setup-database`, and repeat the import after fixing
+the failure.
 
 If the failure exposes missing schema compatibility, import-tool behavior, or
 application validation coverage, add a focused test before repeating the
