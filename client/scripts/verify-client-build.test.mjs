@@ -4,10 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import {
-  EXPECTED_CLIENT_OUTPUTS,
-  findInvalidClientOutputs,
-} from './verify-client-build.mjs';
+import { EXPECTED_CLIENT_OUTPUTS, findInvalidClientOutputs } from './verify-client-build.mjs';
 
 test('client output verification reports every missing output', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'acquire-client-build-'));
@@ -39,7 +36,5 @@ test('client output verification rejects empty output files', async (t) => {
   }
   await writeFile(path.join(root, EXPECTED_CLIENT_OUTPUTS[0]), '');
 
-  assert.deepEqual(await findInvalidClientOutputs(root), [
-    EXPECTED_CLIENT_OUTPUTS[0],
-  ]);
+  assert.deepEqual(await findInvalidClientOutputs(root), [EXPECTED_CLIENT_OUTPUTS[0]]);
 });

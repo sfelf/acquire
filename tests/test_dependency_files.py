@@ -409,9 +409,11 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
         "node --test scripts/verify-client-build.test.mjs"
     )
     assert scripts["format"].endswith("--log-level warn")
+    assert "mjs" in scripts["format"]
     assert scripts["format:check"] == scripts["format"].replace(
         "--write", "--check"
     )
+    assert package["prettier"]["trailingComma"] == "es5"
     assert scripts["verify:client"] == "node scripts/verify-client-build.mjs"
     assert package_lock["name"] == "acquire-client-assets"
     assert package_lock["packages"]["node_modules/esbuild"]["version"] == "0.28.1"

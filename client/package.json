@@ -17,11 +17,12 @@
     "build:client": "npm run build:css && npm run build:enums && npm run build:js",
     "test:client-build": "node --test scripts/verify-client-build.test.mjs",
     "verify:client": "node scripts/verify-client-build.mjs",
-    "format": "prettier --write '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,scss}' --ignore-path ../.gitignore --log-level warn",
-    "format:check": "prettier --check '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,scss}' --ignore-path ../.gitignore --log-level warn"
+    "format": "prettier --write '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,mjs,scss}' --ignore-path ../.gitignore --log-level warn",
+    "format:check": "prettier --check '{,!(.git|dist|node_modules)/**/}*.{css,html,js,json,md,mjs,scss}' --ignore-path ../.gitignore --log-level warn"
   },
   "prettier": {
     "printWidth": 160,
-    "singleQuote": true
+    "singleQuote": true,
+    "trailingComma": "es5"
   }
 }

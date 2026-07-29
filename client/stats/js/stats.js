@@ -136,8 +136,8 @@ $(function () {
           $('<td/>').text(
             rating[3].reduce(function (a, b) {
               return a + b;
-            }),
-          ),
+            })
+          )
         );
         $tr.append($('<td/>').text(rating[3].join(' - ')));
         $tr.append($('<td/>').text(formatDate(rating[0])));
