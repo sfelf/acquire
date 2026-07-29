@@ -56,11 +56,11 @@ def test_pyproject_defines_complete_direct_dependency_boundaries() -> None:
     }
     assert set(pyproject["dependency-groups"]["dev"]) == {
         "httpx>=0.27,<1",
-        "mypy>=1.18,<2",
+        "mypy>=2,<3",
         "pre-commit>=4,<5",
         "pytest>=9.0.3,<10",
         "pytest-cov>=7,<8",
-        "ruff>=0.14,<0.15",
+        "ruff>=0.16,<0.17",
     }
 
 
@@ -135,12 +135,22 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
     pytest_package = next(
         package for package in lock["package"] if package["name"] == "pytest"
     )
+    tooling_versions = {
+        package["name"]: package["version"]
+        for package in lock["package"]
+        if package["name"] in {"mypy", "pre-commit", "ruff"}
+    }
     pytest_requirement = next(
         requirement
         for requirement in metadata["requires-dev"]["dev"]
         if requirement["name"] == "pytest"
     )
     assert pytest_package["version"].startswith("9.")
+    assert tooling_versions == {
+        "mypy": "2.3.0",
+        "pre-commit": "4.6.1",
+        "ruff": "0.16.0",
+    }
     assert pytest_requirement["specifier"] == ">=9.0.3,<10"
     mysql_requirement = next(
         requirement

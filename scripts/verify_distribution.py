@@ -728,8 +728,10 @@ def verify_clean_wheel(
         [
             str(python),
             "-c",
-            "import mysql.connector; "
-            "import acquire.migration.import_mysql_to_postgres",
+            (
+                "import mysql.connector; "
+                "import acquire.migration.import_mysql_to_postgres"
+            ),
         ],
         cwd=workspace,
         environment=environment,
