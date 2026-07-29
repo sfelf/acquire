@@ -17,6 +17,9 @@ tooling. `uv.lock` is the only reproducible resolved dependency set.
 All repository installation paths use uv with these files. Dependency changes
 must update `pyproject.toml` and `uv.lock` together; Dependabot uses its `uv`
 ecosystem support at the repository root to maintain that same boundary.
+CI pins the uv CLI to 0.11.22, matching the maintained uv-build compatibility
+line; build-backend upgrade work must advance and verify both boundaries
+together.
 Routine minor and patch updates are grouped only when they share a focused
 review and test boundary: lint/type/pre-commit tooling, the packaging build
 backend, HTTP/WebSocket runtime, persistence/migration runtime, or the rating
