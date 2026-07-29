@@ -41,6 +41,21 @@ The supported host and CI toolchain is Node.js 22 with npm 10 or newer.
 `verify:client` is read-only and fails after reporting every missing or empty
 expected output. Its focused Node test covers each output independently.
 
+Format the maintained client source tree with:
+
+```bash
+npm --prefix client run format
+```
+
+Check the same formatting baseline without modifying files with:
+
+```bash
+npm --prefix client run format:check
+```
+
+CI runs the read-only check after installing the locked client tooling and
+before building generated assets.
+
 Build them through Docker Compose with:
 
 ```bash

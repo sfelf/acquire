@@ -42,6 +42,9 @@ jobs:
       - name: Install locked client tooling
         run: npm --prefix client ci
 
+      - name: Check client formatting
+        run: npm --prefix client run format:check
+
       - name: Test client output verification
         run: npm --prefix client run test:client-build
 
