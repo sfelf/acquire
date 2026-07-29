@@ -39,7 +39,7 @@ requires-dist = [
     { name = "mysql-connector-python", marker = "extra == 'mysql-migration'", specifier = ">=9.3,<10" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "sqlalchemy", specifier = ">=2,<3" },
-    { name = "trueskill", specifier = "==0.4.4" },
+    { name = "trueskill", specifier = "==0.4.5" },
     { name = "ujson", specifier = ">=5.13,<6" },
     { name = "uvicorn", specifier = ">=0.32,<1" },
     { name = "websockets", specifier = ">=16,<17" },
@@ -1013,12 +1013,12 @@ wheels = [
 
 [[package]]
 name = "trueskill"
-version = "0.4.4"
+version = "0.4.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "six" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/49/01/8572ac20d2877037cb65711ee0b76a0bf7efc11b7f3354e4eae3072f51a1/trueskill-0.4.4.tar.gz", hash = "sha256:67cd45ab14dcdfd5894ecb8288df8d0d8c6cbd784bf7203a14e162d41ac5cb93", size = 21545, upload-time = "2015-12-31T00:58:42.574Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/b1/572f309178eacdccd9f9f5f3e3e14fb3543a89c6259d62b36660350af2b9/trueskill-0.4.5.tar.gz", hash = "sha256:9d62b48d2428369d712bd9becff9f9a2caa325e1a2ab5f9392d34bff757867bb", size = 21315, upload-time = "2018-09-07T12:27:32.078Z" }
 
 [[package]]
 name = "typing-extensions"
