@@ -11,7 +11,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
     "alembic>=1.17,<2",
     "fastapi>=0.115,<1",
-    "psycopg[binary]>=3.2,<4",
+    "psycopg[binary]>=3.3.4,<4",
     "sqlalchemy>=2,<3",
     "trueskill==0.4.5",
     "ujson>=5.13,<6",

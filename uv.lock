@@ -37,7 +37,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.17,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "mysql-connector-python", marker = "extra == 'mysql-migration'", specifier = ">=9.3,<10" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4,<4" },
     { name = "sqlalchemy", specifier = ">=2,<3" },
     { name = "trueskill", specifier = "==0.4.5" },
     { name = "ujson", specifier = ">=5.13,<6" },
