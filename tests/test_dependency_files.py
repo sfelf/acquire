@@ -49,7 +49,7 @@ def test_pyproject_defines_complete_direct_dependency_boundaries() -> None:
         "trueskill==0.4.4",
         "ujson>=5.13,<6",
         "uvicorn>=0.32,<1",
-        "websockets>=14,<16",
+        "websockets>=16,<17",
     }
     assert pyproject["project"]["optional-dependencies"] == {
         "mysql-migration": ["mysql-connector-python>=9.3,<10"]
@@ -140,6 +140,11 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         for package in lock["package"]
         if package["name"] in {"mypy", "pre-commit", "ruff"}
     }
+    http_websocket_versions = {
+        package["name"]: package["version"]
+        for package in lock["package"]
+        if package["name"] in {"fastapi", "starlette", "uvicorn", "websockets"}
+    }
     pytest_requirement = next(
         requirement
         for requirement in metadata["requires-dev"]["dev"]
@@ -150,6 +155,12 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         "mypy": "2.3.0",
         "pre-commit": "4.6.1",
         "ruff": "0.16.0",
+    }
+    assert http_websocket_versions == {
+        "fastapi": "0.140.13",
+        "starlette": "1.3.1",
+        "uvicorn": "0.51.0",
+        "websockets": "16.1.1",
     }
     assert pytest_requirement["specifier"] == ">=9.0.3,<10"
     mysql_requirement = next(
