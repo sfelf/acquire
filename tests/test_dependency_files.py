@@ -1,4 +1,5 @@
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -146,7 +147,7 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
     }
 
 
-def test_dependabot_updates_uv_dependency_sources() -> None:
+def test_dependabot_updates_uv_dependencies_by_risk_boundary() -> None:
     config = yaml.safe_load(
         (REPOSITORY_ROOT / ".github" / "dependabot.yml").read_text()
     )
@@ -170,8 +171,69 @@ def test_dependabot_updates_uv_dependency_sources() -> None:
         "open-pull-requests-limit": 5,
         "labels": ["dependencies", "python"],
         "commit-message": {"prefix": "deps", "include": "scope"},
-        "groups": {"python-dependencies": {"patterns": ["*"]}},
+        "groups": {
+            "lint-type-pre-commit-tooling": {
+                "patterns": ["mypy", "pre-commit", "ruff"],
+                "update-types": ["minor", "patch"],
+            },
+            "packaging-build-backend": {
+                "patterns": ["uv-build"],
+                "update-types": ["minor", "patch"],
+            },
+            "http-websocket-runtime": {
+                "patterns": ["fastapi", "uvicorn", "websockets"],
+                "update-types": ["minor", "patch"],
+            },
+            "persistence-migration-runtime": {
+                "patterns": ["alembic", "psycopg"],
+                "update-types": ["minor", "patch"],
+            },
+            "rating-runtime": {
+                "patterns": ["trueskill"],
+                "update-types": ["minor", "patch"],
+            },
+        },
     }
+
+
+def test_dependabot_uv_groups_cover_direct_dependencies_unambiguously() -> None:
+    config = yaml.safe_load(
+        (REPOSITORY_ROOT / ".github" / "dependabot.yml").read_text()
+    )
+    pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
+    uv_update = next(
+        update for update in config["updates"] if update["package-ecosystem"] == "uv"
+    )
+    groups = uv_update["groups"]
+
+    grouped_dependencies = [
+        pattern
+        for group in groups.values()
+        for pattern in group["patterns"]
+    ]
+    assert len(grouped_dependencies) == len(set(grouped_dependencies))
+    assert all(group["update-types"] == ["minor", "patch"] for group in groups.values())
+    assert all("*" not in group["patterns"] for group in groups.values())
+
+    direct_dependencies = {
+        re.split(r"[\[<>=!~]", requirement, maxsplit=1)[0].replace("_", "-").lower()
+        for requirement in (
+            pyproject["build-system"]["requires"]
+            + pyproject["project"]["dependencies"]
+            + pyproject["project"]["optional-dependencies"]["mysql-migration"]
+            + pyproject["dependency-groups"]["dev"]
+        )
+    }
+    individually_updated = {
+        "httpx",
+        "mysql-connector-python",
+        "pytest",
+        "pytest-cov",
+        "sqlalchemy",
+        "ujson",
+    }
+    assert set(grouped_dependencies).isdisjoint(individually_updated)
+    assert set(grouped_dependencies) | individually_updated == direct_dependencies
 
 
 def test_dependabot_updates_client_build_dependencies() -> None:

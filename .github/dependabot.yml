@@ -19,10 +19,45 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
+    # Keep routine updates aligned with the repository's independently tested
+    # dependency boundaries. Major updates fall through to individual PRs so
+    # that they cannot be silently combined with unrelated compatibility work.
     groups:
-      python-dependencies:
+      lint-type-pre-commit-tooling:
         patterns:
-          - "*"
+          - "mypy"
+          - "pre-commit"
+          - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      packaging-build-backend:
+        patterns:
+          - "uv-build"
+        update-types:
+          - "minor"
+          - "patch"
+      http-websocket-runtime:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "websockets"
+        update-types:
+          - "minor"
+          - "patch"
+      persistence-migration-runtime:
+        patterns:
+          - "alembic"
+          - "psycopg"
+        update-types:
+          - "minor"
+          - "patch"
+      rating-runtime:
+        patterns:
+          - "trueskill"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "npm"
     directory: "/client"
     schedule:
