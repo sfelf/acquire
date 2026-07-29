@@ -6,8 +6,8 @@
     "npm": ">=10"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12",
-    "prettier": "^2.1.2",
+    "esbuild": "^0.28.1",
+    "prettier": "^3.9.6",
     "sass": "^1.89.0"
   },
   "scripts": {
