@@ -102,7 +102,7 @@ def test_ci_pins_uv_to_the_maintained_build_backend_line() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
     assert workflow.count("uses: astral-sh/setup-uv@v5") == 3
-    assert workflow.count('version: "0.11.22"') == 3
+    assert workflow.count('version: "0.11.32"') == 3
 
 
 def test_uv_lock_records_project_dependency_boundaries() -> None:
