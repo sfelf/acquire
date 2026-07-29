@@ -46,7 +46,7 @@ def test_pyproject_defines_complete_direct_dependency_boundaries() -> None:
         "fastapi>=0.115,<1",
         "psycopg[binary]>=3.2,<4",
         "sqlalchemy>=2,<3",
-        "trueskill==0.4.4",
+        "trueskill==0.4.5",
         "ujson>=5.13,<6",
         "uvicorn>=0.32,<1",
         "websockets>=16,<17",
@@ -150,6 +150,9 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         for package in lock["package"]
         if package["name"] in {"alembic", "psycopg", "psycopg-binary"}
     }
+    trueskill_package = next(
+        package for package in lock["package"] if package["name"] == "trueskill"
+    )
     pytest_requirement = next(
         requirement
         for requirement in metadata["requires-dev"]["dev"]
@@ -172,6 +175,7 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         "psycopg": "3.3.4",
         "psycopg-binary": "3.3.4",
     }
+    assert trueskill_package["version"] == "0.4.5"
     assert pytest_requirement["specifier"] == ">=9.0.3,<10"
     mysql_requirement = next(
         requirement
@@ -364,7 +368,7 @@ def test_local_docker_includes_postgres_driver_for_default_database() -> None:
 def test_incremental_rating_dependency_stays_trueskill_compatible() -> None:
     pyproject = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text())
 
-    assert "trueskill==0.4.4" in pyproject["project"]["dependencies"]
+    assert "trueskill==0.4.5" in pyproject["project"]["dependencies"]
     assert not any(
         requirement.startswith("openskill")
         for requirement in pyproject["project"]["dependencies"]
