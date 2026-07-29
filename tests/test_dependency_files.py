@@ -385,7 +385,11 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
     assert package["name"] == "acquire-client-assets"
     assert package["private"] is True
     assert engines == {"node": ">=22", "npm": ">=10"}
-    assert set(dev_dependencies) == {"esbuild", "prettier", "sass"}
+    assert dev_dependencies == {
+        "esbuild": "^0.28.1",
+        "prettier": "^3.9.6",
+        "sass": "^1.89.0",
+    }
     assert "build:css" in scripts
     assert "build:enums" in scripts
     assert "build:js" in scripts
@@ -404,8 +408,16 @@ def test_client_build_uses_dart_sass_and_npm_scripts() -> None:
     assert scripts["test:client-build"] == (
         "node --test scripts/verify-client-build.test.mjs"
     )
+    assert scripts["format"].endswith("--log-level warn")
+    assert "mjs" in scripts["format"]
+    assert scripts["format:check"] == scripts["format"].replace(
+        "--write", "--check"
+    )
+    assert package["prettier"]["trailingComma"] == "es5"
     assert scripts["verify:client"] == "node scripts/verify-client-build.mjs"
     assert package_lock["name"] == "acquire-client-assets"
+    assert package_lock["packages"]["node_modules/esbuild"]["version"] == "0.28.1"
+    assert package_lock["packages"]["node_modules/prettier"]["version"] == "3.9.6"
     assert (
         package_lock["packages"]["node_modules/sass"]["dependencies"]["immutable"]
         == "^5.1.5"
@@ -553,6 +565,10 @@ def test_client_build_ci_uses_locked_tools_and_verifies_every_output() -> None:
     assert "cache-dependency-path: client/package-lock.json" in workflow
     assert "npm --prefix client ci" in workflow
     assert "npm --prefix client run test:client-build" in workflow
+    assert "npm --prefix client run format:check" in workflow
+    assert workflow.index("npm --prefix client run format:check") < workflow.index(
+        "npm --prefix client run build:client"
+    )
     assert "npm --prefix client run build:client" in workflow
     assert "npm --prefix client run verify:client" in workflow
     assert "uv sync --frozen --no-dev" in workflow

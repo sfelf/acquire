@@ -2,13 +2,7 @@ import { stat } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-export const EXPECTED_CLIENT_OUTPUTS = [
-  'main/css/main.css',
-  'stats/css/stats.css',
-  'main/js/enums.js',
-  'main/js/main.js',
-  'main/js/main.js.map',
-];
+export const EXPECTED_CLIENT_OUTPUTS = ['main/css/main.css', 'stats/css/stats.css', 'main/js/enums.js', 'main/js/main.js', 'main/js/main.js.map'];
 
 const CLIENT_ROOT = fileURLToPath(new URL('../', import.meta.url));
 
@@ -37,9 +31,6 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }
