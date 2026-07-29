@@ -145,6 +145,11 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         for package in lock["package"]
         if package["name"] in {"fastapi", "starlette", "uvicorn", "websockets"}
     }
+    persistence_versions = {
+        package["name"]: package["version"]
+        for package in lock["package"]
+        if package["name"] in {"alembic", "psycopg", "psycopg-binary"}
+    }
     pytest_requirement = next(
         requirement
         for requirement in metadata["requires-dev"]["dev"]
@@ -161,6 +166,11 @@ def test_uv_lock_records_project_dependency_boundaries() -> None:
         "starlette": "1.3.1",
         "uvicorn": "0.51.0",
         "websockets": "16.1.1",
+    }
+    assert persistence_versions == {
+        "alembic": "1.18.5",
+        "psycopg": "3.3.4",
+        "psycopg-binary": "3.3.4",
     }
     assert pytest_requirement["specifier"] == ">=9.0.3,<10"
     mysql_requirement = next(
