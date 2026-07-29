@@ -33,6 +33,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.11.22"
           enable-cache: true
 
       - name: Install Python runtime
@@ -73,6 +74,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.11.22"
           enable-cache: true
 
       - name: Install tooling
@@ -139,6 +141,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.11.22"
           enable-cache: true
 
       - name: Install tooling
