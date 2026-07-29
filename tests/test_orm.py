@@ -244,8 +244,10 @@ def test_session_scope_rolls_back_and_closes_on_error(orm_module, monkeypatch):
                 "game_state_id": 3,
                 "game_mode_id": 4,
             },
-            "Game(game_id=1, log_time=100, number=2, begin_time=10, end_time=20, "
-            "game_state_id=3, game_mode_id=4)",
+            (
+                "Game(game_id=1, log_time=100, number=2, begin_time=10, end_time=20, "
+                "game_state_id=3, game_mode_id=4)"
+            ),
         ),
         (
             "GameMode",

@@ -138,6 +138,23 @@ def test_distribution_verifier_checks_survive_python_optimization() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_distribution_verifier_preserves_mysql_import_smoke_command() -> None:
+    verifier_source = (
+        REPOSITORY_ROOT / "scripts" / "verify_distribution.py"
+    ).read_text()
+    verifier_tree = ast.parse(verifier_source)
+    string_constants = {
+        node.value
+        for node in ast.walk(verifier_tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+
+    assert (
+        "import mysql.connector; "
+        "import acquire.migration.import_mysql_to_postgres"
+    ) in string_constants
+
+
 def test_distribution_verifier_rejects_duplicate_wheel_members(
     tmp_path: Path,
 ) -> None:
