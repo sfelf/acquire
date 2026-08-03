@@ -16,7 +16,7 @@ dependencies = [
     "trueskill==0.4.5",
     "ujson>=5.13,<6",
     "uvicorn>=0.32,<1",
-    "websockets>=16,<17",
+    "websockets>=17.0.1,<18",
 ]
 
 [project.scripts]
