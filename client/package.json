@@ -6,9 +6,9 @@
     "npm": ">=10"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "prettier": "^3.9.6",
-    "sass": "^1.89.0"
+    "sass": "^1.103.1"
   },
   "scripts": {
     "build:css": "sass --style=expanded --no-source-map main/css/main.scss main/css/main.css && sass --style=expanded --no-source-map stats/css/stats.scss stats/css/stats.css",
