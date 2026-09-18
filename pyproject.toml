@@ -14,7 +14,7 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "sqlalchemy>=2,<3",
     "trueskill==0.4.5",
-    "ujson>=5.13,<6",
+    "ujson>=6.0.0,<7",
     "uvicorn>=0.32,<1",
     "websockets>=16,<17",
 ]
